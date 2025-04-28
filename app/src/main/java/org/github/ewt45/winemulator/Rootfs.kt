@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.github.ewt45.winemulator.Consts.alpineRootfsDir
 import org.github.ewt45.winemulator.Consts.rootfsDir
 import java.io.BufferedReader
 import java.io.File
@@ -17,45 +18,32 @@ object Rootfs {
     /**
      * 检查rootfs是否存在。若不存在，则下载并解压
      */
-    suspend fun ensure(a: Activity):Unit = withContext(Dispatchers.IO) {
+    suspend fun ensure(ctx: Activity):Unit = withContext(Dispatchers.IO) {
 
         //判断条件：rootfs文件夹存在且内容不为空
         if (rootfsDir.exists() && rootfsDir.isDirectory
             && rootfsDir.list()?.isEmpty() == false) {
             return@withContext
         }
-
-        rootfsDir.mkdirs()
-
-        val rootfsFile = File(Consts.cacheDir, "rootfs.tar.gz")
-        if (rootfsFile.exists()) {
-            if (Utils.calculateSha256(rootfsFile).lowercase() == "140afac5b74f614c2b746bb8e2a312dbb1cc34650b8a5afbfcc424491f32cf4f")
-                return@withContext
-            else
-                rootfsFile.delete()
+        if (!alpineRootfsDir.exists() || alpineRootfsDir.list()?.isEmpty() != false) {
+            Utils.decompressTarXz(ctx.assets.open("alpine-aarch64-pd-v4.21.0.tar.xz"), rootfsDir) // 解压到rootfs文件夹，因为压缩包有一层alpine-aarch64文件夹。
         }
 
-        //下载
-        val url = URL("https://github.com/termux/proot-distro/releases/download/v4.21.0/alpine-aarch64-pd-v4.21.0.tar.xz")
-        url.openStream().use { input ->
-            FileOutputStream(rootfsFile).use { output ->
-                input.copyTo(output)
-            }
-        }
-
-        //解压
-//        val process = ProcessBuilder("tar", "-xJf", rootfsFile.absolutePath, "-C", rootfsDir.absolutePath)
-//            .redirectErrorStream(true)
-//            .start()
-//        var output:String
-//        BufferedReader(InputStreamReader(process.inputStream)).useLines { lines ->
-//            output = lines.joinToString(separator = "\n")
+//        val rootfsFile = File(Consts.cacheDir, "rootfs.tar.gz")
+//        if (rootfsFile.exists()) {
+//            if (Utils.calculateSha256(rootfsFile).lowercase() == "140afac5b74f614c2b746bb8e2a312dbb1cc34650b8a5afbfcc424491f32cf4f")
+//                return@withContext
+//            else
+//                rootfsFile.delete()
 //        }
-//        process.waitFor()
-//        Log.d("Rootfs", "ensure: 执行tar解压完成。输出：\n$output")
-        Utils.decompressTarXz(FileInputStream(rootfsFile), rootfsDir)
 
-
+//        //下载
+//        val url = URL("https://github.com/termux/proot-distro/releases/download/v4.21.0/alpine-aarch64-pd-v4.21.0.tar.xz")
+//        url.openStream().use { input ->
+//            FileOutputStream(rootfsFile).use { output ->
+//                input.copyTo(output)
+//            }
+//        }
     }
 
     /**
@@ -64,7 +52,6 @@ object Rootfs {
     suspend fun runProotCommand(command: String): String {
         val rootfs = Consts.alpineRootfsDir
 
-        "LD_PRELOAD=         /bin/bash -l"
         val processBuilder = ProcessBuilder(
             Consts.prootBin.absolutePath,
             "-0",
@@ -86,7 +73,10 @@ object Rootfs {
             "/bin/sh", "-c", command
         )
             .directory(rootfs)
-            .also { it.environment().also { it.put("PROOT_TMP_DIR", Consts.tmpDir.absolutePath) }.put("LD_PRELOAD", "") }
+            .also {
+                it.environment()["PROOT_TMP_DIR"] = Consts.tmpDir.absolutePath
+                it.environment()["LD_PRELOAD"] = ""
+            }
             .redirectErrorStream(true)
 
         val process = processBuilder.start()

@@ -14,10 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import org.github.ewt45.winemulator.ui.theme.Win模拟器Theme
+import org.github.ewt45.winemulator.ui.theme.MainTheme
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private val terminalViewModel :TerminalViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,20 +27,15 @@ class MainActivity : ComponentActivity() {
         Consts.init(this)
 
         setContent {
-            Win模拟器Theme {
+            MainTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-//                    Greeting(
-//                        name = "Android",
-//                        modifier = Modifier.padding(innerPadding)
-//                    )
-
-                    ProotOutputScreen(viewModel = viewModel,
-                        modifier = Modifier.padding(innerPadding))
+                    MainScreen(modifier = Modifier.padding(innerPadding))
                 }
             }
         }
 
         lifecycleScope.launch {
+            viewModel.showBlockDialog("解压alpine rootfs")
             try {
                 Rootfs.ensure(this@MainActivity)
                 viewModel.setDebugInfo("rootfs解压完成")
@@ -47,6 +43,10 @@ class MainActivity : ComponentActivity() {
                 e.printStackTrace()
                 viewModel.setDebugInfo("rootfs解压失败")
             }
+
+            viewModel.closeBlockDialog()
+
+            terminalViewModel.startTerminal()
 //            viewModel.runProotCommand(applicationContext)
 
 //            // 假设你已经把 `proot` 可执行文件放到了 filesDir 并设置了执行权限
@@ -72,7 +72,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-    Win模拟器Theme {
-        ProotOutputScreen()
+    MainTheme {
+        ProotTerminalScreen()
     }
 }

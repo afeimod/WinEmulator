@@ -32,7 +32,7 @@ object Consts {
         rootfsDir = File(fileDir, "rootfs")
         rootfsDir.mkdirs()
 
-        alpineRootfsDir = File(rootfsDir, "alpine-aarch64")
+        alpineRootfsDir = File(rootfsDir, "alpine-aarch64") //这个等解压的时候再创建吧
 
         //proot从assets解压
         prootBin = File(fileDir, "proot")
