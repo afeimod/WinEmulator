@@ -15,22 +15,22 @@ class EmulatorTerminal {
         val rootfs = Consts.rootfsCurrDir
         val processBuilder = ProcessBuilder(
             Consts.prootBin.absolutePath,
-            "-0", // root用户登录
+            "--root-id", // root用户登录
             "-L",
             "--link2symlink",
             "--kill-on-exit",
             "--rootfs=${rootfs.absolutePath}",
             "--cwd=/",
             "--bind=/dev",
-            "--bind=${Consts.tmpDir.absolutePath}:/tmp",
             "--bind=/proc",
             "--bind=/sys",
+            "--bind=${Consts.tmpDir.absolutePath}:/tmp",
             "--bind=/storage/emulated/0/Download",
             "/usr/bin/env",
             "TMPDIR=/tmp",
             "LC_ALL=en_US.utf8",
 //            "LC_ALL=zh_CN.utf8",
-            "DISPLAY=:0",
+            "DISPLAY=:13",
             "PATH=/opt/wine/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf",
             "/bin/sh", "-l", // -l: 交互式shell，-c: 执行某命令并退出

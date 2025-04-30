@@ -1,13 +1,12 @@
-package org.github.ewt45.winemulator
+package org.github.ewt45.winemulator.viewmodel
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.github.ewt45.winemulator.EmulatorTerminal
 import java.io.BufferedReader
-import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 
@@ -36,7 +35,7 @@ class TerminalViewModel : ViewModel() {
                     BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
                         var line: String?
                         while (reader.readLine().also { line = it } != null) {
-                            output.takeIf { it.size > 2000 }?.removeRange(0, 1000)
+                            output.takeIf { it.size > 800 }?.removeRange(0, 400)
                             output.add(line!!)
                         }
                     }

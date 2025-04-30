@@ -1,8 +1,12 @@
 package org.github.ewt45.winemulator
 
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.system.Os
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
@@ -141,6 +145,50 @@ object Utils {
                     }
                 }
             }
+        }
+    }
+
+    object Ui {
+
+        /** 将一个悬浮窗靠向最近的一条边。嵌进去一半. */
+        fun View.snapToNearestEdgeHalfway() {
+            val parent = parent as? View ?: return
+            val lp = layoutParams as? ViewGroup.MarginLayoutParams ?: return
+
+            val snapDistanceLeft = left
+            val snapDistanceRight = parent.width - right
+            val snapDistanceTop = top
+            val snapDistanceBottom = parent.height - bottom
+
+            val minDistance = minOf(snapDistanceLeft, snapDistanceRight, snapDistanceTop, snapDistanceBottom)
+
+            val currentLeft = left
+            val currentTop = top
+            var targetLeft = currentLeft
+            var targetTop = currentTop
+
+            when (minDistance) {
+                snapDistanceLeft -> targetLeft = -width / 2
+                snapDistanceRight -> targetLeft = parent.width - width / 2
+                snapDistanceTop -> targetTop = -height / 2
+                snapDistanceBottom -> targetTop = parent.height - height / 2
+            }
+
+            ValueAnimator.ofInt(currentLeft, targetLeft).apply {
+                duration = 300
+                addUpdateListener { animation ->
+                    lp.leftMargin = animation.animatedValue as Int
+                    requestLayout()
+                }
+            }.start()
+
+            ValueAnimator.ofInt(currentTop, targetTop).apply {
+                duration = 300
+                addUpdateListener { animation ->
+                    lp.topMargin = animation.animatedValue as Int
+                    requestLayout()
+                }
+            }.start()
         }
     }
 }

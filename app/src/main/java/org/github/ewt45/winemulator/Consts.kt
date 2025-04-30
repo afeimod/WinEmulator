@@ -2,6 +2,7 @@ package org.github.ewt45.winemulator
 
 import android.app.Activity
 import android.content.Context
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -20,6 +21,15 @@ object Consts {
     lateinit var alpineRootfsDir: File
     /** proot二进制文件. files/proot  */
     lateinit var prootBin : File
+
+    object Ui {
+        /** 最小化时的宽高dp值 */
+        val minimizedIconSize = 48
+    }
+
+    object PrefKey {
+        val proot_bool_options = "proot_bool_options"
+    }
 
     /**
      * 初始化。使用前先调用一次
@@ -47,6 +57,5 @@ object Consts {
         }
         prootBin.setExecutable(true)
     }
-
-
 }
+

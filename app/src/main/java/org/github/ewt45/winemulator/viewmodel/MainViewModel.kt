@@ -1,28 +1,16 @@
-package org.github.ewt45.winemulator
+package org.github.ewt45.winemulator.viewmodel
 
-import android.content.Context
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
+import org.github.ewt45.winemulator.MainUiState
 
 class MainViewModel:ViewModel() {
-    private val _commandOutput = MutableStateFlow("正在执行命令...")
-    val commandOutput = _commandOutput.asStateFlow()
-
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    fun setDebugInfo(str:String) {
-        _commandOutput.value = str
-    }
 
     /** 显示阻塞对话框 */
     fun showBlockDialog(msg: String="加载中，请稍等") {
