@@ -13,7 +13,10 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
+import com.termux.x11.CmdEntryPoint
+import com.termux.x11.LorieView
 import com.termux.x11.MainActivity
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
@@ -37,6 +40,9 @@ class MainEmuActivity : MainActivity() {
         prefs.fullscreen.put(true) // 全屏
         prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
 
+        startX11ServiceIntent = Intent(this, X11Service::class.java)
+        startX11ServiceIntent.putExtra("timestamp", System.currentTimeMillis())
+
         //将composeView添加到原视图布局中
         //TODO wrap不生效
         val composeView = ComposeView(this).apply {
@@ -49,19 +55,6 @@ class MainEmuActivity : MainActivity() {
         }
         val frame = findViewById<FrameLayout>(com.termux.x11.R.id.frame)
         frame.addView(composeView, FrameLayout.LayoutParams(-2, -2))
-        //缩小/放大
-//        val foldBtn = Button(this).apply {
-//            text = if (foldComposeView) "放大" else "缩小"
-//            setOnClickListener { v ->
-//                foldComposeView = !foldComposeView
-//                text = if (foldComposeView) "放大" else "缩小"
-//                composeView.layoutParams.height = if (foldComposeView) 100 else MATCH_PARENT
-//                composeView.layoutParams.width = if (foldComposeView) 100 else MATCH_PARENT
-//                composeView.requestLayout()
-//            }
-//        }
-//        (frame.parent as ViewGroup).addView(foldBtn, FrameLayout.LayoutParams(-2, -2))
-
         enableEdgeToEdge()
 //        setContent {
 //            MainTheme {
@@ -80,20 +73,33 @@ class MainEmuActivity : MainActivity() {
                 viewModel.showBlockDialog("错误：解压alpine rootfs 失败！")
                 return@launch
             }
-
             viewModel.closeBlockDialog()
+
+            //等待x11启动完成
+            viewModel.showBlockDialog("xserver启动中") {
+                waitForXStarted()
+            }
 
             Utils.Rootfs.makeCurrent(Consts.alpineRootfsDir)
             terminalViewModel.startTerminal()
         }
 
         //启动xserver
-        startX11ServiceIntent = Intent(this, X11Service::class.java)
         startService(startX11ServiceIntent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopService(startX11ServiceIntent)
+    }
+
+    /**
+     * 等待xserver启动完成
+     */
+    private suspend fun waitForXStarted() {
+        while (true) {
+            if (isConnected()) break
+            else delay(200)
+        }
     }
 }

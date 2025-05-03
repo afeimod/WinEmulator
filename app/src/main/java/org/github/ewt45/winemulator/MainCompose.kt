@@ -27,11 +27,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,15 +46,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.ui.ProotTerminalScreen
 import org.github.ewt45.winemulator.ui.SettingScreen
-import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
-import org.github.ewt45.winemulator.viewmodel.SettingViewModel
-import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
 @Composable
 fun MainScreen(
@@ -75,16 +71,26 @@ fun MainScreen(
             .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
     ) { innerPadding ->
         //FIXME tx11已经处理键盘高度变更了，这里应该不用innerPadding 否则会有空白
-        Box(modifier = Modifier.fillMaxSize(),
+        val ignoreSystemInsets = Modifier.padding(innerPadding)
+        Box(
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
-        ){
-            Column(modifier/*.padding(innerPadding)*/
-                .fillMaxHeight()
-                .widthIn(max=600.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,) {
+        ) {
+            Column(
+                modifier/*.padding(innerPadding)*/
+                    .fillMaxHeight()
+                    .widthIn(max = 600.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (!minimize) {
-                        Text("占位标题", modifier = Modifier.weight(1f).padding(8.dp))
+                        Text(
+                            "占位标题", modifier = Modifier
+                                .weight(1f)
+                                .padding(8.dp)
+                        )
                         SettingButton(showSettingState)
                     }
                     MinimizeButton(minimizeState)
@@ -98,7 +104,6 @@ fun MainScreen(
                 }
             }
         }
-
 
 
         // 阻塞对话框
@@ -137,22 +142,31 @@ fun MinimizeButton(
     var minimize by minimizeState
     val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
 
+    //最小化时颜色稍微变化一下吧，否则不容易看到
+    val colorSurface = MaterialTheme.colorScheme.surfaceContainerHigh
+    val colorContent = MaterialTheme.colorScheme.onSurface
+    val colors =
+        if (!minimize) IconButtonDefaults.iconButtonColors()
+        else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
+
+    // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
+    val margin = remember { mutableListOf(0,100) }
+
     IconButton(
         onClick = {
             minimize = !minimize
-            val view = activity?.findViewById<View>(R.id.compose_view)
-            view?.apply {
+            val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
+            view.apply {
                 val lp = layoutParams as MarginLayoutParams
                 lp.height = if (minimize) miniIconPx else MATCH_PARENT
                 lp.width = if (minimize) miniIconPx else MATCH_PARENT
-                lp.leftMargin = if (minimize) 0 else 0
-                lp.topMargin = if (minimize) 100 else 0
+                lp.leftMargin = if (minimize) margin[0] else 0
+                lp.topMargin = if (minimize) margin[1] else 0
                 lp.rightMargin = 0
                 lp.bottomMargin = 0
                 requestLayout()
                 if (minimize)
                     view.post { view.snapToNearestEdgeHalfway() }
-
             }
         },
         modifier = modifier
@@ -160,16 +174,20 @@ fun MinimizeButton(
             .pointerInput(minimize) {
                 if (!minimize)
                     return@pointerInput
-                val view = activity?.findViewById<View>(R.id.compose_view)
+                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
                 detectDragGestures(
-                    onDragEnd = { view?.snapToNearestEdgeHalfway() }
+                    onDragEnd = { view.snapToNearestEdgeHalfway() }
                 ) { change, dragAmount ->
                     change.consume() //TODO 这个需要吗
-                    (view?.layoutParams as FrameLayout.LayoutParams).leftMargin += dragAmount.x.toInt()
-                    (view?.layoutParams as FrameLayout.LayoutParams).topMargin += dragAmount.y.toInt()
-                    view?.requestLayout()
+                    val lp = view.layoutParams as MarginLayoutParams
+                    lp.leftMargin += dragAmount.x.toInt()
+                    lp.topMargin += dragAmount.y.toInt()
+                    margin[0] = lp.leftMargin
+                    margin[1] = lp.topMargin
+                    view.requestLayout()
                 }
             },
+        colors = colors
     ) {
         Icon(
             painter = painterResource(if (minimize) R.drawable.ic_fullscreen else R.drawable.ic_hide),
@@ -182,9 +200,9 @@ fun MinimizeButton(
  * 按钮，点击可显示设置界面
  */
 @Composable
-fun SettingButton(showState: MutableState<Boolean>,modifier: Modifier = Modifier,) {
+fun SettingButton(showState: MutableState<Boolean>, modifier: Modifier = Modifier) {
     var show by showState
-    IconButton(onClick = { show  = !show }) {
+    IconButton(onClick = { show = !show }) {
         if (!show) Icon(
             imageVector = Icons.Filled.Settings,
             contentDescription = "设置",
@@ -197,24 +215,33 @@ fun SettingButton(showState: MutableState<Boolean>,modifier: Modifier = Modifier
 }
 
 
-
-
 @Preview(showBackground = true)
 @Composable
 fun GameScreenPreview() {
-    MainTheme {
-        MainScreen()
-        val terminalViewModel: TerminalViewModel = viewModel()
-        val mainViewModel: MainViewModel = viewModel()
-        LaunchedEffect(Unit) {
-            terminalViewModel.output.add(
-                "fsdfsdfsdfsdfsd" +
-                        "fsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsd11111" +
-                        "1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\n\nsdfsdfsdfsdfsdfsd\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\nfsdfsdfsdfsdfsdfsd"
-            )
-
-//            mainViewModel.showBlockDialog("测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框")
-        }
+//    MainTheme {
+//        MainScreen()
+//        val terminalViewModel: TerminalViewModel = viewModel()
+//        val mainViewModel: MainViewModel = viewModel()
+//        LaunchedEffect(Unit) {
+//            terminalViewModel.output.add(
+//                "fsdfsdfsdfsdfsd" +
+//                        "fsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsd11111" +
+//                        "1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\n\nsdfsdfsdfsdfsdfsd\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\nfsdfsdfsdfsdfsdfsd"
+//            )
+//
+////            mainViewModel.showBlockDialog("测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框")
+//        }
+//    }
+    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
+    val content = MaterialTheme.colorScheme.onSurface
+    IconButton(
+        onClick = {},
+        colors = IconButtonColors(surface, content, surface, content)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_fullscreen),
+            contentDescription = "全屏/最小化",
+        )
     }
 }
 

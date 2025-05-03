@@ -27,10 +27,6 @@ object Consts {
         val minimizedIconSize = 48
     }
 
-    object PrefKey {
-        val proot_bool_options = "proot_bool_options"
-    }
-
     /**
      * 初始化。使用前先调用一次
      */
