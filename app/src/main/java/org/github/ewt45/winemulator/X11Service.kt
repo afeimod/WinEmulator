@@ -18,9 +18,9 @@ class X11Service : LifecycleService() {
     var started = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // service中如果要获取设置，最好只从传过来的intent中读取数据。其他位置的可能不可靠
         if (!started) {
             started = true
-            Consts.init(this)
             Os.setenv("TERMUX_X11_OVERRIDE_PACKAGE", packageName, true)
             Os.setenv("TMPDIR", Consts.tmpDir.absolutePath, true)
             Os.setenv("XKB_CONFIG_ROOT", Consts.rootfsCurrDir.absolutePath + "/usr/share/X11/xkb", true)

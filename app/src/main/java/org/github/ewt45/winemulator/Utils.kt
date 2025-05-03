@@ -7,7 +7,16 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -189,6 +198,20 @@ object Utils {
                     requestLayout()
                 }
             }.start()
+        }
+
+        /**
+         * 用于viewmodel中将 从datastore获取到的flow 转为stateflow
+         */
+        fun <T> ViewModel.stateInSimple(initValue:T, flow:Flow<T>):StateFlow<T> {
+            return flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initValue)
+        }
+
+        /**
+         * 用于viewmodel中修改datastore的数据
+         */
+        fun <T> ViewModel.editDateStore(key:Preferences.Key<T>, value: T) {
+            viewModelScope.launch { dataStore.edit { it[key] = value} }
         }
     }
 }

@@ -26,6 +26,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -70,7 +72,7 @@ fun MainScreen(
         modifier = Modifier
             .fillMaxSize()
 //        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier)
+            .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
     ) { innerPadding ->
         //FIXME tx11已经处理键盘高度变更了，这里应该不用innerPadding 否则会有空白
         Box(modifier = Modifier.fillMaxSize(),
@@ -167,10 +169,10 @@ fun MinimizeButton(
                     (view?.layoutParams as FrameLayout.LayoutParams).topMargin += dragAmount.y.toInt()
                     view?.requestLayout()
                 }
-            }
+            },
     ) {
         Icon(
-            painter = painterResource(if (minimize) R.drawable.ic_expand else R.drawable.ic_hide),
+            painter = painterResource(if (minimize) R.drawable.ic_fullscreen else R.drawable.ic_hide),
             contentDescription = "全屏/最小化",
         )
     }
@@ -182,11 +184,7 @@ fun MinimizeButton(
 @Composable
 fun SettingButton(showState: MutableState<Boolean>,modifier: Modifier = Modifier,) {
     var show by showState
-    val settingVieModel:SettingViewModel = viewModel()
-    IconButton(onClick = {
-        show  = !show
-//        if (!show) settingVieModel.savePref()
-    }) {
+    IconButton(onClick = { show  = !show }) {
         if (!show) Icon(
             imageVector = Icons.Filled.Settings,
             contentDescription = "设置",

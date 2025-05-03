@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator
 
 import a.io.github.ewt45.winemulator.R
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -8,6 +9,9 @@ import android.widget.FrameLayout
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.ui.platform.ComposeView
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.termux.x11.MainActivity
 import kotlinx.coroutines.launch
@@ -16,13 +20,14 @@ import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
+
+
 class MainEmuActivity : MainActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val terminalViewModel: TerminalViewModel by viewModels()
     private val settingViewModel: SettingViewModel by viewModels()
     private lateinit var startX11ServiceIntent: Intent
 
-    var foldComposeView = false
     override fun onCreate(savedInstanceState: Bundle?) {
         //设置包名
         MainActivity.HOST_PKG_NAME = packageName
@@ -31,9 +36,6 @@ class MainEmuActivity : MainActivity() {
         prefs.showAdditionalKbd.put(false) // 不显示底部按键
         prefs.fullscreen.put(true) // 全屏
         prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
-
-        Consts.init(this)
-        settingViewModel.initPref(this)
 
         //将composeView添加到原视图布局中
         //TODO wrap不生效
@@ -90,10 +92,6 @@ class MainEmuActivity : MainActivity() {
         startService(startX11ServiceIntent)
     }
 
-    override fun onStop() {
-        super.onStop()
-        settingViewModel.savePref() //为啥在viewmodel.onclear 和 activity.onDestroy 保存就没保存上呢
-    }
     override fun onDestroy() {
         super.onDestroy()
         stopService(startX11ServiceIntent)

@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -21,8 +23,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +44,9 @@ fun SettingScreen(modifier: Modifier = Modifier) {
     //TODO 用LazyColumn?
     Column(modifier) {
         CollapsePanel("PRoot参数") {
-            ProotNoValueOptions(proot.proot_bool_options,settingViewModel::onChangedProotBoolOptions)
+            ProotNoValueOptions(proot.proot_bool_options,settingViewModel::onChangeProotBoolOptions)
+            Spacer(Modifier.height(16.dp))
+            ProotStartupCmd(proot.proot_startup_cmd, settingViewModel::onChangeProotStartupCmd)
         }
     }
 }
@@ -65,19 +69,19 @@ fun ProotNoValueOptions(options:Set<String>,
     var optionP = options.contains("-P")
 
     FlowRow(modifier = Modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        ProotChipOption(onCheck, optionRootId, "-0,--root-id", "--root-id")
-        ProotChipOption(onCheck, optionL, "-L")
-        ProotChipOption(onCheck, optionLink2symlink, "-l,--link2symlink", "--link2symlink")
-        ProotChipOption(onCheck, optionKillOnExit, "--kill-on-exit")
-        ProotChipOption(onCheck, optionSysvipc, "--sysvipc")
-        ProotChipOption(onCheck, optionAshmemMemfd, "--ashmem-memfd")
-        ProotChipOption(onCheck, optionH, "-H")
-        ProotChipOption(onCheck, optionP, "-P")
+        ChipOption(onCheck, optionRootId, "-0,--root-id", "--root-id")
+        ChipOption(onCheck, optionL, "-L")
+        ChipOption(onCheck, optionLink2symlink, "-l,--link2symlink", "--link2symlink")
+        ChipOption(onCheck, optionKillOnExit, "--kill-on-exit")
+        ChipOption(onCheck, optionSysvipc, "--sysvipc")
+        ChipOption(onCheck, optionAshmemMemfd, "--ashmem-memfd")
+        ChipOption(onCheck, optionH, "-H")
+        ChipOption(onCheck, optionP, "-P")
     }
 }
 
 @Composable
-fun ProotChipOption(
+fun ChipOption(
     onCheck:(String,Boolean)->Unit,
     state:Boolean,
     label:String,
@@ -86,6 +90,19 @@ fun ProotChipOption(
         state,
         onClick = {onCheck(key, !state)},
         label = { Text(label) },
+    )
+}
+
+@Composable
+fun ProotStartupCmd(
+    cmd:String,
+    onChange: (String) ->Unit
+) {
+    TextField(
+        label = { Text("启动后执行命令") },
+        value = cmd,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -127,10 +144,10 @@ fun CollapsePanel(
             enter = expandVertically(animationSpec = tween(durationMillis = 300)),
             exit = shrinkVertically(animationSpec = tween(durationMillis = 300))
         ) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 8.dp, bottom =8.dp)
+                    .padding(start = 16.dp, end = 8.dp, bottom = 8.dp)
             ) {
                 content()
             }
@@ -157,6 +174,12 @@ fun ExpandablePanelExample() {
 @Preview(showBackground = true)
 @Composable
 fun PreviewExpandablePanelExample() {
-    SettingScreen()
-
+//    SettingScreen()
+    Column {
+        CollapsePanel("PRoot参数") {
+            ProotNoValueOptions(setOf(), { _,_ -> })
+            Spacer(Modifier.height(8.dp))
+            ProotStartupCmd("proot.proot_startup_cmd", { _ -> })
+        }
+    }
 }
