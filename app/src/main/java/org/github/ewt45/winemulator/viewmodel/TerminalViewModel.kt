@@ -22,7 +22,9 @@ class TerminalViewModel : ViewModel() {
     /**
      * 启动终端
      */
-    fun startTerminal() {
+    fun startTerminal(
+        startupCmd:String = ""
+    ) {
         if (process != null) return
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -43,6 +45,9 @@ class TerminalViewModel : ViewModel() {
                     e.printStackTrace()
                 }
             }
+
+            if (startupCmd.isNotEmpty())
+                runCommand("$startupCmd &")
 
             process!!.waitFor()
             closeResources()

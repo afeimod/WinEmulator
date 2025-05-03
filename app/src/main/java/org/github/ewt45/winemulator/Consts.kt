@@ -3,6 +3,8 @@ package org.github.ewt45.winemulator
 import android.app.Activity
 import android.content.Context
 import androidx.compose.ui.unit.dp
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -25,6 +27,18 @@ object Consts {
     object Ui {
         /** 最小化时的宽高dp值 */
         val minimizedIconSize = 48
+    }
+
+    /**
+     * 用户偏好相关.
+     * 如果assets中指定了默认值，会覆盖这里的默认值
+     */
+    object Pref {
+        val key_proot_bool_options = stringSetPreferencesKey("proot_bool_options")
+        var default_proot_bool_options =
+            setOf("--root-id", "-L", "--link2symlink", "--kill-on-exit")
+        val key_proot_startup_cmd = stringPreferencesKey("proot_startup_cmd")
+        var default_proot_startup_cmd = ""
     }
 
     /**

@@ -1,22 +1,17 @@
 package org.github.ewt45.winemulator
 
 import a.io.github.ewt45.winemulator.R
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.FrameLayout
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.ui.platform.ComposeView
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
-import com.termux.x11.CmdEntryPoint
-import com.termux.x11.LorieView
 import com.termux.x11.MainActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
@@ -29,7 +24,7 @@ class MainEmuActivity : MainActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val terminalViewModel: TerminalViewModel by viewModels()
     private val settingViewModel: SettingViewModel by viewModels()
-    private lateinit var startX11ServiceIntent: Intent
+    private lateinit var startX11Intent: Intent
 
     override fun onCreate(savedInstanceState: Bundle?) {
         //设置包名
@@ -40,8 +35,7 @@ class MainEmuActivity : MainActivity() {
         prefs.fullscreen.put(true) // 全屏
         prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
 
-        startX11ServiceIntent = Intent(this, X11Service::class.java)
-        startX11ServiceIntent.putExtra("timestamp", System.currentTimeMillis())
+        startX11Intent = createStartX11Intent()
 
         //将composeView添加到原视图布局中
         //TODO wrap不生效
@@ -81,16 +75,17 @@ class MainEmuActivity : MainActivity() {
             }
 
             Utils.Rootfs.makeCurrent(Consts.alpineRootfsDir)
-            terminalViewModel.startTerminal()
+            //这里还不能用state因为state第一次获取的是默认值而非datastore来的值
+            terminalViewModel.startTerminal(settingViewModel.prootFlow.first().proot_startup_cmd)
         }
 
         //启动xserver
-        startService(startX11ServiceIntent)
+        startService(startX11Intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        stopService(startX11ServiceIntent)
+        stopService(startX11Intent)
     }
 
     /**
@@ -100,6 +95,17 @@ class MainEmuActivity : MainActivity() {
         while (true) {
             if (isConnected()) break
             else delay(200)
+        }
+    }
+
+    /**
+     * 创建一个intent用于启动X11Service. 在intent放入数据：
+     * timestamp：时间戳
+     *
+     */
+    private fun createStartX11Intent():Intent {
+        return Intent(this, X11Service::class.java).apply {
+            putExtra("timestamp", System.currentTimeMillis())
         }
     }
 }
