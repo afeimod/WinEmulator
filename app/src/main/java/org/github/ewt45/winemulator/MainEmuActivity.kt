@@ -59,15 +59,14 @@ class MainEmuActivity : MainActivity() {
 //        }
 
         lifecycleScope.launch {
-            viewModel.showBlockDialog("解压alpine rootfs")
-            try {
+            val result = viewModel.showBlockDialog("解压alpine rootfs") {
                 Utils.Rootfs.ensureAlpineRootfs(this@MainEmuActivity)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                viewModel.showBlockDialog("错误：解压alpine rootfs 失败！")
+            }
+            if (result.isFailure) {
+                result.exceptionOrNull()!!.printStackTrace()
+                viewModel.showConfirmDialog("错误：解压alpine rootfs 失败！").run { finish() }
                 return@launch
             }
-            viewModel.closeBlockDialog()
 
             //等待x11启动完成
             viewModel.showBlockDialog("xserver启动中") {

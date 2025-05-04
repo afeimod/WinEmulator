@@ -31,6 +31,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -44,12 +45,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.ui.ProotTerminalScreen
 import org.github.ewt45.winemulator.ui.SettingScreen
+import org.github.ewt45.winemulator.viewmodel.DialogType
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 
 @Composable
@@ -59,10 +62,8 @@ fun MainScreen(
     val TAG = "MainScreen"
     val viewModel: MainViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
-    val minimizeState = remember { mutableStateOf(false) }
-    val minimize by minimizeState
-    val showSettingState = remember { mutableStateOf(false) }
-    val showSetting by showSettingState
+    var minimize by remember { mutableStateOf(false) }
+    var showSetting by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier
@@ -77,8 +78,7 @@ fun MainScreen(
             contentAlignment = Alignment.Center,
         ) {
             Column(
-                modifier/*.padding(innerPadding)*/
-                    .fillMaxHeight()
+                modifier/*.padding(innerPadding)*/.fillMaxHeight()
                     .widthIn(max = 600.dp)
             ) {
                 Row(
@@ -87,13 +87,14 @@ fun MainScreen(
                 ) {
                     if (!minimize) {
                         Text(
-                            "占位标题", modifier = Modifier
+                            "占位标题",
+                            modifier = Modifier
                                 .weight(1f)
                                 .padding(8.dp)
                         )
-                        SettingButton(showSettingState)
+                        SettingButton(showSetting, { showSetting = !showSetting })
                     }
-                    MinimizeButton(minimizeState)
+                    MinimizeButton(minimize, { minimize = !minimize })
                 }
 
                 if (!minimize) {
@@ -106,11 +107,14 @@ fun MainScreen(
         }
 
 
-        // 阻塞对话框
-        if (uiState.blockDialog) {
+        // 对话框
+        val dialogType = uiState.dialogType
+        val isConfirm = uiState.dialogType == DialogType.CONFIRM
+        val isBlock = uiState.dialogType == DialogType.BLOCK
+        if (dialogType != DialogType.NONE) {
             AlertDialog(
-                onDismissRequest = {},
-                title = { Text("加载中") },
+                onDismissRequest = {}, //阻止点击外部区域关闭
+//                title = { Text("加载中") },
                 text = {
                     Column(
                         modifier = Modifier
@@ -118,12 +122,23 @@ fun MainScreen(
                             .wrapContentHeight(), // 根据内容调整高度
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(uiState.blockDialogMsg)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        CircularProgressIndicator()
+                        Text(uiState.msg)
+                        if (isBlock) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            CircularProgressIndicator()
+                        }
                     }
                 },
-                confirmButton = {}
+                confirmButton = {
+                    if (isConfirm) {
+                        TextButton(onClick = { viewModel.closeConfirmDialog(true) }) { Text(stringResource(android.R.string.ok)) }
+                    }
+                },
+                dismissButton = {
+                    if (isConfirm) {
+                        TextButton(onClick = { viewModel.closeConfirmDialog(false) }) { Text(stringResource(android.R.string.cancel)) }
+                    }
+                }
             )
         }
     }
@@ -134,12 +149,11 @@ fun MainScreen(
  */
 @Composable
 fun MinimizeButton(
-    minimizeState: MutableState<Boolean>,
-    modifier: Modifier = Modifier,
+    minimize: Boolean,
+    onClick: () -> Unit,
 ) {
     val TAG = "MinimizeButton"
     val activity = LocalActivity.current
-    var minimize by minimizeState
     val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
 
     //最小化时颜色稍微变化一下吧，否则不容易看到
@@ -150,26 +164,27 @@ fun MinimizeButton(
         else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
 
     // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
-    val margin = remember { mutableListOf(0,100) }
+    val margin = remember { mutableListOf(0, 100) }
 
     IconButton(
         onClick = {
-            minimize = !minimize
             val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
+            val nextValue = !minimize
             view.apply {
                 val lp = layoutParams as MarginLayoutParams
-                lp.height = if (minimize) miniIconPx else MATCH_PARENT
-                lp.width = if (minimize) miniIconPx else MATCH_PARENT
-                lp.leftMargin = if (minimize) margin[0] else 0
-                lp.topMargin = if (minimize) margin[1] else 0
+                lp.height = if (nextValue) miniIconPx else MATCH_PARENT
+                lp.width = if (nextValue) miniIconPx else MATCH_PARENT
+                lp.leftMargin = if (nextValue) margin[0] else 0
+                lp.topMargin = if (nextValue) margin[1] else 0
                 lp.rightMargin = 0
                 lp.bottomMargin = 0
                 requestLayout()
-                if (minimize)
+                if (nextValue)
                     view.post { view.snapToNearestEdgeHalfway() }
             }
+            onClick()
         },
-        modifier = modifier
+        modifier = Modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .pointerInput(minimize) {
                 if (!minimize)
@@ -200,9 +215,8 @@ fun MinimizeButton(
  * 按钮，点击可显示设置界面
  */
 @Composable
-fun SettingButton(showState: MutableState<Boolean>, modifier: Modifier = Modifier) {
-    var show by showState
-    IconButton(onClick = { show = !show }) {
+fun SettingButton(show: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
         if (!show) Icon(
             imageVector = Icons.Filled.Settings,
             contentDescription = "设置",

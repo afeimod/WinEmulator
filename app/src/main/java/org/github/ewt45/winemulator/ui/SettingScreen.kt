@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandIn
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
@@ -31,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,22 +50,71 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import org.github.ewt45.winemulator.viewmodel.MainViewModel
+import org.github.ewt45.winemulator.viewmodel.SettingAction
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 
 @Composable
 fun SettingScreen(modifier: Modifier = Modifier) {
+    val mainViewmodel: MainViewModel = viewModel()
     val settingViewModel: SettingViewModel = viewModel()
     val proot by settingViewModel.prootState.collectAsState()
+    val scope = rememberCoroutineScope()
     //TODO 用LazyColumn?
     Column(modifier) {
-        CollapsePanel("PRoot参数") {
-            ProotNoValueOptions(
-                proot.proot_bool_options,
-                settingViewModel::onChangeProotBoolOptions
-            )
-            Spacer(Modifier.height(16.dp))
-            ProotStartupCmd(proot.proot_startup_cmd, settingViewModel::onChangeProotStartupCmd)
-        }
+        TopBarActions(
+            modifier = Modifier.align(Alignment.End),
+            onClick = { action ->
+                scope.launch {
+                    val result = if (action == SettingAction.RESET) mainViewmodel.showConfirmDialog("将全部选项恢复为默认。是否执行此操作？")
+                    else Result.success(true)
+                    if (result.getOrNull() == true) {
+                        settingViewModel.onActionClick(SettingAction.RESET)
+                    }
+                }
+            }
+        )
+        ProotSettings(
+            prootNoValueOptions = proot.proot_bool_options,
+            onChangeProotNoValueOptions = settingViewModel::onChangeProotBoolOptions,
+            prootStartupCmd = proot.proot_startup_cmd,
+            onChangeProotStartupCmd = settingViewModel::onChangeProotStartupCmd,
+        )
+    }
+}
+
+/**
+ * 顶部操作按钮
+ */
+@Composable
+fun TopBarActions(
+    modifier: Modifier = Modifier,
+    onClick: (SettingAction) -> Unit = {}
+) {
+    Row(
+        modifier = modifier,
+    ) {
+        TextButton(onClick = { onClick(SettingAction.EXPORT) }) { Text("导出") }
+        TextButton(onClick = { onClick(SettingAction.IMPORT) }) { Text("导入") }
+        TextButton(onClick = { onClick(SettingAction.RESET) }) { Text("重置") }
+    }
+}
+
+/**
+ * proot设置
+ */
+@Composable
+fun ProotSettings(
+    prootNoValueOptions: Set<String>,
+    onChangeProotNoValueOptions: (String, Boolean) -> Unit,
+    prootStartupCmd: String,
+    onChangeProotStartupCmd: (String) -> Unit,
+) {
+    CollapsePanel("PRoot参数") {
+        ProotNoValueOptions(prootNoValueOptions, onChangeProotNoValueOptions)
+        Spacer(Modifier.height(16.dp))
+        ProotStartupCmd(prootStartupCmd, onChangeProotStartupCmd)
     }
 }
 
@@ -75,14 +128,14 @@ fun ProotNoValueOptions(
     onCheck: (String, Boolean) -> Unit
 ) {
 
-    var optionRootId = options.contains("--root-id")
-    var optionL = options.contains("-L")
-    var optionLink2symlink = options.contains("--link2symlink")
-    var optionKillOnExit = options.contains("--kill-on-exit")
-    var optionSysvipc = options.contains("--sysvipc")
-    var optionAshmemMemfd = options.contains("--ashmem-memfd")
-    var optionH = options.contains("-H")
-    var optionP = options.contains("-P")
+    val optionRootId = options.contains("--root-id")
+    val optionL = options.contains("-L")
+    val optionLink2symlink = options.contains("--link2symlink")
+    val optionKillOnExit = options.contains("--kill-on-exit")
+    val optionSysvipc = options.contains("--sysvipc")
+    val optionAshmemMemfd = options.contains("--ashmem-memfd")
+    val optionH = options.contains("-H")
+    val optionP = options.contains("-P")
 
     FlowRow(modifier = Modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         ChipOption(onCheck, optionRootId, "-0,--root-id", "--root-id")
@@ -173,7 +226,7 @@ fun CollapsePanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = title, style = MaterialTheme.typography.titleLarge)
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
             Icon(
                 imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                 contentDescription = if (expanded) "收起" else "展开"
@@ -182,8 +235,8 @@ fun CollapsePanel(
         // 展开内容
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(),
-            exit = shrinkVertically()
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
         ) {
             Column(
                 modifier = Modifier
@@ -217,11 +270,21 @@ fun ExpandablePanelExample() {
 fun PreviewExpandablePanelExample() {
 //    SettingScreen()
     Column {
-        CollapsePanel("PRoot参数") {
-            ProotNoValueOptions(setOf(), { _, _ -> })
-            Spacer(Modifier.height(8.dp))
-            ProotStartupCmd("proot.proot_startup_cmd", { _ -> })
+        Row(
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(8.dp)
+        ) {
+            TextButton(onClick = {}) { Text("导出") }
+            TextButton(onClick = {}) { Text("导入") }
+            TextButton(onClick = {}) { Text("重置") }
         }
+        ProotSettings(
+            prootNoValueOptions = setOf(),
+            onChangeProotNoValueOptions = { _, _ -> },
+            prootStartupCmd = "",
+            onChangeProotStartupCmd = {},
+        )
     }
 //    var finalCmd by remember { mutableStateOf("") }
 //    ProotStartupCmd(finalCmd) {finalCmd = it.replace("\n", " ").trim().trimEnd('&').trim()}
