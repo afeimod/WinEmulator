@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
 @Composable
@@ -65,7 +66,7 @@ fun ProotTerminalScreen(
         ) {
             SelectionContainer {
                 Text(
-                    text = output.joinToString(separator = "\n"),
+                    text = output.joinToString(separator = ""),
                     style = MaterialTheme.typography.bodyMedium,
                     fontFamily = FontFamily.Monospace
                 )

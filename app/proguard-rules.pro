@@ -19,3 +19,27 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+-dontwarn android.app.ActivityThread
+-dontwarn android.app.ContextImpl
+-dontwarn android.app.IActivityManager
+-dontwarn android.content.IIntentReceiver$Stub
+-dontwarn android.content.IIntentReceiver
+-dontwarn android.content.IIntentSender
+-dontwarn android.content.pm.IPackageManager
+
+# 会反射 / jni 中获取，保留类及其全部属性+方法声明及其名称
+-keep class com.termux.x11.MainActivity {
+    <fields>;
+    <methods>;
+}
+-keep class org.github.ewt45.winemulator.MainEmuActivity {
+    <fields>;
+    <methods>;
+}
+-keep class org.github.ewt45.winemulator.Consts {
+    <fields>;
+    <methods>;
+}
+
+

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -34,6 +35,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
+import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.DialogType
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
+import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
+import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 
 @Composable
 fun MainScreen(
@@ -60,9 +66,18 @@ fun MainScreen(
 ) {
     val TAG = "MainScreen"
     val viewModel: MainViewModel = viewModel()
+    val settingVM: SettingViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
+    val rootfsVM: PrepareStageViewModel = viewModel()
+
     var minimize by remember { mutableStateOf(false) }
     var showSetting by remember { mutableStateOf(false) }
+    val isNoRootfs by remember { rootfsVM.isNoRootfs }
+
+    //进入设置时手动更新一些可能过期的数据，比如文件列表。 这个不能直接放下面的if里，不然会频繁执行
+    LaunchedEffect(showSetting) {
+        if (showSetting)  settingVM.updateValuesWhenEnterSettings()
+    }
 
     Scaffold(
         modifier = Modifier
@@ -86,8 +101,7 @@ fun MainScreen(
                 ) {
                     if (!minimize) {
                         Text(
-                            "占位标题",
-                            modifier = Modifier
+                            "占位标题", modifier = Modifier
                                 .weight(1f)
                                 .padding(8.dp)
                         )
@@ -97,14 +111,15 @@ fun MainScreen(
                 }
 
                 if (!minimize) {
-                    if (!showSetting)
-                        ProotTerminalScreen()
-                    else
+                    if (isNoRootfs)
+                        RootfsSelectScreen()
+                    else if (showSetting)
                         SettingScreen()
+                    else
+                        ProotTerminalScreen()
                 }
             }
         }
-
 
         // 对话框
         val dialogType = uiState.dialogType
@@ -121,7 +136,9 @@ fun MainScreen(
                             .wrapContentHeight(), // 根据内容调整高度
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(uiState.msg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.verticalScroll(rememberScrollState()))
+                        SelectionContainer {
+                            Text(uiState.msg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.verticalScroll(rememberScrollState()))
+                        }
                         if (isBlock) {
                             Spacer(modifier = Modifier.height(16.dp))
                             CircularProgressIndicator()
@@ -231,30 +248,8 @@ fun SettingButton(show: Boolean, onClick: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 fun GameScreenPreview() {
-//    MainTheme {
-//        MainScreen()
-//        val terminalViewModel: TerminalViewModel = viewModel()
-//        val mainViewModel: MainViewModel = viewModel()
-//        LaunchedEffect(Unit) {
-//            terminalViewModel.output.add(
-//                "fsdfsdfsdfsdfsd" +
-//                        "fsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsd11111" +
-//                        "1\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\n\nsdfsdfsdfsdfsdfsd\n\n\n\n\n\n\n\n\n\n\n\n\\n\n\n\\n\n\n\n\n\n\\n\n\n\n\n\n\n\n\n\n\nfsdfsdfsdfsdfsdfsd"
-//            )
-//
-////            mainViewModel.showBlockDialog("测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框测试对话框")
-//        }
-//    }
-    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val content = MaterialTheme.colorScheme.onSurface
-    IconButton(
-        onClick = {},
-        colors = IconButtonColors(surface, content, surface, content)
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_fullscreen),
-            contentDescription = "全屏/最小化",
-        )
+    MainTheme {
+        MainScreen()
     }
 }
 

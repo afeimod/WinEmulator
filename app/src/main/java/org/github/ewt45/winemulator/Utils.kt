@@ -1,16 +1,18 @@
 package org.github.ewt45.winemulator
 
+import android.Manifest
 import android.animation.ValueAnimator
-import android.app.Activity
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.system.Os
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import androidx.compose.ui.platform.ClipboardManager
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
@@ -40,16 +42,17 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import okio.Buffer
+import okio.source
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import org.apache.commons.io.FileUtils
 import org.apache.commons.io.IOUtils
-import org.github.ewt45.winemulator.Consts.alpineRootfsDir
-import org.github.ewt45.winemulator.Consts.prootBin
 import org.github.ewt45.winemulator.Consts.rootfsAllDir
-import java.io.BufferedInputStream
+import org.github.ewt45.winemulator.Consts.rootfsCurrDir
+import org.tukaani.xz.XZ
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -58,12 +61,14 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
-import java.io.PrintWriter
-import java.io.StringWriter
 import java.net.URL
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.declaredMemberProperties
+import kotlin.reflect.jvm.isAccessible
 
 
 object Utils {
@@ -129,6 +134,67 @@ object Utils {
         }
     }
 
+    /** 获取进程的pid */
+    fun Process.getPid(): Int {
+        try {
+            val property: KProperty1<Process, Int> = this::class.declaredMemberProperties.find { it.name == "pid" } as KProperty1<Process, Int>
+            property.isAccessible = true
+            val pid = property.get(this)
+            property.isAccessible = false
+            return pid
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return -1
+        }
+    }
+
+    /**
+     * 获取x11Service对应的进程pid。原理：通过对比进程名（在Manifest中设置的）
+     */
+    fun Context.getX11ServicePid(): Int {
+        return getSystemService(ActivityManager::class.java).runningAppProcesses
+            .find { it.processName == "$packageName:xserver" }?.pid ?: -1
+    }
+
+    /**
+     * chmod. 添加try catch 传入mode为8进制数字的字符串，例如“755”
+     */
+    fun chmod(file: File, mode: String) {
+        try {
+            Os.chmod(file.absolutePath, mode.toInt(8))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun File.notExists(): Boolean = !this.exists()
+
+
+    fun printStackTraceToString(e: Throwable): String = e.stackTraceToString()
+
+    /** 检查文件头是否为给定标识. 从输入流当前位置开始读取 header.size 个字节并进行比较。 */
+    private fun InputStream.checkHeaderMagic(header: ByteArray): Boolean {
+        try {
+            val len = header.size.toLong()
+            val fileHeader = source().use { source -> Buffer().also { source.read(it, len) }.readByteArray(len) }
+            for (i in 0 until len.toInt())
+                if (header[i] != fileHeader[i])
+                    return false
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /** 判断该文件是否为gz压缩包 */
+    fun InputStream.isGzip(): Boolean = checkHeaderMagic(byteArrayOf(0x1F.toByte(), 0x8B.toByte()))
+
+    /** 判断该文件是否为xz压缩包 */
+    fun InputStream.isXz(): Boolean = checkHeaderMagic(XZ.HEADER_MAGIC)
+
+    /** 打开uri的输入流。等于 contentResolver.openInputStream(uri) */
+    fun Context.openInput(uri: Uri): InputStream? = contentResolver.openInputStream(uri)
+
     object Files {
         suspend fun writeToUri(ctx: Context, uri: Uri, content: String): Result<Unit> = withContext(Dispatchers.IO) {
             kotlin.runCatching {
@@ -151,64 +217,339 @@ object Utils {
             }
         }
 
+        /** 创建符号链接。会检查要成为符号链接的路径，如果已经有一个文件夹且不为符号链接且有内容，则抛出异常 */
+        fun symlink(realFile: File, linkFile: File) {
+            if (linkFile.exists() && !FileUtils.isSymlink(linkFile) && !linkFile.list().isNullOrEmpty()) {
+                Log.e(
+                    TAG,
+                    "symlink: 停止创建符号链接！要成为符号链接的文件路径已经是一个文件夹，不为符号链接且内部不为空。删除该文件夹可能丢失文件。\n realFile=$realFile, linkFile=$linkFile"
+                )
+                return
+            }
+            try {
+                linkFile.delete()
+                linkFile.parentFile?.mkdirs()
+                Os.symlink(realFile.absolutePath, linkFile.absolutePath)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        /** FileUtils.writeStringToFile， 保证字符串结尾是一个换行。但是这个函数不会trimIndent */
+        fun writeStringToFileWithLF(file: File, str: String, charset: Charset = StandardCharsets.UTF_8) {
+            val str1 = str.takeIf { it.endsWith('\n') }?.let { it + "\n" } ?: str
+            FileUtils.writeStringToFile(file, str1, charset)
+        }
+
+        /** 判断该文件是否为gz压缩包 */
+        fun File.isGzip(): Boolean = checkHeaderMagic(byteArrayOf(0x1F.toByte(), 0x8B.toByte()))
+
+        /** 判断该文件是否为xz压缩包 */
+        fun File.isXz(): Boolean = checkHeaderMagic(XZ.HEADER_MAGIC)
+
+        /** 检查文件头是否为给定标识 */
+        private fun File.checkHeaderMagic(header: ByteArray): Boolean {
+            try {
+                val len = header.size.toLong()
+                val fileHeader = source().use { source -> Buffer().also { source.read(it, len) }.readByteArray(len) }
+                for (i in 0 until len.toInt())
+                    if (header[i] != fileHeader[i])
+                        return false
+                return true
+            } catch (e: Exception) {
+                return false
+            }
+        }
 
     }
 
     object Rootfs {
         /**
-         * 检查rootfs是否存在。若不存在，则下载并解压
+         * 将某一个rootfs激活为当前rootfs（之后可通过rootfsCurrDir 获取)
+         * 会将该rootfs文件名保存到datastore
          */
-        suspend fun ensureAlpineRootfs(ctx: Activity): Unit = withContext(Dispatchers.IO) {
-            if (!alpineRootfsDir.exists() || alpineRootfsDir.list()?.isEmpty() != false) {
-                // 解压到rootfs文件夹，因为压缩包有一层alpine-aarch64文件夹。
-                Utils.Archive.decompressTarXz(ctx.assets.open("alpine-aarch64-pd-v4.21.0.tar.xz"), rootfsAllDir)
+        suspend fun makeCurrent(rootfsDir: File) {
+            Files.symlink(rootfsDir, rootfsCurrDir)
+            dataStore.edit { it[Consts.Pref.Local.curr_rootfs_name.key] = rootfsDir.name }
+        }
+
+        /**
+         * 如果rootfs文件夹下为空或仅有current文件夹，则返回true,此时应该先提醒用户选择一个rootfs
+         */
+        fun haveNoRootfs(): Boolean {
+            val currName = rootfsCurrDir.name
+            return !(rootfsAllDir.listFiles()?.any { it.name != currName } ?: false)
+
+        }
+
+        private data class FileEntry(
+            var name: String, val fullPath: String, val id: Long = nextId(),
+            val subs: MutableSet<FileEntry> = mutableSetOf()
+        ) {
+            companion object {
+                private var currentId = 0L
+                private fun nextId(): Long = currentId++
+            }
+
+            override fun equals(other: Any?): Boolean = (this === other || (other is FileEntry && other.id == id))
+            override fun hashCode(): Int = id.hashCode()
+            fun add(subName: String, fullPath: String): FileEntry {
+                var sub = subs.find { it.name == subName }
+                if (sub == null) {
+                    sub = FileEntry(subName, fullPath)
+                    subs.add(sub)
+                }
+                return sub
             }
         }
 
         /**
-         * 将某一个rootfs激活为当前rootfs（之后可通过rootfsCurrDir 获取
+         * 解压rootfs时，为了解压到指定文件夹d后，d内直接子文件夹就是usr opt 那些，可能需要移除压缩包中文件的路径开头多于的文件夹
+         * @param reportProgress 更新进度。接收参数为当前已读取的文件字节（压缩后大小）
+         * @return 返回解压时，文件名需要移除的路径前缀. 顺带返回压缩包内文件总个数 用于计算解压进度
          */
-        fun makeCurrent(rootfsDir: File) {
-            Consts.rootfsCurrDir.delete()
-            Os.symlink(rootfsDir.absolutePath, Consts.rootfsCurrDir.absolutePath)
+        private suspend fun findRootfsTarXzRemovedPrefix(input: InputStream?, reportProgress: (Long) -> Unit = {}): Pair<String, Long> =
+            withContext(Dispatchers.IO) {
+                if (input == null) throw IllegalArgumentException("输入流为null")
+                val startTime = System.currentTimeMillis()
+
+                /** 要移除的多余前缀路径 如果为空字符串则表示未获取到 */
+                var removedPrefix = ""
+                var entryNum = 0L
+                var readUncompSize = 0L
+
+                XZCompressorInputStream(input).use { xzIn ->
+                    TarArchiveInputStream(xzIn).use { tis ->
+                        val maxSegmentIdx = 10
+                        val segmentList = mutableListOf<MutableSet<String>>() //每个元素是一个 路径根据 / 分割出来的路径列表
+                        for (i in 0 until maxSegmentIdx) segmentList.add(mutableSetOf())
+                        var maxSegmentedPath = listOf<String>() // 分段最多，也就是最深的路径。等到时候找出第几个idx是rootfs了，就以这个为基准获取idx之前的部分
+                        var entry: TarArchiveEntry
+                        while (tis.nextEntry.also { entry = it } != null) {
+                            entryNum++
+                            readUncompSize += entry.size
+                            if (entryNum % 200 == 0L) {
+                                reportProgress(xzIn.compressedCount)
+//                            Log.d(TAG, "findRootfsTarXzRemovedPrefix: xz无法获取总大小吗? ${xzIn.compressedCount}, ${xzIn.uncompressedCount}")
+//                            Log.d(TAG, "findRootfsTarXzRemovedPrefix: 已读取 $entryNum 个文件, 大小 ${readUncompSize / (1024 * 1024)}MB")
+                            }
+                            val split = entry.name.trim('/').split('/')
+                            if (split.size > maxSegmentedPath.size) maxSegmentedPath = split
+                            for (i in split.indices) {
+                                if (i >= maxSegmentIdx) break
+                                segmentList[i].add(split[i])
+                            }
+                        }
+
+                        val rootfsSubDirs = listOf("etc", "usr")
+                        var segmentIdx = -1
+                        for (i in segmentList.indices) {
+                            if (segmentList[i].containsAll(rootfsSubDirs)) {
+                                segmentIdx = i
+                                break //停止循环时，当前segmentIdx对应的是rootfs的子目录们
+                            }
+                        }
+
+                        if (segmentIdx >= 0 && maxSegmentedPath.isNotEmpty()) {
+                            //不行 现在只知道第几段的那个文件夹名，但前面几段应该是哪些文件夹名不知道了
+                            // 存一个分段最多的路径吧，然后根据idx获取前半部分。但是如果rootfs目录有多个上级目录，那么最深的那个也有很小几率变成非rootfs那个文件夹里的一个文件。小概率事件不管了吧
+                            removedPrefix = maxSegmentedPath.subList(0, segmentIdx).joinToString("/")
+                        } else {
+                            throw RuntimeException("无法找到压缩包内的多余路径前缀。segmentIdx=$segmentIdx, maxSegmentedPath=$maxSegmentedPath")
+                        }
+                    }
+                }
+                //archlinux(676MB, 32800个文件）36秒 改之前38秒。。。。到底怎么才能读取更快呢？
+                Log.d(
+                    TAG, "findRootfsTarXzRemovedPrefix: 找到多余路径前缀：$removedPrefix " +
+                            "\n 寻找rootfs多余前缀路径耗时${(System.currentTimeMillis() - startTime) / 1000F}秒"
+                )
+
+                return@withContext Pair(removedPrefix, entryNum)
+            }
+
+
+        /**
+         * 解压一个tar.xz的压缩包，其内含一个rootfs, 将其解压到outDir.
+         * 解压后，outDir为 [Consts.rootfsAllDir] 中的一个目录，其内部为 bin etc 这种的目录
+         * 解压后会做一些处理操作，参考 [postExtractRootfs]
+         * uri不是.tar.xz时会抛出异常
+         */
+        suspend fun installTarXzRootfs(
+            ctx: Context,
+            uri: Uri,
+            outDir: File,
+            reporter: TaskReporter,
+        ) = withContext(Dispatchers.IO) {
+
+            val tmpArchiveFile = File(Consts.tmpDir, "archive-rootfs-tmp")
+            val compSize = ctx.contentResolver.openFileDescriptor(uri, "r").use { it?.statSize } ?: (1024 * 1024 * 1024L)
+//            var msgTitle = "(1/3) 正在将文件复制到内部存储目录..."
+//            var msg = ""
+
+            reporter.progress(0F)
+            //先检测是不是gz或xz. 然后复制文件到内部目录
+            val isXz = ctx.openInput(uri)?.use { it.isXz() } ?: false
+            val isGz = ctx.openInput(uri)?.use { it.isGzip() } ?: false
+            if (!isXz && !isGz) {
+                return@withContext reporter.done(RuntimeException("该文件不是 xz 或 gz 压缩包。"))
+            }
+
+            reporter.msg("", "(1/3) 正在将文件复制到内部存储目录...")
+//            ctx.openInput(uri)?.source()?.buffer()?.use { source ->
+//                tmpArchiveFile.sink().buffer().use { sink ->
+//                    sink.writeAll(source)
+//                }
+//            }
+            tmpArchiveFile.delete()
+            ctx.openInput(uri)?.use { input ->
+                tmpArchiveFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            if (!tmpArchiveFile.exists() || tmpArchiveFile.length() != compSize) {
+                return@withContext reporter.done(RuntimeException("文件复制出错，无法进行解压。"))
+            }
+
+            reporter.msg("", "(2/3) 正在读取压缩包寻找rootfs根目录...")
+
+            //FIXME 在压缩包内读取rootfs多余前缀太费时。先解压出来再移动文件夹？
+            val (removedPrefix, entryNum) = findRootfsTarXzRemovedPrefix(
+                ctx.contentResolver.openInputStream(uri),
+                reportProgress = { reporter.progress(it.toFloat() / compSize) })
+
+            reporter.msg("找到压缩包内rootfs目录: $removedPrefix", "(3/3) 正在解压...")
+            var currNum = 0F
+            extractTarXzRootfsInternal(ctx.contentResolver.openInputStream(uri), outDir, removedPrefix) {
+                currNum++
+                if (currNum % 200 == 0F)
+                    reporter.progress(currNum / entryNum)
+            }
+            //解压后做一些处理操作
+            reporter.msg("", "解压结束。正在做一些处理...")
+            postExtractRootfs(outDir)
         }
+
+        /**
+         * 参见 [installTarXzRootfs]
+         * @param removedPrefix 压缩文件名中 要移除的的路径前缀。不应以'/'开头。 为空字符串时不做移除处理
+         */
+        private suspend fun extractTarXzRootfsInternal(
+            input: InputStream?, outDir: File, removedPrefix: String, reportProgress: (Long) -> Unit = {},
+        ) = withContext(Dispatchers.IO) {
+            if (input == null) throw IllegalArgumentException("输入流为null")
+            val prefixCount = removedPrefix.trimStart('/').length //去除前缀 没有/开头的长度
+            Archive.decompressTarXz(input, outDir, reportProgress) {
+                if (prefixCount == 0) it
+                else if (it.length < prefixCount) {
+                    Log.w(TAG, "extractTarXzRootfs: 压缩包中文件名长度小于prefix长度：文件名=\"$it\"， prefix=$removedPrefix")
+                    ""
+                } else it.substring(prefixCount + if (it.startsWith('/')) 1 else 0) //如果解压文件有/开头，则去除长度+1
+            }
+        }
+
+        /** 获取当前选择的rootfs。
+         * 确保：1. 不为 [rootfsCurrDir] 2. 优先读取上次设置的，如果不存在则随机选一个
+         */
+        suspend fun getSelectedRootfs(): File? {
+            var selectedRootfs: String? = Consts.Pref.Local.curr_rootfs_name.get()
+            val allAvailable = rootfsAllDir.list() ?: arrayOf()
+            if (selectedRootfs.isNullOrEmpty() || !allAvailable.contains(selectedRootfs)) {
+                selectedRootfs = allAvailable.find { it != rootfsCurrDir.name }
+            }
+            if (selectedRootfs.isNullOrEmpty())
+                return null
+            val file = File(rootfsAllDir, selectedRootfs)
+            if (!file.exists()) return null
+            else return file
+        }
+
+        /**
+         * 解压rootfs后，需要对其做一些一次性处理
+         * - 修改网络相关配置文件
+         */
+        suspend fun postExtractRootfs(rootfsDir: File) = withContext(Dispatchers.IO) {
+            //来自proot-distro。修改网络配置文件
+            File(rootfsDir, "/etc/resolv.conf").run {
+                delete()
+                writeText(
+                    """
+                    nameserver 8.8.8.8
+                    nameserver 8.8.4.4
+                    """.trimIndent().plus("\n")
+                )
+            }
+            File(rootfsDir, "/etc/hosts").run {
+                delete()
+                writeText(
+                    """
+                    # IPv4.
+                    127.0.0.1   localhost.localdomain localhost
+            
+                    # IPv6.
+                    ::1         localhost.localdomain localhost ip6-localhost ip6-loopback
+                    fe00::0     ip6-localnet
+                    ff00::0     ip6-mcastprefix
+                    ff02::1     ip6-allnodes
+                    ff02::2     ip6-allrouters
+                    ff02::3     ip6-allhosts
+                    """.trimIndent().plus("\n")
+                )
+            }
+        }
+
+
     }
 
     object Archive {
+
         /**
          * 解压一个.tar.xz压缩文件
-         * @param archiveInputStream 对应压缩文件的输入流
+         * @param archiveInput 对应压缩文件的输入流
+         * @param outDir 解压到的目录，解压后该文件夹下直接子文件夹应该为 usr bin etc 那些
+         * @param reportProgress 每解压一个文件，调用一次该函数传入该文件解压后大小。用于更新解压进度
+         * @param entryNameMapper 一个映射函数，输入压缩包内文件名a，返回修改后的文件名b，最终该文件会解压到 File([outDir], b)
          */
         @Throws(IOException::class)
-        fun decompressTarXz(archiveInputStream: InputStream, dstDir: File) {
-            if (!dstDir.exists()) dstDir.mkdirs()
+        fun decompressTarXz(
+            archiveInput: InputStream?,
+            outDir: File,
+            reportProgress: (Long) -> Unit = {},
+            entryNameMapper: (String) -> String = { it },
+        ) {
+            if (archiveInput == null) throw IllegalArgumentException("输入流为null")
+            if (!outDir.exists()) outDir.mkdirs()
 
             //文件->xz->tar
-            XZCompressorInputStream(archiveInputStream).use { xzIn ->
-                TarArchiveInputStream(xzIn).use { tis ->
+            XZCompressorInputStream(archiveInput).use { xzis ->
+                TarArchiveInputStream(xzis).use { tis ->
                     var entry: TarArchiveEntry
                     while (tis.nextEntry.also { entry = it } != null) {
-                        val name = entry.name
-                        val outFile = File(dstDir, name)
+                        reportProgress(entry.size) //更新解压进度
+                        val name = entryNameMapper(entry.name)
+                        if (name.isEmpty())
+                            continue
+                        val outFile = File(outDir, name)
                         //确保父目录存在
                         outFile.parentFile?.mkdirs()
-                        //如果是目录，创建目录
-                        if (entry.isDirectory) {
-                            outFile.mkdirs()
-                        }
-                        //如果是符号链接
-                        else if (entry.isSymbolicLink) {
-                            Os.symlink(entry.linkName, outFile.absolutePath)
+                        try {
+                            //如果是目录，创建目录
+                            if (entry.isDirectory) {
+                                outFile.mkdirs()
+                                Os.chmod(outFile.absolutePath, entry.mode)
+                            }
+                            //如果是符号链接
+                            else if (entry.isSymbolicLink) {
+                                Os.symlink(entry.linkName, outFile.absolutePath)
 //                            Log.d(TAG,"extract: 解压时发现符号链接：链接文件：${entry.name}，指向文件：${entry.linkName}")
+                            }
+                            //文件，解压
+                            else {
+                                FileOutputStream(outFile).use { os -> tis.copyTo(os) }
+                                Os.chmod(outFile.absolutePath, entry.mode) //不知为何执行权限没同步过来？
+                                // FileUtils.copyInputStreamToFile(tis, file); //不能用这个，会自动关闭输入流
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "decompressTarXz: 解压文件时出错。路径=${outFile.absolutePath}", e)
                         }
-                        //文件，解压
-                        else {
-                            FileOutputStream(outFile).use { os -> tis.copyTo(os) }
-                            Os.chmod(outFile.absolutePath, entry.mode) //不知为何执行权限没同步过来？
-                            // FileUtils.copyInputStreamToFile(tis, file); //不能用这个，会自动关闭输入流
-                        }
-
-
                     }
                 }
             }
@@ -268,8 +609,41 @@ object Utils {
         /**
          * 用于viewmodel中修改datastore的数据
          */
-        fun <T> ViewModel.editDateStore(key: Preferences.Key<T>, value: T) {
-            viewModelScope.launch { dataStore.edit { it[key] = value } }
+        suspend fun <T> ViewModel.editDateStore(key: Preferences.Key<T>, value: T) = withContext(Dispatchers.IO) {
+            dataStore.edit { it[key] = value }
+        }
+
+        /** 同[ViewModel.editDateStore]，但会在新的协程中异步执行， */
+        fun <T> ViewModel.editDateStoreAsync(key: Preferences.Key<T>, value: T) {
+            viewModelScope.launch(Dispatchers.IO) { dataStore.edit { it[key] = value } }
+        }
+    }
+
+    object Permissions {
+        lateinit var storageLauncher: ActivityResultLauncher<String>
+        fun registerForActivityResult(a: MainEmuActivity) {
+            storageLauncher = a.registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (!isGranted) {
+                    CoroutineScope(Dispatchers.Default).launch {
+                        a.viewModel.showConfirmDialog("未获取存储权限!")
+                        requestStoragePermission()
+                    }
+                } else {
+                    //获取权限后 启动模拟器
+                    MainEmuActivity.instance.prepareAndStart()
+                }
+            }
+        }
+
+        /** 检查是否有存储权限。如果没有则申请。返回当前是否有权限 */
+        fun checkStoragePermission(a: MainEmuActivity): Boolean {
+            val granted = a.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            if (!granted) requestStoragePermission()
+            return granted
+        }
+
+        private fun requestStoragePermission() {
+            storageLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
     }
 
@@ -344,10 +718,22 @@ object Utils {
             }
         }
     }
+
+    /** 当一个执行一个长时间操作时，传入一个此类的时候一遍在屏幕上显示进度和消息 */
+    interface TaskReporter {
+        /** 更新进度 */
+        fun progress(percent: Float)
+
+        /** 执行此函数表示任务结束. 若 [error] 不为null, 说明失败了。 */
+        fun done(error: Exception? = null)
+
+        /** 需要显示的文字 */
+        fun msg(text: String, title: String? = null)
+    }
 }
 
 
-class RateLimiter(val delayMs:Long = 1000L) {
+class RateLimiter(val delayMs: Long = 1000L) {
     private val lastBlock = AtomicReference<(suspend () -> Unit)?>(null)
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -365,3 +751,14 @@ class RateLimiter(val delayMs:Long = 1000L) {
         }
     }
 }
+
+
+enum class FuncOnChangeAction {
+    EDIT,
+    ADD,
+    DEL,
+}
+/** 增删改的回调 [FuncOnChange]的同步函数版本 */
+typealias FuncOnChangeSync<T> = (oldValue: T, newValue: T, action: FuncOnChangeAction) -> Unit
+/** 增删改的回调 异步函数。当为ADD或DEL时old=new */
+typealias FuncOnChange<T> = suspend (oldValue: T, newValue: T, action: FuncOnChangeAction) -> Unit

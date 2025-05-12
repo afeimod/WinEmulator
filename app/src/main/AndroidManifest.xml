@@ -4,6 +4,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+
     <application
         android:name="org.github.ewt45.winemulator.MainEmuApplication"
         android:allowBackup="true"
@@ -46,10 +50,22 @@
         </activity>
 
         <service
-            android:name="org.github.ewt45.winemulator.X11Service"
+            android:name="org.github.ewt45.winemulator.emu.X11Service"
             android:enabled="true"
             android:process=":xserver"
             android:exported="false" />
-    </application>
 
+        <!--        mt的文件提供器-->
+        <provider
+            android:name="bin.mt.file.content.MTDataFilesProvider"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:exported="true"
+            android:authorities="org.github.ewt45.winemulator.MTDataFilesProvider"
+            android:grantUriPermissions="true">
+            <intent-filter>
+                <action
+                    android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
 </manifest>

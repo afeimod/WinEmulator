@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.github.ewt45.winemulator.FuncOnChangeAction
 
 /**
  * 用于 MainViewModel 的state
@@ -43,7 +44,7 @@ class MainViewModel : ViewModel() {
      * @param action 要执行的操作。在viewModelScope中运行
      * @return 返回一个Result success代表操作执行成功，failure代表失败
      */
-    suspend fun showBlockDialog(msg: String = "加载中，请稍等", action: (suspend () -> Unit)):Result<Unit> {
+    suspend fun <T> showBlockDialog(msg: String = "加载中，请稍等", action: (suspend () -> T)):Result<T> {
         //更新state,显示dialog
         _uiState.update { it.copy(dialogType = DialogType.BLOCK, msg = msg) }
         //执行action
@@ -75,6 +76,18 @@ class MainViewModel : ViewModel() {
 
     fun showErrorDialog(msg:String, isFatal:Boolean = false) {
         TODO()
+    }
+
+    /**
+     * 先通过 [showBlockDialog] 显示阻塞对话框并执行操作。该操作返回一个字符串。
+     * 当字符串不为空时表示失败，会通过 [showConfirmDialog] 显示失败信息。
+     */
+    suspend fun showBlockDialogWithErrorConfirm(msg: String,  action: (suspend () -> String)) {
+        val result = showBlockDialog(msg, action)
+        val str = if (result.getOrNull() != null) result.getOrNull()!! else result.exceptionOrNull()!!.stackTraceToString()
+        if (str.isNotEmpty()) {
+            showConfirmDialog(str)
+        }
     }
 
 }

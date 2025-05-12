@@ -1,6 +1,9 @@
 package org.github.ewt45.winemulator
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager.ApplicationInfoFlags
+import android.system.Os
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -9,6 +12,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import org.apache.commons.io.IOUtils
 import java.io.File
 import java.io.FileOutputStream
@@ -17,6 +23,7 @@ import kotlin.reflect.full.declaredMemberProperties
 
 object Consts {
     private val TAG = "Consts"
+    var isDebug = true
     lateinit var cacheDir: File
 
     /** 用于proot绑定 /tmp 的安卓路径 */
@@ -28,17 +35,33 @@ object Consts {
     /** 当前激活的rootfs, 应该为一个指向实际rootfs的软链接. files/rootfs/current */
     lateinit var rootfsCurrDir: File
 
+    /** tx11 需要用到的xkb文件夹， rootfs可以安装libxkbcommon包来获取. 路径：[rootfsCurrDir]/usr/share/X11/xkb */
+    lateinit var rootfsCurrXkbDir: File
+
+    /** rootfs中的/tmp文件夹。启动proot前应将其变为[tmpDir]的符号链接。路径：[rootfsCurrDir]/tmp */
+    lateinit var rootfsCurrTmpDir: File
+
+    /** proot --link2symlink 时 要存放唯一真实文件的文件夹。路径：[rootfsCurrDir]/.l2s */
+    lateinit var rootfsCurrL2sDir: File
+
     /** 一个用于测试的alpine rootfs. files/rootfs/alpine-aarch64 */
     lateinit var alpineRootfsDir: File
+
+    /** 在一个rootfs内部，存放模拟器配置相关的文件夹的名称。 */
+    val rootfsEmuConfDirName: String = "/.emuconf"
 
     /** proot二进制文件. files/proot  */
     lateinit var prootBin: File
 
     /** 存储pulseaudio相关文件的文件夹 */
     lateinit var pulseDir: File
+
     /** 运行pulse时环境变量HOME设置为该路径，用于寻找~/.config 等 */
     lateinit var pulseHomeDir: File
     lateinit var pulseBin: File
+
+    /** apk自身所在路径 */
+    lateinit var apkFilePath: String
 
     /** 定义在assets中的默认值，此map中的值会优先于代码中的默认值生效。key为datastore的某个key, value为对应value */
     private lateinit var prefInAssets: Map<String, Any>
@@ -53,14 +76,27 @@ object Consts {
      * 如果assets中指定了默认值，会覆盖这里的默认值
      */
     object Pref {
-        data class Item<T>(val key: Preferences.Key<T>, val default: T)
+        data class Item<T>(val key: Preferences.Key<T>, val default: T, val flow: Flow<T>) {
+            /** 获取最新的值. 本地未存储时返回[default] */
+            suspend fun get(): T = flow.first()
+        }
+
         /** 全部设置项。用于批量操作 例如导出导入，重置 */
         val allItems by lazy { getAllPrefItems() }
 
         val general_resolution by item("general_resolution", "1280x720")
-        val proot_bool_options by item("proot_bool_options", setOf("--root-id", "-L", "--link2symlink", "--kill-on-exit"))
+        val general_rootfs_lang by item("general_rootfs_lang", "en_US.UTF-8")
+        val general_shared_ext_path by item("shared_ext_path", setOf("/storage/emulated/0/Download"))
+        val proot_bool_options by item("proot_bool_options", setOf( "-L", "--link2symlink", "--sysvipc", "--kill-on-exit", /*"--root-id",*/))
         val proot_startup_cmd by item("proot_startup_cmd", "")
 
+        /** 仅在此设备存储，不应用于导出导入。 */
+        object Local {
+            /** 当前使用的rootfs名，[Consts.rootfsAllDir]目录下的某个文件夹名，可能为空字符串或对应文件夹不存在 */
+            val curr_rootfs_name by item("local_curr_rootfs_name", "")
+            /** 记录当前存在的rootfs 如果要使用该rootfs, 应该登陆哪个用户。 存为json字符串。转换时应该变成一个map, key是rootfs文件夹名, value是用户名  */
+            val rootfs_login_user_json by item("local_rootfs_login_user", "{}")
+        }
 
         /**
          * 初始化Item需要在读取assets之后，lazy的话 第一次用到Pref时Consts应该已经初始化好了吧。用lateinit的话还需要多写一行
@@ -77,35 +113,39 @@ object Consts {
                 else -> throw IllegalArgumentException("Unsupported type: ${T::class.simpleName}")
             } as Preferences.Key<T>
             val finalDefault = (prefInAssets[name].takeIf { it is T } ?: default) as T
-            return@lazy Item(key, finalDefault)
+            return@lazy Item(key, finalDefault, dataStore.data.map { it[key] ?: finalDefault })
         }
 
         /** 反射获取全部设置项 */
-        private fun getAllPrefItems():List<Item<Any>> {
+        private fun getAllPrefItems(): List<Item<Any>> {
             return Pref::class.declaredMemberProperties
                 .filter { it.returnType.classifier == Pref.Item::class }
                 .mapNotNull { property -> property.call(Pref) as? Pref.Item<Any> }
         }
     }
 
+    //TODO 将费时操作移到异步函数中
     /**
      * 初始化。使用前先调用一次
      */
     fun init(ctx: Context) {
+        isDebug = ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         cacheDir = ctx.cacheDir
         cacheDir.mkdirs()
 
         tmpDir = File(cacheDir, "tmp")
         tmpDir.mkdirs()
-//        Os.chmod(tmpDir.absolutePath, 0777)
+        Os.chmod(tmpDir.absolutePath, "777".toInt(8))
 
         val fileDir = ctx.filesDir
         rootfsAllDir = File(fileDir, "rootfs")
         rootfsAllDir.mkdirs()
 
         rootfsCurrDir = File(rootfsAllDir, "current")
-
         alpineRootfsDir = File(rootfsAllDir, "alpine-aarch64") //这个等解压的时候再创建吧
+        rootfsCurrXkbDir = File(rootfsCurrDir, "usr/share/X11/xkb")
+        rootfsCurrTmpDir = File(rootfsCurrDir, "tmp")
+        rootfsCurrL2sDir = File(rootfsCurrDir, "/.l2s")
 
         //proot从assets解压
         prootBin = File(fileDir, "proot")
@@ -123,6 +163,8 @@ object Consts {
             pulseHomeDir.mkdirs()
         }
         pulseBin.setExecutable(true)
+
+        apkFilePath = ctx.applicationInfo.sourceDir
 
         //优先生效的用户偏好
         val prefInAssetsJson = IOUtils.toString(ctx.assets.open("preferences.json"), StandardCharsets.UTF_8)

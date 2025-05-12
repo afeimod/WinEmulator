@@ -5,6 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -24,9 +26,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.github.ewt45.winemulator.ui.setting.CollapsePanel
-import org.github.ewt45.winemulator.ui.setting.GeneralResolution
+import org.github.ewt45.winemulator.Consts
+import org.github.ewt45.winemulator.ui.setting.DebugSettings
+import org.github.ewt45.winemulator.ui.setting.DebugSettingsImpl
+import org.github.ewt45.winemulator.ui.setting.GeneralSettings
+import org.github.ewt45.winemulator.ui.setting.GeneralSettingsPreview
 import org.github.ewt45.winemulator.ui.setting.ProotSettings
+import org.github.ewt45.winemulator.ui.setting.ProotSettingsPreview
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingAction
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
@@ -37,41 +43,22 @@ fun SettingScreen(modifier: Modifier = Modifier) {
     val mainViewModel: MainViewModel = viewModel()
     val settingViewModel: SettingViewModel = viewModel()
     val scope = rememberCoroutineScope()
-    val ctx = LocalContext.current
-
-    val proot by settingViewModel.prootState.collectAsState()
-    val general by settingViewModel.generalState.collectAsState()
-    //TODO 用LazyColumn?
     Column(
         modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         TopBarActions(modifier = Modifier.align(Alignment.End))
-        GeneralSettings(
-            resolutionText = settingViewModel.resolutionText,
-            onChangeResolution = settingViewModel::onChangeResolutionText,
-        )
+        if (Consts.isDebug) {
+            DebugSettings()
+            HorizontalDivider()
+        }
+        GeneralSettings()
         HorizontalDivider()
-        ProotSettings(
-            prootNoValueOptions = proot.boolOptions,
-            onChangeProotNoValueOptions = settingViewModel::onChangeProotBoolOptions,
-            prootStartupCmd = proot.startupCmd,
-            onChangeProotStartupCmd = settingViewModel::onChangeProotStartupCmd,
-        )
+        ProotSettings()
+        Spacer(Modifier.height(16.dp))
     }
 }
 
-@Composable
-fun GeneralSettings(
-    resolutionText: String,
-    onChangeResolution: (String, Boolean) -> Unit,
-) {
-    CollapsePanel("一般选项") {
-        GeneralResolution(
-            resolutionText, onChangeResolution
-        )
-    }
-}
 
 
 /**
@@ -155,14 +142,13 @@ fun PreviewExpandablePanelExample() {
             modifier = Modifier.align(Alignment.End),
             onClick = {}
         )
-        GeneralSettings(resolution, { str,_-> resolution = str })
+        if (Consts.isDebug) {
+            DebugSettingsImpl()
+            HorizontalDivider()
+        }
+        GeneralSettingsPreview()
         HorizontalDivider()
-        ProotSettings(
-            prootNoValueOptions = setOf(),
-            onChangeProotNoValueOptions = { _, _ -> },
-            prootStartupCmd = "",
-            onChangeProotStartupCmd = {},
-        )
+        ProotSettingsPreview()
     }
 
 //    var finalCmd by remember { mutableStateOf("") }
