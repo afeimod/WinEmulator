@@ -71,6 +71,7 @@ import java.io.OutputStream
 import java.net.URL
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KProperty1
@@ -479,7 +480,11 @@ object Utils {
         }
     }
 
-
+     /** 代表一个符号链接. 用于解压文件时相关处理
+      * @param symlink 符号链接的路径（安卓上的路径）
+      * @param pointTo 该链接指向的路径（由symlink指定，不一定指向自己app内的路径，可能相对指向自己同目录，可能以rootfs为根目录的绝对路径，当然也可能是l2s文件指向termux内路径）
+      */
+    private data class SymLink(val symlink: String, val pointTo: String)
     object Archive {
 
         /**
@@ -496,6 +501,8 @@ object Utils {
             entryNameMapper: (String) -> String = { it },
         ) where T : CompressorInputStream, T : InputStreamStatistics {
             if (!outDir.exists()) outDir.mkdirs()
+
+            val symLinkList = mutableListOf<SymLink>()
 
             archiveInput.use { zis ->
                 TarArchiveInputStream(zis).use { tis ->
@@ -516,8 +523,8 @@ object Utils {
                             }
                             //如果是符号链接
                             else if (entry.isSymbolicLink) {
-                                Os.symlink(entry.linkName, outFile.absolutePath)
-//                            Log.d(TAG,"extract: 解压时发现符号链接：链接文件：${entry.name}，指向文件：${entry.linkName}")
+                                symLinkList.add(SymLink(outFile.absolutePath, entry.linkName))
+//                                Os.symlink(entry.linkName, outFile.absolutePath) // 全部解压完再处理吧
                             }
                             //文件，解压
                             else {
@@ -529,6 +536,20 @@ object Utils {
                             reporter.msg("解压文件时出错：路径=${outFile.absolutePath} 。错误消息=${e.stackTraceToString()}")
                         }
                     }
+                }
+            }
+
+            for (item in symLinkList) {
+                try {
+                    Os.symlink(item.pointTo, item.symlink)
+                    //修复 proot l2s文件相关的符号链接指向路径
+                    /*
+                    - 如果符号链接指向的路径以.l2s开头，说明该符号链接可能是硬链接模拟，指向的路径可能是中间文件。循环一次获取硬链接模拟到中间文件的 `map<中间文件路径，List<硬链接模拟路径>>`
+                    - 如果中间文件是符号链接且指向的路径与自己同目录，且文件名只多了后缀 `.0001` 之类的数字，说明确定了中间文件和最终文件
+                    - 注意，解压后的中间文件路径 不等于 硬链接模拟指向的路径，因为硬链接解压到自己包名子目录下了，检查中间文件指向的路径的时候不应该从硬链接指向的路径获取中间文件，而是应该从.l2s文件夹（或者硬链接同目录）寻找文件名相同的作为中间路径，寻找最终文件时同理
+                     */
+                } catch (e: Exception) {
+                    reporter.msg("创建符号链接时出错。文件=$item 。错误消息=${e.stackTraceToString()}")
                 }
             }
         }

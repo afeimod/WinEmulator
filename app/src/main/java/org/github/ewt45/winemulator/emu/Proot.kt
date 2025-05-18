@@ -56,7 +56,7 @@ class Proot {
             "--change-id=${userInfo.uid}:${userInfo.gid}",
             "--cwd=${userInfo.home}",
             "--bind=${tmpdir.absolutePath}:/tmp",
-//            "--bind=${rootfs.absolutePath}/tmp:/dev/shm",
+            "--bind=${rootfs.absolutePath}/tmp:/dev/shm", //将tmp用作 /dev/shm， 这么做会有冲突吗
             "--bind=/sys",
             "--bind=/proc/self/fd:/dev/fd",
             "--bind=/proc",
