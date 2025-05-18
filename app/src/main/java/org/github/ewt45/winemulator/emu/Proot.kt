@@ -35,10 +35,10 @@ class Proot {
         val rootfs = rootfsCurrDir
         val tmpdir = Consts.tmpDir
 
-        //每次运行前清空tmp
-        tmpdir.deleteRecursively()
-        tmpdir.mkdirs()
-        chmod(tmpdir, "1777")
+        //TODO 每次运行前清空tmp。不对不能在tx11启动后清空 不然和容器连不上了
+//        tmpdir.deleteRecursively()
+//        tmpdir.mkdirs()
+//        chmod(tmpdir, "1777")
 
         //proot命令的参数使用 大量参考Proot-Distro
 
@@ -56,7 +56,7 @@ class Proot {
             "--change-id=${userInfo.uid}:${userInfo.gid}",
             "--cwd=${userInfo.home}",
             "--bind=${tmpdir.absolutePath}:/tmp",
-            "--bind=${rootfs.absolutePath}/tmp:/dev/shm",
+//            "--bind=${rootfs.absolutePath}/tmp:/dev/shm",
             "--bind=/sys",
             "--bind=/proc/self/fd:/dev/fd",
             "--bind=/proc",

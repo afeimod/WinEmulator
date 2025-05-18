@@ -174,6 +174,7 @@ class MainEmuActivity : MainActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        terminalViewModel.stopTerminal()
         stopService(startX11Intent)
 
         // 删除通知 从onPause改到onDestroy

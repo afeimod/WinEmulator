@@ -55,6 +55,7 @@ import org.github.ewt45.winemulator.Consts.Pref.Local.curr_rootfs_name
 import org.github.ewt45.winemulator.Consts.rootfsAllDir
 import org.github.ewt45.winemulator.Consts.rootfsCurrDir
 import org.tukaani.xz.XZ
+import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -482,8 +483,6 @@ object Utils {
                 )
             }
         }
-
-
     }
 
     object Archive {
@@ -677,7 +676,7 @@ object Utils {
                     is Long -> encoder.encodeLong(value)
                     is Double -> encoder.encodeDouble(value)
                     is Set<*> -> {
-                        encoder.encodeSerializableValue(listSerializer, value.mapNotNull { it as? String })
+                        encoder.encodeSerializableValue(listSerializer, value.map { it as String })
 //                        if (value.first()?.takeIf { it is String } != null) encoder.encodeSerializableValue(setSerializer, value as Set<String>)
                     }
 
@@ -700,7 +699,7 @@ object Utils {
                     }
                     //这个数组每个元素是JsonLiteral(JsonPrimitive) 不是直接String
                     is JsonArray -> {
-                        el.mapNotNull { item -> (item as? JsonPrimitive)?.takeIf { it.isString }?.content }.toSet()
+                        el.mapNotNull { item -> (item as JsonPrimitive).takeIf { it.isString }!!.content }.toSet()
                     }
 
                     else -> throw IllegalArgumentException("反序列化时，Any无法转为常见类型: $el")

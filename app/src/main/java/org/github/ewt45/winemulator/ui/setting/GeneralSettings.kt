@@ -52,10 +52,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChange
 import org.github.ewt45.winemulator.FuncOnChangeAction
+import org.github.ewt45.winemulator.emu.ProotRootfs
 import org.github.ewt45.winemulator.ui.AnimatedVertical
 import org.github.ewt45.winemulator.ui.CollapsePanel
 import org.github.ewt45.winemulator.ui.ComposeSpinner
@@ -64,7 +64,6 @@ import org.github.ewt45.winemulator.ui.TitleAndContent
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
-import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 import java.io.File
 import java.util.Random
 
@@ -75,29 +74,25 @@ private val TAG = "GeneralSettings"
 fun GeneralSettings(
 ) {
 
-    val scope = rememberCoroutineScope()
-
     val settingVM: SettingViewModel = viewModel()
     val mainViewModel: MainViewModel = viewModel()
-    val terminalViewModel: TerminalViewModel = viewModel()
     val state by settingVM.generalState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
-    /** 当前已设置的rootfs默认登陆用户。 key为rootfs名，value为用户名  */
-    val rootfsUsersCurr: Map<String, String> = Json.decodeFromString(state.localRootfsUsersCurr)
 
     CollapsePanel("一般选项", vPadding = 32.dp) {
         GeneralResolution(settingVM.resolutionText, settingVM::onChangeResolutionText)
         GeneralRootfsLang(state.rootfsLang, listOf("en_US.UTF-8", "zh_CN.UTF-8"), settingVM::onChangeRootfsLang)
         GeneralShareDir(state.sharedExtPath, settingVM::onChangeShareExtPath)
 //        MoreContent {
+
         GeneralRootfsSelect(
-            settingVM.rootfsList.value,
             Consts.rootfsCurrDir.canonicalFile.name,
-            rootfsUsersCurr,
-            settingVM.rootfsUsersOptions.value,
+            state.localRootfsLoginUsersMap,
+            settingVM.rootfsUsersOptions.value.mapValues { it.value.map { info -> info.name } },
             settingVM::onChangeRootfsName,
             settingVM::onChangeRootfsSelect,
-            { rootfs, user -> scope.launch { settingVM.onChangeRootfsLoginUser(rootfs, user, rootfsUsersCurr) } },
+            { rootfs, user -> scope.launch { settingVM.onChangeRootfsLoginUser(rootfs, user) } },
         )
 //        }
     }
@@ -118,18 +113,17 @@ fun GeneralRootfsLang(
 
 /**
  * Rootfs切换，删除，重命名，添加
- * @param rootfsList 用于显示的rootfs名称，对应文件夹名。不应该包含[Consts.rootfsCurrDir]
+// * @param rootfsList 用于显示的rootfs名称，对应文件夹名。
  * @param currRootfs 当前正在运行的rootfs名，rootfsList中的一项，为 [Consts.rootfsCurrDir] 指向的真实路径，应该将此项禁用禁止编辑
  * @param onRootfsNameChange 文件夹重命名/删除时
- * @param loginUsersCurr 每个rootfs及其当前选择的登陆用户名。. 参考：[Consts.Pref.Local.rootfs_login_user_json]
- * @param loginUsersOptions 每个rootfs及其对应的全部可使用用户名
+ * @param loginUsersCurr 每个rootfs及其当前选择的登陆用户名。参考：[Consts.Pref.Local.rootfs_login_user_json]。请传入前确保每个rootfs都在其中有key，且对应value 的user符合 [ProotRootfs.getPreferredUser]
+ * @param loginUsersOptions 每个rootfs及其对应的全部可使用用户名。 请传入前确保rootfs不包含[Consts.rootfsCurrDir]
  * @param onRootfsSelectChange 当前使用的rootfs变更时
  * @param onUserSelectChange 某个rootfs的登陆用户变化时。参数1是rootfs名，参数2是用户名
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralRootfsSelect(
-    rootfsList: List<String>,
+//    rootfsList: List<String>,
     currRootfs: String,
     loginUsersCurr: Map<String, String>,
     loginUsersOptions: Map<String, List<String>>,
@@ -137,11 +131,12 @@ fun GeneralRootfsSelect(
     onRootfsSelectChange: suspend (String) -> Unit,
     onUserSelectChange: (String, String) -> Unit,
 ) {
+
     val scope = rememberCoroutineScope()
     val mainVm: MainViewModel = viewModel()
     val prepareVm: PrepareStageViewModel = viewModel()
 //    TODO 排一下序之后没问题了，之前重命名用list.minus.plus 然后重命名之后rootfs名往上挪了一位，user名还没变。出错原理是什么？
-    val sortedRootfsList = rootfsList.sortedWith(compareBy<String> { it != currRootfs }.thenBy { it })
+    val sortedRootfsList = loginUsersOptions.keys.sortedWith(compareBy<String> { it != currRootfs }.thenBy { it })
 
 //    fun onDoneRootfsName(oldName:String, newNameRaw: String, isCurr: Boolean) {
 //        val newName = newNameRaw.replace(" ", "").trim()
@@ -180,15 +175,18 @@ fun GeneralRootfsSelect(
 
             for (rootfsName in sortedRootfsList) {
                 val isCurr = rootfsName == currRootfs
-                val userNameOptions = loginUsersOptions[rootfsName] ?: listOf("root")
-                val fallbackUserName = userNameOptions.find { it != "root" } ?: "root"
-                val oldStoreUserName = loginUsersCurr[rootfsName]
-                //从本地存储的json读取的记录的user名，可能未记录为null,也可能已记录但过时（目前没有这个用户）。如果过时就更新
-                if (oldStoreUserName != null && !userNameOptions.contains(oldStoreUserName)) {
-                    onUserSelectChange(oldStoreUserName, fallbackUserName)
+                val userNameOptions = loginUsersOptions[rootfsName]
+                val userName = loginUsersCurr[rootfsName]
+                if (userNameOptions == null || userName == null) {
+                    //TODO 目前没有实现等待加载机制（sealed interface），所以初次传入的值可能不准确，直接忽略即可。稍后应该会更新传入准确的数据
                     continue
                 }
-                val userName = oldStoreUserName ?: fallbackUserName
+                //从本地存储的json读取的记录的user名，可能未记录为null,也可能已记录但过时（目前没有这个用户）。如果过时就更新
+//                Log.d(TAG, "GeneralRootfsSelect: 跳过=${userName != null && !userNameOptions.contains(userName)} rootfsList变化后没显示？rootfsName=$rootfsName, oldStoreUserName=$userName ,userNameOptions = $userNameOptions")
+                if (!userNameOptions.contains(userName)) {
+                    throw RuntimeException("请确保传入的loginUsersOptions包含userName！loginUsersOptions=$userNameOptions, rootfsName=$rootfsName, username=$userName")
+                }
+
                 Box {
                     Row(Modifier.padding(0.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1F)) {
@@ -444,6 +442,7 @@ fun GeneralSettingsPreview() {
         if (action == FuncOnChangeAction.ADD) shareDirSet += "/added/path/${Random(1).nextInt()}"
         if (action == FuncOnChangeAction.EDIT) shareDirSet = shareDirSet - old + new
     }
+    val loginUsersOptions = mapOf("rootfs-1" to listOf("root"), "rootfs-2" to listOf("iuser", "root"), "rootfs-3" to listOf("iuser_3", "root"))
 
     CollapsePanel("一般选项") {
         GeneralResolution("1280x720", { _, _ -> })
@@ -451,7 +450,7 @@ fun GeneralSettingsPreview() {
         GeneralShareDir(shareDirSet, onChangeShareDir)
 //        MoreContent {
         GeneralRootfsSelect(
-            listOf("current", "rootfs-1", "rootfs-2"), "rootfs-1", mapOf(), mapOf(), { _, _, _ -> "" }, { _ -> }, { _, _ -> })
+            "rootfs-1", mapOf(), loginUsersOptions, { _, _, _ -> "" }, { _ -> }, { _, _ -> })
 //        }
     }
 }

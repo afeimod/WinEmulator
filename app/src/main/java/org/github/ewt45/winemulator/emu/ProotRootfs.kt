@@ -22,8 +22,8 @@ class ProotRootfs {
 
 
     companion object {
-        /** 获取一个rootfs文件夹内/etc/passwd 中存储的用户信息 */
-        fun getUserInfos(rootfs: File = Consts.rootfsCurrDir): List<UserInfo> {
+        /** 获取一个rootfs文件夹内/etc/passwd 中存储的用户信息。按用户名字母顺序排序 */
+        fun getUserInfos(rootfs: File): List<UserInfo> {
             var returnValue:List<UserInfo>
             try {
                 returnValue = FileUtils.readLines(File(rootfs, "/etc/passwd"), StandardCharsets.UTF_8).mapNotNull { line ->
@@ -52,19 +52,27 @@ class ProotRootfs {
         }
 
         /**
-         * 获取某rootfs的所选登陆用户名。
-         * 首先从本地json中读取，如果没有，则优先返回非root用户。最后选项是root用户
+         * 同 [getPreferredUser](String?, List)
          * @param rootfsName 作为 [Consts.Pref.Local.rootfs_login_user_json] 的map的key 获取存储的user名。不能为current
          */
-        suspend fun getPreferredUser(rootfsName: String):UserInfo = getUserInfos(File(Consts.rootfsAllDir,rootfsName)).run {
+        suspend fun getPreferredUser(rootfsName: String):UserInfo  {
             if (rootfsName == Consts.rootfsCurrDir.name) throw IllegalArgumentException("用于搜索的 rootfsName 不能为 'current'")
             val userMap: Map<String, String> = Json.decodeFromString(Consts.Pref.Local.rootfs_login_user_json.get())
-            val lastSelectedUserName = userMap[rootfsName]
+            return getPreferredUser(userMap[rootfsName], getUserInfos(File(Consts.rootfsAllDir,rootfsName)))
+        }
+
+        /**
+         * 获取某rootfs的应该使用的登陆用户名。
+         * 首先从本地json中读取，如果没有，则优先返回非root用户。最后选项是root用户
+         * @param lastSelectedUserName 本地存储的该rootfs对应的默认用户名，可能为null（若没存过）
+         * @param allUsers 该rootfs全部可选的用户列表
+         */
+        fun getPreferredUser(lastSelectedUserName: String?, allUsers: List<UserInfo>): UserInfo = allUsers.run {
             var foundInfo = find { info -> info.name == lastSelectedUserName }
             if (foundInfo == null) foundInfo = find { info -> info.name != "root" }
             if (foundInfo == null) foundInfo = find { info -> info.name == "root" }
             if (foundInfo == null) foundInfo = UserInfo.ROOT
-            return@run foundInfo
+            return foundInfo
         }
     }
 }

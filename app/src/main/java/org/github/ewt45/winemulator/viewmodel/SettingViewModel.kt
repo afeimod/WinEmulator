@@ -2,6 +2,7 @@ package org.github.ewt45.winemulator.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.system.Os
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +29,8 @@ import org.github.ewt45.winemulator.Consts.Pref.general_rootfs_lang
 import org.github.ewt45.winemulator.Consts.Pref.general_shared_ext_path
 import org.github.ewt45.winemulator.Consts.Pref.proot_bool_options
 import org.github.ewt45.winemulator.Consts.Pref.proot_startup_cmd
+import org.github.ewt45.winemulator.Consts.rootfsAllDir
+import org.github.ewt45.winemulator.Consts.rootfsCurrDir
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
 import org.github.ewt45.winemulator.RateLimiter
@@ -49,22 +52,17 @@ class SettingViewModel : ViewModel() {
     // 一般设置
     var resolutionText by mutableStateOf("")
         private set
-    //FIXME 这样如果在别处修改了，而不是在设置界面修改的话，这里不会更新。Composable中接收到的数据还是旧数据吧？
-    /** 当前[Consts.rootfsAllDir]下的的rootfs列表 不包括[Consts.rootfsCurrDir] */
-    val rootfsList = mutableStateOf(listOf<String>())
 
-//    /** key为[rootfsList]中的名字，value为对应rootfs的当前选择的登陆用户名 */
-//    val rootfsUsersCurr = mutableStateOf(mapOf<String, String>())
-
-    /** key为[rootfsList]中的名字，value为对应rootfs的全部可用的登陆用户名 */
-    val rootfsUsersOptions = mutableStateOf(mapOf<String, List<String>>())
+    /** key为[Consts.rootfsAllDir]下的的rootfs列表，value为对应rootfs的全部可用的用户。
+     * rootfs不包含 包括[Consts.rootfsCurrDir] 暂时先用这个替代rootfsList。后续可以改成一个包含rootfs信息的列表（不对 不是字符串的话没法存datastore了） */
+    val rootfsUsersOptions = mutableStateOf(mapOf<String, List<ProotRootfs.UserInfo>>())
 
     val generalFLow = dataStore.data.map { pref ->
         PrefGeneral(
             general_resolution.run { pref[key] ?: default },
             general_shared_ext_path.run { pref[key] ?: default },
             general_rootfs_lang.run { pref[key] ?: default },
-            Pref.Local.rootfs_login_user_json.run { pref[key] ?: default },
+            Json.decodeFromString(rootfs_login_user_json.run { pref[key] ?: default }),
         )
     }
     val generalState = stateInSimple(PrefGeneral_DEFAULT, generalFLow)
@@ -87,12 +85,11 @@ class SettingViewModel : ViewModel() {
      */
     fun updateValuesWhenEnterSettings() {
         Log.e(TAG, "updateValuesWhenEnterSettings: 测试一下不执行这个函数的时候是不是不更新")
-        viewModelScope.launch {
+        viewModelScope.launch(IO) {
             resolutionText = general_resolution.get() //resolutionText不随flow更改，初始化先读取一下
-            withContext(IO) {
-                rootfsList.value = Consts.rootfsAllDir.list()?.toMutableList()?.minus(Consts.rootfsCurrDir.name) ?: listOf()
-                rootfsUsersOptions.value = getRootfsUsersOptions()
-            }
+            rootfsUsersOptions.value = getRootfsUsersOptions()
+            // 目前 localRootfsLoginUsersMap 依赖 rootfsUsersOptions 才能正常工作。所以也要手动刷新
+            onChangeRootfsLoginUser("", "")
         }
     }
 
@@ -188,35 +185,35 @@ class SettingViewModel : ViewModel() {
         editDateStore(general_shared_ext_path.key, newList)
     }
 
+    /** 获取当前rootfs列表，不包含[rootfsCurrDir] */
+    fun getRootfsList(): List<String> = rootfsAllDir.list()?.toMutableList()?.minus(rootfsCurrDir.name) ?: listOf()
+
     /**
      * 修改某rootfs文件夹名，或删除
-     * 确保：重命名时，新名称不为 [Consts.rootfsCurrDir] 或其他已有名称。 删除时：[Consts.rootfsCurrDir] 链接不指向该rootfs
+     * 确保：重命名时，新名称不为 [Consts.rootfsCurrDir] 或其他已有名称。 删除时：[rootfsCurrDir] 链接不指向该rootfs
      * @return 成功时为空字符串，失败时为失败原因
      */
     suspend fun onChangeRootfsName(oldName: String, newName: String, action: FuncOnChangeAction): String = withContext(Dispatchers.IO) {
         val catchResult = runCatching {
             when (action) {
                 FuncOnChangeAction.EDIT -> {
-                    if (newName == Consts.rootfsCurrDir.name || File(Consts.rootfsAllDir, newName).exists())
+                    if (newName == rootfsCurrDir.name || File(rootfsAllDir, newName).exists())
                         return@runCatching "该文件已存在，无法重命名"
-                    File(Consts.rootfsAllDir, oldName).renameTo(File(Consts.rootfsAllDir, newName))
-                    withContext(Dispatchers.Main) {
-                        rootfsList.value = rootfsList.value.minus(oldName).plus(newName)
-                        // rootfs重命名后，登陆用户map中的rootfs键也要更新
-                        val rootfsToUserMap  = Json.decodeFromString<Map<String,String>>(generalState.value.localRootfsUsersCurr)
-                        rootfsToUserMap[oldName]?.let { onChangeRootfsLoginUser(newName, it, rootfsToUserMap) }
-                        rootfsUsersOptions.value = getRootfsUsersOptions()
-                    }
+                    File(rootfsAllDir, oldName).renameTo(File(rootfsAllDir, newName))
+                    // rootfs重命名后，登陆用户map中的rootfs键也要重命名
+                    onChangeRootfsLoginUser(newName, ProotRootfs.getPreferredUser(newName).name)
                 }
 
                 FuncOnChangeAction.ADD -> Unit
                 FuncOnChangeAction.DEL -> {
-                    if (newName == Consts.rootfsCurrDir.name || newName == Consts.rootfsCurrDir.canonicalFile.name)
+                    if (newName == rootfsCurrDir.name || newName == rootfsCurrDir.canonicalFile.name)
                         return@runCatching "该Rootfs当前正在运行，无法删除"
-                    FileUtils.deleteDirectory(File(Consts.rootfsAllDir, oldName))
-                    withContext(Dispatchers.Main) {
-                        rootfsList.value = rootfsList.value.minus(oldName)
-                    }
+                    //不知为绑定的那些（dev, proc）文件夹用java方法无法删除。用rm -r 倒是可以
+                    val output = Utils.readLinesProcessOutput(ProcessBuilder(listOf("sh","-c", "rm -r ${File(rootfsAllDir, oldName).absolutePath}"))
+                        .redirectErrorStream(true).start())
+                    if (output.isNotBlank()) throw RuntimeException(output)
+                    // rootfs删除后，登陆用户map中的rootfs键也要删除 随便给一个不存在userName 会被删掉
+                    onChangeRootfsLoginUser(newName, "stub")
                 }
             }
             return@runCatching ""
@@ -224,25 +221,26 @@ class SettingViewModel : ViewModel() {
         return@withContext if (catchResult.isSuccess) catchResult.getOrNull()!! else catchResult.exceptionOrNull()!!.stackTraceToString()
     }
 
-    /** 使用[ProotRootfs.getUserInfos]从本地读取rootfs全部可用的用户列表 */
-    private fun getRootfsUsersOptions(): Map<String, List<String>> {
-        return rootfsList.value.associateWith { rootfs ->
-            ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name }.sorted()
-        }
-    }
+    /** 使用[ProotRootfs.getUserInfos]从本地读取rootfs全部可用的用户列表. rootfs 不包含 [rootfsCurrDir] */
+    private fun getRootfsUsersOptions(): Map<String, List<ProotRootfs.UserInfo>> =
+        getRootfsList().associateWith { rootfs -> ProotRootfs.getUserInfos(File(rootfsAllDir, rootfs)) }
 
     suspend fun onChangeRootfsSelect(rootfsName: String) {
         MainEmuActivity.instance.terminalViewModel.stopTerminal()
-        Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+        Utils.Rootfs.makeCurrent(File(rootfsAllDir, rootfsName))
         MainEmuActivity.instance.finish()
     }
 
-    suspend fun onChangeRootfsLoginUser(rootfsName: String, userName: String, map: Map<String, String>?=null,) {
-        val newJson = (map ?: Json.decodeFromString(generalState.value.localRootfsUsersCurr))
-            .filter { rootfsList.value.contains(it.key) }
-            .plus(rootfsName to userName)
-            .let { Json.encodeToString(it) }
-        editDateStore(rootfs_login_user_json.key, newJson)
+    /** 改变某rootfs的默认登陆用户。 该函数内部会调用[getRootfsUsersOptions]自动将 [rootfsUsersOptions] 更新到最新 */
+    suspend fun onChangeRootfsLoginUser(rootfsName: String, userName: String) {
+        rootfsUsersOptions.value = getRootfsUsersOptions()
+        val unfilteredMap = generalState.value.localRootfsLoginUsersMap.plus(rootfsName to userName)
+        val newMap = mutableMapOf<String, String>()
+        //保证newMap的keys包含全部rootfs，且每个rootfs都对应一个有效值
+        rootfsUsersOptions.value.forEach { (k, v) ->
+            newMap[k] = ProotRootfs.getPreferredUser(unfilteredMap[k], v).name
+        }
+        editDateStore(rootfs_login_user_json.key, Json.encodeToString(newMap))
     }
 
     fun onChangeRootfsLang(lang: String) = editDateStoreAsync(general_rootfs_lang.key, lang)
@@ -264,14 +262,15 @@ data class PrefGeneral(
     val resolution: String,
     val sharedExtPath: Set<String>,
     val rootfsLang: String,
-    val localRootfsUsersCurr: String,
+    /** 当前全部rootfs对应的登陆用户。 key为rootfs名，value为用户名  */
+    val localRootfsLoginUsersMap: Map<String, String>,
 )
 
 private val PrefGeneral_DEFAULT = PrefGeneral(
     general_resolution.default,
     general_shared_ext_path.default,
     general_rootfs_lang.default,
-    Pref.Local.rootfs_login_user_json.default,
+    mapOf(),
 )
 
 /** 顶部操作按钮类型 */
