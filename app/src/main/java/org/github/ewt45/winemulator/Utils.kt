@@ -29,7 +29,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
@@ -45,7 +44,6 @@ import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import okio.Buffer
-import okio.GzipSource
 import okio.source
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -59,7 +57,6 @@ import org.github.ewt45.winemulator.Consts.Pref.Local.curr_rootfs_name
 import org.github.ewt45.winemulator.Consts.rootfsAllDir
 import org.github.ewt45.winemulator.Consts.rootfsCurrDir
 import org.tukaani.xz.XZ
-import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
@@ -71,7 +68,6 @@ import java.io.OutputStream
 import java.net.URL
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.reflect.KProperty1
@@ -480,11 +476,21 @@ object Utils {
         }
     }
 
-     /** 代表一个符号链接. 用于解压文件时相关处理
-      * @param symlink 符号链接的路径（安卓上的路径）
-      * @param pointTo 该链接指向的路径（由symlink指定，不一定指向自己app内的路径，可能相对指向自己同目录，可能以rootfs为根目录的绝对路径，当然也可能是l2s文件指向termux内路径）
-      */
+    /** 代表一个符号链接. 用于解压文件时相关处理
+     * @param symlink 符号链接的路径（安卓上的路径）
+     * @param pointTo 该链接指向的路径（由symlink指定，不一定指向自己app内的路径，可能相对指向自己同目录，可能以rootfs为根目录的绝对路径，当然也可能是l2s文件指向termux内路径）
+     */
     private data class SymLink(val symlink: String, val pointTo: String)
+
+    /** 有关一条l2s链的信息。硬链接路径，中间路径和最终路径都是绝对路径，且为正确路径（自己包名开头的）， */
+    private data class L2sInfo(
+        var interCorrectPath: String,
+        val finalCorrectPath: String,
+        val interName: String = interCorrectPath.split('/').last(),
+        val finalName: String = finalCorrectPath.split('/').last(),
+        var hardPaths: MutableSet<String> = mutableSetOf(),
+    )
+
     object Archive {
 
         /**
@@ -539,19 +545,87 @@ object Utils {
                 }
             }
 
-            for (item in symLinkList) {
+            reporter.msg(null, "文件和文件夹解压完毕，开始创建符号链接...")
+            reporter.totalValue = symLinkList.size.toLong()
+
+            symLinkList.forEachIndexed { idx, item ->
+                reporter.progressValue(idx.toLong())
                 try {
                     Os.symlink(item.pointTo, item.symlink)
-                    //修复 proot l2s文件相关的符号链接指向路径
-                    /*
-                    - 如果符号链接指向的路径以.l2s开头，说明该符号链接可能是硬链接模拟，指向的路径可能是中间文件。循环一次获取硬链接模拟到中间文件的 `map<中间文件路径，List<硬链接模拟路径>>`
-                    - 如果中间文件是符号链接且指向的路径与自己同目录，且文件名只多了后缀 `.0001` 之类的数字，说明确定了中间文件和最终文件
-                    - 注意，解压后的中间文件路径 不等于 硬链接模拟指向的路径，因为硬链接解压到自己包名子目录下了，检查中间文件指向的路径的时候不应该从硬链接指向的路径获取中间文件，而是应该从.l2s文件夹（或者硬链接同目录）寻找文件名相同的作为中间路径，寻找最终文件时同理
-                     */
                 } catch (e: Exception) {
                     reporter.msg("创建符号链接时出错。文件=$item 。错误消息=${e.stackTraceToString()}")
                 }
             }
+
+            //先完整循环一遍， 确保中间文件和最终文件都已创建。
+
+            reporter.msg(null, "符号链接创建完毕，开始寻找l2s文件...")
+
+            /** l2s相关文件信息。key为中间文件错误路径（别的包名开头），value为该文件相关信息。 */
+            val interToL2sMap: MutableMap<String, L2sInfo> = mutableMapOf()
+
+            // /.l2s文件夹下的文件，优先从此处找。没有再从硬链接同目录找
+            val l2sDirFiles = File(outDir, ".l2s").listFiles() ?: arrayOf()
+            val regex4Dec = "^[0-9]{4}$".toRegex()
+            for ( idx in symLinkList.indices) {
+                val item = symLinkList[idx]
+                //修复 proot l2s文件相关的符号链接指向路径
+                /*
+                - 如果符号链接指向的路径以.l2s.开头，说明该符号链接可能是硬链接模拟，指向的路径可能是中间文件。循环一次获取硬链接模拟到中间文件的 `map<中间文件路径，List<硬链接模拟路径>>`
+                - 如果中间文件是符号链接且指向的路径与自己同目录，且文件名只多了后缀 `.0001` 之类的数字，说明确定了中间文件和最终文件
+                - 注意，解压后的中间文件路径 不等于 硬链接模拟指向的路径，因为硬链接解压到自己包名子目录下了，检查中间文件指向的路径的时候不应该从硬链接指向的路径获取中间文件，而是应该从.l2s文件夹（或者硬链接同目录）寻找文件名相同的作为中间路径，寻找最终文件时同理
+                 */
+                reporter.progressValue(idx.toLong())
+                try {
+                    //硬链接模拟的文件名
+                    val hardFile = File(item.symlink).takeIf { it.exists() } ?: continue
+                    val hardName = hardFile.name
+                    val interPrefix = ".l2s."
+                    // 中间文件 错误指向的 那个不存在路径
+                    val interWrongFile = File(item.pointTo)
+                    //中间文件名:  .l2s. + 任意文字 + .四位整数
+                    val interName = interWrongFile.name.takeIf {
+                        it.startsWith(interPrefix) && it.takeLast(4).matches(regex4Dec)  //中间文件名符合格式
+                    } ?: continue
+                    //中间文件目前存在路径:  .l2s或同目录下 + 文件名符合格式 + 文件存在
+                    val interExistFile = (l2sDirFiles.find { it.name == interName } ?: File(hardFile.parent!!, interName).takeIf { it.exists() })
+                        ?: throw RuntimeException("存在硬链接模拟文件，但找不到中间文件。")
+                    // 最终文件 错误不存在的路径:  中间文件为软链接 + 指向的路径
+                    val finalWrongFile = interExistFile.canonicalFile.takeIf { it.name != interExistFile.name }
+                        ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但中间存在文件不是软链接。")
+                    val finalPrefix = "$interName."
+                    // 最终文件名： 中间文件.硬链接个数
+                    val finalName = finalWrongFile.name.takeIf { it.startsWith(finalPrefix) && it.substring(finalPrefix.length).matches(regex4Dec) }
+                        ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但最终文件名格式错误。")
+                    //最终文件目前存在路径:  .l2s或同目录下 + 文件名符合格式 + 文件存在
+                    val finalExistFile = (l2sDirFiles.find { it.name == finalName } ?: File(interExistFile.parent!!, finalName).takeIf { it.exists() })
+                        ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但找不到最终存在文件。")
+
+                    //最后一起处理。这里先存起来。如果半道直接处理，后面再读错误路径可能就读到正确路径上了。
+                    val l2sInfo = interToL2sMap[interWrongFile.absolutePath]
+                        ?: L2sInfo(interExistFile.absolutePath, finalExistFile.absolutePath, interName, finalName)
+                            .also { interToL2sMap[interWrongFile.absolutePath] = it }
+                    l2sInfo.hardPaths.add(hardFile.absolutePath)
+                } catch (e: Exception) {
+                    reporter.msg("寻找l2s文件时出错。数据=$item 。错误消息=${e.stackTraceToString()}")
+                }
+            }
+
+            reporter.msg(null, "寻找l2s文件完成。开始修复l2s文件...")
+            reporter.totalValue = interToL2sMap.size.toLong()
+
+            /** 修复全部刚才找到的错误l2s相关软链接。中间路径 -> 最终路径，硬链接路径 -> 中间路径 */
+            interToL2sMap.values.forEachIndexed { idx, info ->
+                reporter.progressValue(idx.toLong())
+                try {
+                    Os.symlink(info.finalCorrectPath, info.interCorrectPath)
+                    info.hardPaths.forEach { Os.symlink(info.interCorrectPath, it) }
+                }catch (e: Exception) {
+                    reporter.msg("创建l2s文件正确软链接时出错。数据=$info 。错误消息=${e.stackTraceToString()}")
+                }
+            }
+
+            reporter.msg(null, "修复l2s文件完成")
         }
 
         /**
@@ -739,14 +813,14 @@ object Utils {
     }
 
     /** 当一个执行一个长时间操作时，传入一个此类的时候一遍在屏幕上显示进度和消息
-     * @param totalValue 计算百分比时的分母
+     * @param totalValue 计算百分比时的分母 . 为负数是表示无法计算进度
      */
-    abstract class TaskReporter(var totalValue: Long) {
+    abstract class TaskReporter(var totalValue: Long = -1) {
 
-        /** 更新进度 */
+        /** 更新进度。若为负数代表应显示无限加载条 */
         abstract fun progress(percent: Float)
 
-        /** 和proress不同，传入参数不是 当前值/总值，而仅仅是 当前值。因为有时候调用环境不知道总值。 */
+        /** 同[progress] 区别为传入参数不是 当前值/总值，而仅仅是 当前值。因为有时候调用环境不知道总值。 */
         fun progressValue(value: Long) = progress(value.toFloat() / totalValue)
 
         /** 执行此函数表示任务结束. 若 [error] 不为null, 说明失败了。 */
