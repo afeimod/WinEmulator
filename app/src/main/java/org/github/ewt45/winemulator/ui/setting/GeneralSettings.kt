@@ -3,6 +3,7 @@ package org.github.ewt45.winemulator.ui.setting
 import a.io.github.ewt45.winemulator.R
 import android.net.Uri
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -17,12 +18,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import org.github.ewt45.winemulator.CompressedType
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChange
 import org.github.ewt45.winemulator.FuncOnChangeAction
@@ -113,19 +119,17 @@ fun GeneralRootfsLang(
 
 /**
  * Rootfs切换，删除，重命名，添加
-// * @param rootfsList 用于显示的rootfs名称，对应文件夹名。
  * @param currRootfs 当前正在运行的rootfs名，rootfsList中的一项，为 [Consts.rootfsCurrDir] 指向的真实路径，应该将此项禁用禁止编辑
  * @param onRootfsNameChange 文件夹重命名/删除时
- * @param loginUsersCurr 每个rootfs及其当前选择的登陆用户名。参考：[Consts.Pref.Local.rootfs_login_user_json]。请传入前确保每个rootfs都在其中有key，且对应value 的user符合 [ProotRootfs.getPreferredUser]
+ * @param rootfsToLoginUserMap 每个rootfs及其当前选择的登陆用户名。参考：[Consts.Pref.Local.rootfs_login_user_json]。请传入前确保每个rootfs都在其中有key，且对应value 的user符合 [ProotRootfs.getPreferredUser]
  * @param loginUsersOptions 每个rootfs及其对应的全部可使用用户名。 请传入前确保rootfs不包含[Consts.rootfsCurrDir]
  * @param onRootfsSelectChange 当前使用的rootfs变更时
  * @param onUserSelectChange 某个rootfs的登陆用户变化时。参数1是rootfs名，参数2是用户名
  */
 @Composable
 fun GeneralRootfsSelect(
-//    rootfsList: List<String>,
     currRootfs: String,
-    loginUsersCurr: Map<String, String>,
+    rootfsToLoginUserMap: Map<String, String>,
     loginUsersOptions: Map<String, List<String>>,
     onRootfsNameChange: suspend (String, String, FuncOnChangeAction) -> String,
     onRootfsSelectChange: suspend (String) -> Unit,
@@ -138,22 +142,8 @@ fun GeneralRootfsSelect(
 //    TODO 排一下序之后没问题了，之前重命名用list.minus.plus 然后重命名之后rootfs名往上挪了一位，user名还没变。出错原理是什么？
     val sortedRootfsList = loginUsersOptions.keys.sortedWith(compareBy<String> { it != currRootfs }.thenBy { it })
 
-//    fun onDoneRootfsName(oldName:String, newNameRaw: String, isCurr: Boolean) {
-//        val newName = newNameRaw.replace(" ", "").trim()
-//        if (newName.isEmpty()) return
-//        scope.launch {
-//            val extraTip = if (isCurr) "\n\n该Rootfs当前正在使用，重命名后会退出app，请手动重启。" else ""
-//            if (mainVm.showConfirmDialog("是否将该Rootfs重命名为 $newName？$extraTip").getOrNull() == true) {
-//                mainVm.showBlockDialogWithErrorConfirm("正在重命名...") {
-//                    val result = onRootfsNameChange(oldName, newName, FuncOnChangeAction.EDIT)
-//                    if (isCurr) onRootfsSelectChange(newName)//如果是当前的，保存名称
-//                    return@showBlockDialogWithErrorConfirm result
-//                }
-//            }
-//        }
-//    }
-    val TYPE_SEL = 0
-    val TYPE_DEL = 1
+    val TYPE_SEL = 0 // 切换
+    val TYPE_DEL = 1 // 删除
     fun onClickBtn(type: Int, rootfsName: String, isCurr: Boolean) = scope.launch {
         if (type == TYPE_SEL && !isCurr && mainVm.showConfirmDialog("将此文件夹设置为Proot使用的rootfs？\n确定后将退出app, 请手动重启。\n\n$rootfsName").getOrNull() == true) {
             onRootfsSelectChange(rootfsName)
@@ -176,13 +166,11 @@ fun GeneralRootfsSelect(
             for (rootfsName in sortedRootfsList) {
                 val isCurr = rootfsName == currRootfs
                 val userNameOptions = loginUsersOptions[rootfsName]
-                val userName = loginUsersCurr[rootfsName]
+                val userName = rootfsToLoginUserMap[rootfsName]
                 if (userNameOptions == null || userName == null) {
                     //TODO 目前没有实现等待加载机制（sealed interface），所以初次传入的值可能不准确，直接忽略即可。稍后应该会更新传入准确的数据
                     continue
                 }
-                //从本地存储的json读取的记录的user名，可能未记录为null,也可能已记录但过时（目前没有这个用户）。如果过时就更新
-//                Log.d(TAG, "GeneralRootfsSelect: 跳过=${userName != null && !userNameOptions.contains(userName)} rootfsList变化后没显示？rootfsName=$rootfsName, oldStoreUserName=$userName ,userNameOptions = $userNameOptions")
                 if (!userNameOptions.contains(userName)) {
                     throw RuntimeException("请确保传入的loginUsersOptions包含userName！loginUsersOptions=$userNameOptions, rootfsName=$rootfsName, username=$userName")
                 }
@@ -204,13 +192,15 @@ fun GeneralRootfsSelect(
                             shape = RoundedCornerShape(100.dp),
                             border = CardDefaults.outlinedCardBorder(),
                         ) {
-                            Column(Modifier) {
-                                IconButton(onClick = { onClickBtn(TYPE_SEL, rootfsName, isCurr) }) {
+                            val btnModifier = Modifier.size(40.dp)//.padding(4.dp)
+                            Column {
+                                IconButton(onClick = { onClickBtn(TYPE_SEL, rootfsName, isCurr) }, btnModifier) {
                                     if (isCurr) Icon(Icons.Filled.Check, null)
                                     else Icon(painterResource(R.drawable.ic_switch), null)
                                 }
-                                IconButton(onClick = { onClickBtn(TYPE_DEL, rootfsName, isCurr) })
+                                IconButton(onClick = { onClickBtn(TYPE_DEL, rootfsName, isCurr) }, btnModifier)
                                 { Icon(Icons.Filled.Delete, null) }
+                                GeneralRootfsSelect_ExportRootfs(btnModifier, rootfsName)
                             }
                         }
                     }
@@ -220,6 +210,51 @@ fun GeneralRootfsSelect(
                 }
             }
         }
+    }
+}
+
+/**
+ * [GeneralRootfsSelect] 的子布局。导出某rootfs为压缩包
+ */
+@Composable
+fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: String) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    IconButton(onClick = {
+        showDialog = true
+    }, modifier)
+    { Icon(painterResource(R.drawable.ic_archive_save), null) }
+
+    fun getMimeType(extension: String) =  MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+    if (showDialog) {
+        var currCompType = CompressedType.GZ
+        val compSuffix = mapOf(CompressedType.GZ to ".tar.gz", CompressedType.XZ to ".tar.xz")
+        val compMimeTypes = mapOf(CompressedType.GZ to getMimeType("tar.gz"), CompressedType.XZ to getMimeType("tar.xz"))
+        Log.d(TAG, "GeneralRootfsSelect_ExportRootfs: 能否获取到mimetype? $compMimeTypes")
+        val launcher  = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(compMimeTypes[currCompType] ?: "*/*")) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            Utils.
+
+        }
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = { },
+            dismissButton = { },
+            modifier = Modifier.padding(16.dp),
+            text = {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("将Rootfs: $rootfsName 导出为压缩包。以便日后恢复或在其他地方使用。")
+                    Spacer(Modifier.height(16.dp))
+                    ComposeSpinner(currCompType, compSuffix.keys.toList(), compSuffix.values.toList(), label = "压缩格式") { _, new -> currCompType = new }
+                    Spacer(Modifier.height(24.dp))
+                    Button({launcher.launch(rootfsName+compSuffix[currCompType]!!)}) { Text("导出到...") }
+                    TextButton({ showDialog = false }) { Text("取消") }
+                }
+            }
+        )
     }
 }
 
@@ -431,7 +466,7 @@ fun GeneralResolution(
 }
 
 
-@Preview(widthDp = 300, heightDp = 1000)
+@Preview(widthDp = 300, heightDp = 600)
 @Composable
 fun GeneralSettingsPreview() {
     val langOptions = listOf("en_US.UTF-8", "zh_CN.UTF-8")
@@ -443,15 +478,13 @@ fun GeneralSettingsPreview() {
         if (action == FuncOnChangeAction.EDIT) shareDirSet = shareDirSet - old + new
     }
     val loginUsersOptions = mapOf("rootfs-1" to listOf("root"), "rootfs-2" to listOf("iuser", "root"), "rootfs-3" to listOf("iuser_3", "root"))
-
+    val rootfsToLoginUserMap = loginUsersOptions.mapValues { entry -> entry.value.run { find { it != "root" } ?: find { it == "root" }!! } }
     CollapsePanel("一般选项") {
-        GeneralResolution("1280x720", { _, _ -> })
-        GeneralRootfsLang(lang, langOptions, { lang = it })
-        GeneralShareDir(shareDirSet, onChangeShareDir)
-//        MoreContent {
+//        GeneralResolution("1280x720", { _, _ -> })
+//        GeneralRootfsLang(lang, langOptions, { lang = it })
+//        GeneralShareDir(shareDirSet, onChangeShareDir)
         GeneralRootfsSelect(
-            "rootfs-1", mapOf(), loginUsersOptions, { _, _, _ -> "" }, { _ -> }, { _, _ -> })
-//        }
+            "rootfs-3", rootfsToLoginUserMap, loginUsersOptions, { _, _, _ -> "" }, { _ -> }, { _, _ -> })
     }
 }
 

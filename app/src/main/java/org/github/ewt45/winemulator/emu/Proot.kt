@@ -40,6 +40,8 @@ class Proot {
 //        tmpdir.mkdirs()
 //        chmod(tmpdir, "1777")
 
+        rootfsCurrL2sDir.mkdirs()
+
         //proot命令的参数使用 大量参考Proot-Distro
 
         //登陆时使用指定用户名。优先使用非root用户。从/etc/passwd获取uid, gid, home, shell

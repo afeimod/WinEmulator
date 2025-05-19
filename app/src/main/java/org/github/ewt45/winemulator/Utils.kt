@@ -375,13 +375,13 @@ object Utils {
 
 
         /**
-         * 解压一个tar.xz的压缩包，其内含一个rootfs, 将其解压到outDir.
+         * 解压一个压缩包(目前支持.tar.xz 和 .tar.gz) ，其内含一个rootfs, 将其解压到outDir.
          * 解压后，outDir为 [Consts.rootfsAllDir] 中的一个目录，其内部为 bin etc 这种的目录
          * 解压后会做一些处理操作，参考 [postExtractRootfs]
          * uri不是.tar.xz时会抛出异常
          * @param reporter 调用[TaskReporter.progressValue] 时传入的是某文件压缩后大小. 本函数会将[TaskReporter.totalValue] 设置为压缩文件总大小
          */
-        suspend fun installTarXzRootfs(ctx: Context, uri: Uri, outDir: File, reporter: TaskReporter) = withContext(Dispatchers.IO) {
+        suspend fun installRootfsArchive(ctx: Context, uri: Uri, outDir: File, reporter: TaskReporter) = withContext(IO) {
             val tmpArchiveFile = File(Consts.tmpDir, "archive-rootfs-tmp")
             val compSize = ctx.contentResolver.openFileDescriptor(uri, "r").use { it?.statSize } ?: (1024 * 1024 * 1024L)
 
@@ -389,8 +389,8 @@ object Utils {
             reporter.totalValue = compSize
 
             //先检测是不是gz或xz. 然后复制文件到内部目录
-            val compType = if (ctx.openInput(uri)?.use { it.isXz() } ?: false) Archive.CompressedType.XZ
-            else if (ctx.openInput(uri)?.use { it.isGzip() } ?: false) Archive.CompressedType.GZ
+            val compType = if (ctx.openInput(uri)?.use { it.isXz() } == true) CompressedType.XZ
+            else if (ctx.openInput(uri)?.use { it.isGzip() } == true) CompressedType.GZ
             else return@withContext reporter.done(RuntimeException("该文件不是 xz 或 gz 压缩包。"))
 
             reporter.msg(null, "(1/3) 正在将文件复制到内部存储目录...")
@@ -428,6 +428,12 @@ object Utils {
             postExtractRootfs(outDir)
         }
 
+        /**
+         * 将指定rootfs压缩为压缩包并导出
+         */
+        suspend fun exportRootfsArchive(ctx: Context, uri: Uri, rootfsFile: File, compType: CompressedType,reporter: TaskReporter) = withContext(IO) {
+            
+        }
         /** 获取当前选择的rootfs。
          * 确保：1. 不为 [rootfsCurrDir] 2. 优先读取上次设置的，如果不存在则随机选一个
          */
@@ -490,9 +496,7 @@ object Utils {
     )
 
     object Archive {
-        enum class CompressedType {
-            XZ, GZ,
-        }
+
 
         /** 将一个普通输入流转换为对应的压缩器输入流 如 [XZCompressorInputStream] [GzipCompressorInputStream] */
         fun getCompressedInput(type: CompressedType, rawInput: InputStream?): CompressorInputStream = when (type) {
@@ -577,7 +581,8 @@ object Utils {
             val interToL2sMap: MutableMap<String, L2sInfo> = mutableMapOf()
 
             // /.l2s文件夹下的文件，优先从此处找。没有再从硬链接同目录找
-            val l2sDirFiles = File(outDir, ".l2s").listFiles() ?: arrayOf()
+            val l2sDir = File(outDir, "/.l2s")
+            val l2sDirFiles = l2sDir.listFiles() ?: arrayOf()
             val regex4Dec = "^[0-9]{4}$".toRegex()
             for (idx in symLinkList.indices) {
                 val item = symLinkList[idx]
@@ -636,11 +641,17 @@ object Utils {
                 reporter.progressValue(idx.toLong())
                 reporter.msg("修复l2s软链接 $info")
                 try {
-                    File(info.interCorrectPath).delete()
-                    Os.symlink(info.finalCorrectPath, info.interCorrectPath)
+                    //强制放到.l2s文件夹。因为后续proot启动时会指定到这个文件夹
+                    var finalInL2s = File(info.finalCorrectPath)
+                    if (!finalInL2s.absolutePath.startsWith(l2sDir.absolutePath))
+                        finalInL2s = File(l2sDir, finalInL2s.name).also { finalInL2s.renameTo(it) }
+                    var interInL2s = File(info.interCorrectPath).also { it.delete() }
+                    if (!interInL2s.absolutePath.startsWith(l2sDir.absolutePath))
+                        interInL2s = File(l2sDir, interInL2s.name)
+                    Os.symlink(finalInL2s.absolutePath, interInL2s.absolutePath)
                     info.hardPaths.forEach {
                         File(it).delete()
-                        Os.symlink(info.interCorrectPath, it)
+                        Os.symlink(interInL2s.absolutePath, it)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -884,6 +895,9 @@ class RateLimiter(val delayMs: Long = 1000L) {
     }
 }
 
+enum class CompressedType {
+    XZ, GZ,
+}
 
 enum class FuncOnChangeAction {
     EDIT,

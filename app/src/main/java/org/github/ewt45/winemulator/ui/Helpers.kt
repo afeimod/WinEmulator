@@ -80,7 +80,7 @@ fun AnimatedVertical(
  * @param hideBtns 是否隐藏按钮以防止关闭, 为true时传入的onDismiss不会被执行
  */
 @Composable
-fun Dialog(
+fun MyDialog(
     text: String,
     visible: Boolean,
     onDismiss: () -> Unit,
@@ -114,7 +114,7 @@ fun Dialog(
 @Preview
 @Composable
 private fun Test() {
-    Dialog(
+    MyDialog(
         visible = true,
         text = "111",
         onDismiss = {}

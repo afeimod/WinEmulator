@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -40,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,9 +54,31 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+/**
+ * 返回一个状态 控制显示一个对话框提示尚未实现
+ */
+@Composable
+fun rememberNotImplDialog():MutableState<Boolean> {
+    return rememberSimpleDialog("尚未实现！")
+}
+
+/**
+ * 返回一个状态 控制一个[SimpleDialog]显隐。
+ * @param onDismiss dialog关闭时的回调。无需在这里处理显隐状态。
+ */
+@Composable
+fun rememberSimpleDialog(text: String, title: String? = null, onDismiss: (() -> Unit)? = null):MutableState<Boolean> {
+    val visibleState = remember { mutableStateOf(false) }
+    SimpleDialog(visibleState.value, text, title, ) {
+        visibleState.value = false
+        if (onDismiss != null) onDismiss()
+    }
+    return visibleState
+}
+
 /** 简易dialog */
 @Composable
-fun SimpleDialog(visible: Boolean, text: String, title: String? = null, onChangeVisibility: (Boolean) -> Unit) {
+fun SimpleDialog(visible: Boolean, text: String, title: String? = null, onDismiss: (Boolean) -> Unit) {
     if (visible) {
         AlertDialog(
             onDismissRequest = {}, //阻止点击外部区域关闭
@@ -74,7 +96,7 @@ fun SimpleDialog(visible: Boolean, text: String, title: String? = null, onChange
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onChangeVisibility(false) }) { Text(stringResource(android.R.string.ok)) }
+                TextButton(onClick = { onDismiss(false) }) { Text(stringResource(android.R.string.ok)) }
             },
 //        dismissButton = {
 //            TextButton(onClick = { viewModel.closeConfirmDialog(false) }) { Text(stringResource(android.R.string.cancel)) }
@@ -121,6 +143,7 @@ fun <T> ComposeSpinner(
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
         )
         ExposedDropdownMenu(expanded, onDismissRequest = { expanded = !expanded }) {
+
             keyList.forEachIndexed { idx, option ->
                 DropdownMenuItem(
                     { Text(nameList[idx], style = MaterialTheme.typography.bodyLarge) },

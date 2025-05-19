@@ -18,7 +18,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -32,18 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import org.github.ewt45.winemulator.Consts
-import org.github.ewt45.winemulator.Consts.Pref
-import org.github.ewt45.winemulator.Consts.Pref.Local.rootfs_login_user_json
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
 import org.github.ewt45.winemulator.Utils
-import org.github.ewt45.winemulator.Utils.Ui.editDateStore
-import org.github.ewt45.winemulator.dataStore
 import org.github.ewt45.winemulator.emu.ProotRootfs
 import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_LoginUserSelect
 import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
@@ -108,7 +101,7 @@ fun RootfsSelectScreen(
             processingMsg = "日志："
             isError = false
             try {
-                Utils.Rootfs.installTarXzRootfs(ctx, uri, File(Consts.rootfsAllDir, rootfsName), processReporter)
+                Utils.Rootfs.installRootfsArchive(ctx, uri, File(Consts.rootfsAllDir, rootfsName), processReporter)
                 processingMsgTitle = "解压成功，点击按钮将退出。请手动重启。"
                 isFinished = true
             } catch (e: Throwable) {
@@ -180,7 +173,8 @@ fun RootfsSelectScreen(
         Text(
             processingMsg, Modifier.padding(top = 32.dp)
                 .horizontalScroll(rememberScrollState()),
-            color = MaterialTheme.colorScheme.run { if (isError) error else onSurface })
+            color = MaterialTheme.colorScheme.run { if (isError) error else onSurface },
+            style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(16.dp))
 
     }
