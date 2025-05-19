@@ -6,11 +6,13 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.github.ewt45.winemulator.Utils.getPid
 import org.github.ewt45.winemulator.emu.Proot
 import java.io.BufferedReader
@@ -32,58 +34,59 @@ class TerminalViewModel : ViewModel() {
     /**
      * 启动终端
      */
-    fun startTerminal(
-        startupCmd:String = ""
-    ) {
+    suspend fun startTerminal () {
         if (process != null) return
+        process = withContext(Dispatchers.IO){
+            terminal.attach().start()
+        }
 
+        //绑定输入输出
+        processWriter = OutputStreamWriter(process!!.outputStream)
+
+        //另起协程获取输出以及等待关闭
         viewModelScope.launch(Dispatchers.IO) {
-            process = terminal.attach().start()
-            //绑定输入输出
-            processWriter = OutputStreamWriter(process!!.outputStream)
-            launch {
-                output.add("终端开始运行\n")
-                try {
-                    BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
-                        val builder = StringBuilder()
-                        var readInt: Int
-                        var charRead: Char
-                        var lastReadCharTime = 0L //上次读取到新输出字符的时间。即使不完成整行 也会更新
-                        //builder lastUpdateTime output 应该在锁下进行
+            output.add("终端开始运行\n")
+            try {
+                BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
+                    val builder = StringBuilder()
+                    var readInt: Int
+                    var charRead: Char
+                    var lastReadCharTime = 0L //上次读取到新输出字符的时间。即使不完成整行 也会更新
+                    //builder lastUpdateTime output 应该在锁下进行
 
-                        // FIXME adduser 最后一条确认没显示出来？
-                        val updateInlineOutputJob = launch {
-                            var lastReadCharTimeCopy = 0L
-                            while(process?.isAlive == true) {
-                                delay(500)
-                                outputMutex.withLock {
-//                                    Log.d(TAG, "startTerminal: 检测缓存字符串：${lastReadCharTime == lastReadCharTimeCopy} ${builder.isNotEmpty()} 字符串=${builder.toString()}")
-                                    // 如果500ms内字符输出没有更新过，则将当前缓存的无换行字符串显示出来。
-                                    if  (lastReadCharTime == lastReadCharTimeCopy && lastReadCharTimeCopy !=0L && builder.isNotEmpty()) {
-                                        val lastLine = output.lastOrNull()
-                                        if (lastLine?.endsWith('\n') != false) output.add(builder.toString())
-                                        else output[output.lastIndex] = lastLine + builder.toString()
-                                        builder.clear()
-                                    }
-                                    lastReadCharTimeCopy = lastReadCharTime
-                                }
-                            }
-                        }
-                        while(reader.read().also { readInt = it } != -1) {
-                            charRead = readInt.toChar()
+                    // FIXME adduser 最后一条确认没显示出来？
+                    val updateInlineOutputJob = launch {
+                        var lastReadCharTimeCopy = 0L
+                        while(process?.isAlive == true) {
+                            delay(500)
                             outputMutex.withLock {
-                                lastReadCharTime = System.currentTimeMillis()
-                                builder.append(charRead)
-                                if (charRead == '\n') {
-                                    output.takeIf { it.size > 800 }?.removeRange(0, 400)
-                                    output.add(builder.toString())
+//                                    Log.d(TAG, "startTerminal: 检测缓存字符串：${lastReadCharTime == lastReadCharTimeCopy} ${builder.isNotEmpty()} 字符串=${builder.toString()}")
+                                // 如果500ms内字符输出没有更新过，则将当前缓存的无换行字符串显示出来。
+                                if  (lastReadCharTime == lastReadCharTimeCopy && lastReadCharTimeCopy !=0L && builder.isNotEmpty()) {
+                                    val lastLine = output.lastOrNull()
+                                    if (lastLine?.endsWith('\n') != false) output.add(builder.toString())
+                                    else output[output.lastIndex] = lastLine + builder.toString()
                                     builder.clear()
                                 }
+                                lastReadCharTimeCopy = lastReadCharTime
                             }
                         }
-                        updateInlineOutputJob.cancel()
                     }
-                    // 旧方法 直接按行读取
+                    while(reader.read().also { readInt = it } != -1) {
+                        charRead = readInt.toChar()
+                        outputMutex.withLock {
+                            lastReadCharTime = System.currentTimeMillis()
+                            builder.append(charRead)
+                            if (charRead == '\n') {
+                                output.takeIf { it.size > 800 }?.removeRange(0, 400)
+                                output.add(builder.toString())
+                                builder.clear()
+                            }
+                        }
+                    }
+                    updateInlineOutputJob.cancel()
+                }
+                // 旧方法 直接按行读取
 //                    BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
 //                        var line: String?
 //                        while (reader.readLine().also { line = it } != null) {
@@ -91,25 +94,23 @@ class TerminalViewModel : ViewModel() {
 //                            output.add(line!!)
 //                        }
 //                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-
-            if(Proot.lastTimeCmd.isNotBlank())
-                output.add("使用以下参数启动proot：\n${Proot.lastTimeCmd}\n\n")
-            if (startupCmd.isNotEmpty())
-                runCommand("$startupCmd &")
-
             process!!.waitFor()
             closeResources()
         }
+
+        if(Proot.lastTimeCmd.isNotBlank())
+            output.add("使用以下参数启动proot：\n${Proot.lastTimeCmd}\n\n")
+        return
     }
 
     /**
      * 执行某个命令
      */
     fun runCommand(command: String) = viewModelScope.launch(Dispatchers.IO){
+
         if (processWriter == null || process?.isAlive != true) {
             output.add("进程已关闭。无法执行命令 $command。\n")
             stopTerminal()

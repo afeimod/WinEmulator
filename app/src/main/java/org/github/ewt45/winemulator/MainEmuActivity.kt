@@ -162,14 +162,13 @@ class MainEmuActivity : MainActivity() {
 
 
             //这里还不能用state因为state第一次获取的是默认值而非datastore来的值
-            val startupCmd = listOf(
-                "locale-gen ${general_rootfs_lang.get()}", //每次切换语言都要执行locale-gen
-                proot_startup_cmd.get().takeIf { it.isNotBlank() },
-            ).filterNotNull().joinToString(" ; ")
-//            val startupCmd = ""
-            terminalViewModel.startTerminal(startupCmd)
+            terminalViewModel.startTerminal()
             //添加observer时会立刻发送一遍从头到现在的状态，所以onCreate会触发
             lifecycle.addObserver(EmuManager(lifecycleScope))
+            terminalViewModel.runCommand("locale-gen ${general_rootfs_lang.get()}")
+            proot_startup_cmd.get().takeIf { it.isNotBlank() } ?.let {
+                terminalViewModel.runCommand("$it &")
+            }
         }
     }
 
