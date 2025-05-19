@@ -233,7 +233,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
         Log.d(TAG, "GeneralRootfsSelect_ExportRootfs: 能否获取到mimetype? $compMimeTypes")
         val launcher  = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(compMimeTypes[currCompType] ?: "*/*")) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            Utils.
+            TODO("实现解压逻辑")
 
         }
         AlertDialog(
@@ -287,10 +287,11 @@ fun GeneralRootfsSelect_RootfsName(
     onRootfsNameChange: suspend (String, String, Boolean) -> String,
 ) {
     val scope = rememberCoroutineScope()
-    TextFieldOption(rootfsName, title = "Rootfs名称", outlined = true, maxLines = 1) {
-        val newName = it.replace(" ", "").trim()
+    TextFieldOption(rootfsName, title = "Rootfs名称", outlined = true,) {
+
+        val newName = it.filter { ch ->!ch.isWhitespace() }
         scope.launch {
-            if (newName.isEmpty()) return@launch
+            if (newName.isBlank()) return@launch
             val extraTip = if (isCurr) "\n\n该Rootfs当前正在使用，重命名后会退出app，请手动重启。" else ""
             if (mainVm.showConfirmDialog("是否将该Rootfs重命名为 $newName？$extraTip").getOrNull() == true) {
                 mainVm.showBlockDialogWithErrorConfirm("正在重命名...") {

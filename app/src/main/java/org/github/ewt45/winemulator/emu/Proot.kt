@@ -127,7 +127,7 @@ class Proot {
         val prootCmdProotPart = prootCmd.toMutableList()
         prootCmd.clear()
         //sh -c 之后应该用一个字符串 不应再分割了
-        prootCmd.addAll(listOf("sh", "-c", "umask 0022 ; ${prootCmdProotPart.joinToString(" ")}"))
+        prootCmd.addAll(listOf("sh", "-c", "${prootCmdProotPart.joinToString(" ")}")) //umask 0022 ;//TODO umask先不设置了？
         lastTimeCmd = "sh -c umask 0022 ; \\\n" + prootCmdProotPart.joinToString(" \\\n")
         Log.d(TAG, "attach: 最终prootcmd=$lastTimeCmd")
 

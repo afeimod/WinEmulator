@@ -16,7 +16,7 @@ import org.github.ewt45.winemulator.Consts
 
 class X11Service : LifecycleService() {
     private val TAG = "X11Service"
-    var started = false
+    private var started = false
     var job: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -51,5 +51,6 @@ class X11Service : LifecycleService() {
     override fun onDestroy() {
         super.onDestroy()
         job?.cancel("service onDestroy, 停止xserver")
+        started = false
     }
 }

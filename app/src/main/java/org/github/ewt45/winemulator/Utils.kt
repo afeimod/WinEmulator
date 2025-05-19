@@ -48,9 +48,13 @@ import okio.Buffer
 import okio.source
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
 import org.apache.commons.compress.compressors.CompressorInputStream
+import org.apache.commons.compress.compressors.CompressorOutputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
 import org.apache.commons.compress.utils.InputStreamStatistics
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.IOUtils
@@ -201,6 +205,9 @@ object Utils {
 
     /** 打开uri的输入流。等于 contentResolver.openInputStream(uri) */
     fun Context.openInput(uri: Uri): InputStream? = contentResolver.openInputStream(uri)
+
+    /** 打开uri的输出流。等于 contentResolver.openOutputStream(uri) */
+    fun Context.openOutput(uri: Uri): OutputStream? = contentResolver.openOutputStream(uri)
 
     object Files {
         suspend fun writeToUri(ctx: Context, uri: Uri, content: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -411,7 +418,6 @@ object Utils {
             val removedPrefix = findRootfsCompressedTarRemovedPrefix(Archive.getCompressedInput(compType, ctx.openInput(uri)), reporter)
 
             reporter.msg("找到压缩包内rootfs目录: $removedPrefix", "(3/3) 正在解压...")
-//            extractTarXzRootfsInternal(ctx.contentResolver.openInputStream(uri), outDir, removedPrefix, reporter)
             val prefixCount = removedPrefix.trimStart('/').length //去除前缀 没有/开头的长度
             val compressedTarInput = Archive.getCompressedInput(compType, ctx.openInput(uri))
             Archive.decompressCompressedTarStream(compressedTarInput, outDir, reporter) {
@@ -429,10 +435,21 @@ object Utils {
         }
 
         /**
-         * 将指定rootfs压缩为压缩包并导出
+         * 将指定rootfs压缩为压缩包并导出。压缩包内第一层是该rootfs文件夹，再内部是各基本目录
          */
         suspend fun exportRootfsArchive(ctx: Context, uri: Uri, rootfsFile: File, compType: CompressedType,reporter: TaskReporter) = withContext(IO) {
-            
+            /** 压缩包内文件去掉rootfs父目录的路径 */
+            TODO("实现解压逻辑")
+            val pathPrefix = rootfsFile.parentFile!!.absolutePath
+            Archive.getCompressedOutput(compType, ctx.openOutput(uri)).use { zOut ->
+                TarArchiveOutputStream(zOut).use { tOut ->
+
+//                    for (file in rootfsFile..walkTopDown()) {
+//                        val entryName = if (parentPath.isNotEmpty()) "$parentPath/${file.name}" else file.name
+//                        val tarEntry = TarArchiveEntry(file, entryName)
+//                    }
+                }
+            }
         }
         /** 获取当前选择的rootfs。
          * 确保：1. 不为 [rootfsCurrDir] 2. 优先读取上次设置的，如果不存在则随机选一个
@@ -504,6 +521,12 @@ object Utils {
             CompressedType.GZ -> GzipCompressorInputStream(rawInput)
         }
 
+        /** 将一个普通输出流转换为对应的压缩器输出流 如 [XZCompressorInputStream] [GzipCompressorOutputStream] */
+        fun getCompressedOutput(type: CompressedType, rawOutput: OutputStream?): CompressorOutputStream<out OutputStream> = when (type) {
+            CompressedType.XZ -> XZCompressorOutputStream(rawOutput)
+            CompressedType.GZ -> GzipCompressorOutputStream(rawOutput)
+        }
+
         /**
          * 解压一个压缩包输入流，该压缩包解压后应该是一个tar文件，然后将这个tar文件内容解压到指定目录
          * @param archiveInput 对应压缩文件的压缩器输入流，如 [XZCompressorInputStream] [GzipCompressorInputStream]
@@ -520,15 +543,15 @@ object Utils {
             if (!outDir.exists()) outDir.mkdirs()
 
             val symLinkList = mutableListOf<SymLink>()
-            var count = 0F
+            var extractCount = 0F //解压出的文件个数
 
             archiveInput.use { zis ->
                 val statistics = zis as? InputStreamStatistics
                 TarArchiveInputStream(zis).use { tis ->
                     var entry: TarArchiveEntry
                     while (tis.nextEntry.also { entry = it } != null) {
+                        extractCount ++
                         statistics?.let { reporter.progressValue(statistics.compressedCount) } //更新解压进度
-                        count ++
                         val name = entryNameMapper(entry.name)
                         if (name.isEmpty())
                             continue
@@ -572,7 +595,6 @@ object Utils {
                     reporter.msg("创建符号链接时出错。文件=$item 。错误消息=${e.stackTraceToString()}")
                 }
             }
-
             //先完整循环一遍， 确保中间文件和最终文件都已创建。
 
             reporter.msg(null, "符号链接创建完毕，开始寻找l2s文件...")
@@ -644,7 +666,7 @@ object Utils {
                     //强制放到.l2s文件夹。因为后续proot启动时会指定到这个文件夹
                     var finalInL2s = File(info.finalCorrectPath)
                     if (!finalInL2s.absolutePath.startsWith(l2sDir.absolutePath))
-                        finalInL2s = File(l2sDir, finalInL2s.name).also { finalInL2s.renameTo(it) }
+                        finalInL2s = File(l2sDir, finalInL2s.name).also { FileUtils.moveFile(finalInL2s, it) }
                     var interInL2s = File(info.interCorrectPath).also { it.delete() }
                     if (!interInL2s.absolutePath.startsWith(l2sDir.absolutePath))
                         interInL2s = File(l2sDir, interInL2s.name)
