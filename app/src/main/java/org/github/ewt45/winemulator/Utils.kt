@@ -73,6 +73,7 @@ import java.io.OutputStream
 import java.net.URL
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
@@ -320,76 +321,18 @@ object Utils {
         }
 
         /**
-         * 解压rootfs时，为了解压到指定文件夹d后，d内直接子文件夹就是usr opt 那些，可能需要移除压缩包中文件的路径开头多于的文件夹
-         * @param archiveInput 对应压缩文件的压缩器输入流，如 [XZCompressorInputStream] [GzipCompressorInputStream]
-         * @param reportProgress 更新进度。接收参数为当前已读取的文件字节（压缩后大小）
-         * @return 返回解压时，文件名需要移除的路径前缀.
-         */
-        private suspend fun findRootfsCompressedTarRemovedPrefix(
-            archiveInput: CompressorInputStream, reporter: TaskReporter,
-        ): String = withContext(IO) {
-            val startTime = System.currentTimeMillis()
-
-            /** 要移除的多余前缀路径 如果为空字符串则表示未获取到 */
-            var removedPrefix = ""
-            var readUncompSize = 0L
-
-            archiveInput.use { aIn ->
-                val statistics = aIn as? InputStreamStatistics
-                TarArchiveInputStream(aIn).use { tis ->
-                    val maxSegmentIdx = 10
-                    val segmentList = mutableListOf<MutableSet<String>>() //每个元素是一个 路径根据 / 分割出来的路径列表
-                    for (i in 0 until maxSegmentIdx) segmentList.add(mutableSetOf())
-                    var maxSegmentedPath = listOf<String>() // 分段最多，也就是最深的路径。等到时候找出第几个idx是rootfs了，就以这个为基准获取idx之前的部分
-                    var entry: TarArchiveEntry
-                    while (tis.nextEntry.also { entry = it } != null) {
-                        readUncompSize += entry.size
-                        statistics?.let { reporter.progressValue(it.compressedCount) }
-                        val split = entry.name.trim('/').split('/')
-                        if (split.size > maxSegmentedPath.size) maxSegmentedPath = split
-                        for (i in split.indices) {
-                            if (i >= maxSegmentIdx) break
-                            segmentList[i].add(split[i])
-                        }
-                    }
-
-                    val rootfsSubDirs = listOf("etc", "usr")
-                    var segmentIdx = -1
-                    for (i in segmentList.indices) {
-                        if (segmentList[i].containsAll(rootfsSubDirs)) {
-                            segmentIdx = i
-                            break //停止循环时，当前segmentIdx对应的是rootfs的子目录们
-                        }
-                    }
-
-                    if (segmentIdx >= 0 && maxSegmentedPath.isNotEmpty()) {
-                        //不行 现在只知道第几段的那个文件夹名，但前面几段应该是哪些文件夹名不知道了
-                        // 存一个分段最多的路径吧，然后根据idx获取前半部分。但是如果rootfs目录有多个上级目录，那么最深的那个也有很小几率变成非rootfs那个文件夹里的一个文件。小概率事件不管了吧
-                        removedPrefix = maxSegmentedPath.subList(0, segmentIdx).joinToString("/")
-                    } else {
-                        throw RuntimeException("无法找到压缩包内的多余路径前缀。segmentIdx=$segmentIdx, maxSegmentedPath=$maxSegmentedPath")
-                    }
-                }
-            }
-            //archlinux(676MB, 32800个文件）36秒 改之前38秒。。。。到底怎么才能读取更快呢？
-            Log.d(
-                TAG, "findRootfsTarXzRemovedPrefix: 找到多余路径前缀：$removedPrefix " +
-                        "\n 寻找rootfs多余前缀路径耗时${(System.currentTimeMillis() - startTime) / 1000F}秒"
-            )
-
-            return@withContext removedPrefix
-        }
-
-
-        /**
          * 解压一个压缩包(目前支持.tar.xz 和 .tar.gz) ，其内含一个rootfs, 将其解压到outDir.
          * 解压后，outDir为 [Consts.rootfsAllDir] 中的一个目录，其内部为 bin etc 这种的目录
          * 解压后会做一些处理操作，参考 [postExtractRootfs]
          * uri不是.tar.xz时会抛出异常
          * @param reporter 调用[TaskReporter.progressValue] 时传入的是某文件压缩后大小. 本函数会将[TaskReporter.totalValue] 设置为压缩文件总大小
          */
-        suspend fun installRootfsArchive(ctx: Context, uri: Uri, outDir: File, reporter: TaskReporter) = withContext(IO) {
-            val tmpArchiveFile = File(Consts.tmpDir, "archive-rootfs-tmp")
+        suspend fun installRootfsArchive(ctx: Context, uri: Uri, targetOutDir: File, reporter: TaskReporter) = withContext(IO) {
+            val tmpArchiveFile = File(Consts.tmpDir, "archive-rootfs-tmp").also { it.delete() }
+            val tmpOutDir = File(Consts.tmpDir, "extract-rootfs-tmp").also {
+                FileUtils.deleteDirectory(it)
+                it.mkdirs()
+            }
             val compSize = ctx.contentResolver.openFileDescriptor(uri, "r").use { it?.statSize } ?: (1024 * 1024 * 1024L)
 
             reporter.progress(0F)
@@ -400,38 +343,35 @@ object Utils {
             else if (ctx.openInput(uri)?.use { it.isGzip() } == true) CompressedType.GZ
             else return@withContext reporter.done(RuntimeException("该文件不是 xz 或 gz 压缩包。"))
 
-            reporter.msg(null, "(1/3) 正在将文件复制到内部存储目录...")
-//            ctx.openInput(uri)?.source()?.buffer()?.use { source ->
-//                tmpArchiveFile.sink().buffer().use { sink ->
-//                    sink.writeAll(source)
-//                }
-//            }
-            tmpArchiveFile.delete()
-            FileUtils.copyInputStreamToFile(ctx.openInput(uri), tmpArchiveFile)
-            if (!tmpArchiveFile.exists() || tmpArchiveFile.length() != compSize) {
-                return@withContext reporter.done(RuntimeException("文件复制出错，无法进行解压。"))
-            }
-
-            reporter.msg(null, "(2/3) 正在读取压缩包寻找rootfs根目录...")
-
-            //FIXME 在压缩包内读取rootfs多余前缀太费时。先解压出来再移动文件夹？
-            val removedPrefix = findRootfsCompressedTarRemovedPrefix(Archive.getCompressedInput(compType, ctx.openInput(uri)), reporter)
-
-            reporter.msg("找到压缩包内rootfs目录: $removedPrefix", "(3/3) 正在解压...")
-            val prefixCount = removedPrefix.trimStart('/').length //去除前缀 没有/开头的长度
+            reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
+            reporter.totalValue = compSize
             val compressedTarInput = Archive.getCompressedInput(compType, ctx.openInput(uri))
-            Archive.decompressCompressedTarStream(compressedTarInput, outDir, reporter) {
-                if (prefixCount == 0) it
-                else if (it.length < prefixCount) {
-                    reporter.msg("压缩包中文件名长度小于prefix长度，跳过解压：文件名=\"$it\"， prefix=$removedPrefix")
-                    ""
-                } else it.substring(prefixCount + if (it.startsWith('/')) 1 else 0) //如果解压文件有/开头，则去除长度+1
-            }
+            Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
 
+            reporter.msg(null, "(2/3) 正在移动到目标文件夹...")
+            reporter.progress(0F)
+            //寻找rootfs根目录
+            val confirmRootfsSubDirs = listOf("etc", "usr")
+            val searchDirs = mutableListOf(tmpOutDir)
+            var foundRootfsDir: File? = null
+            while(searchDirs.size > 0 && foundRootfsDir == null) {
+                val nowDir = searchDirs.removeAt(0)
+                foundRootfsDir = nowDir.takeIf { it.list()?.toList()?.containsAll(confirmRootfsSubDirs) == true }
+                nowDir.listFiles()?.let { searchDirs.addAll(it) }
+            }
+            if (foundRootfsDir == null)
+                return@withContext reporter.done(RuntimeException("无法在解压内容中找到rootfs根目录（包含 etc usr 的文件夹）"))
+            foundRootfsDir.absolutePath.substring(tmpOutDir.absolutePath.length).takeIf { it.isNotBlank() }.let {
+                reporter.msg("找到解压后多余的内层文件夹：$it")
+            }
+            FileUtils.moveDirectory(foundRootfsDir, targetOutDir)
+
+            tmpArchiveFile.delete()
+            FileUtils.deleteDirectory(tmpOutDir)
 
             //解压后做一些处理操作
             reporter.msg(null, "解压结束。正在做一些处理...")
-            postExtractRootfs(outDir)
+            postExtractRootfs(targetOutDir)
         }
 
         /**
@@ -594,6 +534,12 @@ object Utils {
                     e.printStackTrace()
                     reporter.msg("创建符号链接时出错。文件=$item 。错误消息=${e.stackTraceToString()}")
                 }
+            }
+
+            val skipL2s = false
+            if (skipL2s) {
+                reporter.msg("跳过处理l2s文件并返回。")
+                return
             }
             //先完整循环一遍， 确保中间文件和最终文件都已创建。
 

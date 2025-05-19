@@ -44,6 +44,9 @@ object Consts {
     /** proot --link2symlink 时 要存放唯一真实文件的文件夹。路径：[rootfsCurrDir]/.l2s */
     lateinit var rootfsCurrL2sDir: File
 
+    /** 容器启动时执行的初始化脚本 */
+    lateinit var rootfsCurrStartSh: File
+
     /** 一个用于测试的alpine rootfs. files/rootfs/alpine-aarch64 */
     lateinit var alpineRootfsDir: File
 
@@ -146,6 +149,7 @@ object Consts {
         rootfsCurrXkbDir = File(rootfsCurrDir, "usr/share/X11/xkb")
         rootfsCurrTmpDir = File(rootfsCurrDir, "tmp")
         rootfsCurrL2sDir = File(rootfsCurrDir, "/.l2s")
+        rootfsCurrStartSh = File(rootfsCurrDir, "/.emuconf/start.sh")
 
         //proot从assets解压
         prootBin = File(fileDir, "proot")

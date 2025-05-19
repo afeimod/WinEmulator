@@ -41,6 +41,9 @@ class Proot {
 //        chmod(tmpdir, "1777")
 
         rootfsCurrL2sDir.mkdirs()
+        chmod(rootfsCurrL2sDir, "755")
+//        ProotHelper.createStartSh()
+        ProotHelper.setup_fake_data()
 
         //proot命令的参数使用 大量参考Proot-Distro
 

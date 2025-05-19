@@ -224,6 +224,19 @@ object ProotHelper {
         writeIfNotExists("/proc/.sysctl_inotify_max_user_watches", "4096")
     }
 
+    /** 启动脚本，启动后执行这个 */
+    fun createStartSh() {
+//        Consts.rootfsCurrStartSh.takeIf { it.notExists() }?.let {
+//            FileUtils.writeStringToFile(it, """
+//                if [ "${'$'}(locale -a | grep $LC_ALL)" != "$LC_ALL" ]; then
+//                    progress "-1" "Generating locale..."
+//                    locale-gen --no-archive $LC_ALL
+//                fi
+//            """.trimIndent(), StandardCharsets.UTF_8)
+//        }
+
+    }
+
     /**
      * 如果文件不存在，则创建并写入内容
      * @param filePath 相对于 [Consts.rootfsCurrDir] 的路径
