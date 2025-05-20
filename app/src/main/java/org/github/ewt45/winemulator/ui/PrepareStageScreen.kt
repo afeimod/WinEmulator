@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +43,7 @@ import org.github.ewt45.winemulator.emu.ProotRootfs
 import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_LoginUserSelect
 import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
+import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 import java.io.File
 
 @Composable
@@ -71,8 +74,9 @@ fun RootfsSelectScreen(
     var processingMsgTitle by remember { mutableStateOf("") }
     var processingMsg by remember { mutableStateOf("") }
     var rootfsName by remember { mutableStateOf("") }
+    var isSetCurrent by remember { mutableStateOf(true) }
 
-    val processReporter = object: Utils.TaskReporter(-1) {
+    val processReporter = object : Utils.TaskReporter(-1) {
         override fun progress(percent: Float) {
             extractProgress = percent
         }
@@ -113,10 +117,15 @@ fun RootfsSelectScreen(
         }
     }
 
-    val onClickFinish = if (isFinished) {
-        { MainEmuActivity.instance.finish() }
-    } else {
-        { readFileLauncher.launch(arrayOf("application/x-xz", "*/*")) }
+    val onClickFinish:() -> Unit = {
+        if (isFinished) {
+            scope.launch {
+                if (isSetCurrent) MainEmuActivity.instance.settingViewModel.onChangeRootfsSelect(rootfsName)
+                else MainEmuActivity.instance.finish()
+            }
+        } else {
+            readFileLauncher.launch(arrayOf("application/x-xz", "*/*"))
+        }
     }
 
     Column(
@@ -166,15 +175,23 @@ fun RootfsSelectScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("下次启动app运行该容器")
+                Checkbox(isSetCurrent, { isSetCurrent = it })
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
         // 解压过程中的输出信息
         HorizontalDivider(Modifier.padding(vertical = 24.dp))
         Text(
-            processingMsg, Modifier.padding(top = 32.dp)
+            processingMsg, Modifier
+                .padding(top = 24.dp)
                 .horizontalScroll(rememberScrollState()),
             color = MaterialTheme.colorScheme.run { if (isError) error else onSurface },
-            style = MaterialTheme.typography.bodySmall)
+            style = MaterialTheme.typography.bodySmall
+        )
         Spacer(Modifier.height(16.dp))
 
     }
@@ -183,11 +200,14 @@ fun RootfsSelectScreen(
 @Preview(widthDp = 300, heightDp = 600)
 @Composable
 fun PrepareStageScreenFinishPreview() {
-    Column(Modifier.padding(16.dp)) {
+    Column(
+        Modifier.padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         val rootfsName = "rootfs-1"
         Text("退出之前，您还可以编辑以下内容。。")
         Spacer(Modifier.height(16.dp))
-        GeneralRootfsSelect_RootfsName("rootfs-1", false) { oldRootfsName, newRootfsName, _ -> "" }
+        GeneralRootfsSelect_RootfsName("rootfs-1", false) { _, _, _ -> "" }
 
         val userList = listOf("root", "aid_u0_a287", "iuser").filter { !it.startsWith("aid_") }.sorted()
         val nonRootUser = userList.find { it != "root" }
@@ -197,10 +217,14 @@ fun PrepareStageScreenFinishPreview() {
             GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { _, newUserName -> userName = newUserName }
         }
         Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("下次启动app运行该容器")
+            Checkbox(true, {})
+        }
     }
 }
 
-@Preview(widthDp = 300, heightDp = 600)
+//@Preview(widthDp = 300, heightDp = 600)
 @Composable
 fun PrepareStageScreenPreview() {
     RootfsSelectScreen({ _, _ -> }, { _, _, _ -> "" })
