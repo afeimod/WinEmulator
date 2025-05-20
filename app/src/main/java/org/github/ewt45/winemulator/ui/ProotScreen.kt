@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -81,24 +84,25 @@ fun ProotTerminalScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        val onSend = {
+            viewModel.runCommand(execCommand)
+            execCommand = ""
+        }
         TextField(
             value = execCommand,
             modifier = Modifier.fillMaxWidth(),
             onValueChange = { execCommand = it },
             label = { Text("输入命令") },
             trailingIcon = {
-                IconButton(
-                    onClick = {
-                        viewModel.runCommand(execCommand)
-                        execCommand = ""
-                    }
-                ) {
+                IconButton(onSend) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "发送"
                     )
                 }
             },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = {onSend()})
         )
     }
 }
