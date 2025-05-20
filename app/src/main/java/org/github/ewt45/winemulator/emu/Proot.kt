@@ -1,8 +1,10 @@
 package org.github.ewt45.winemulator.emu
 
 import android.util.Log
+import androidx.compose.ui.text.toLowerCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okio.FileSystem
 import org.apache.commons.io.FileUtils
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.Consts.Pref.general_shared_ext_path
@@ -11,6 +13,7 @@ import org.github.ewt45.winemulator.Consts.rootfsCurrL2sDir
 import org.github.ewt45.winemulator.Utils.chmod
 import org.github.ewt45.winemulator.emu.ProotHelper.DEFAULT_FAKE_KERNEL_VERSION
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 /**
  * 连接linux的终端。输入命令或获取输出
@@ -26,6 +29,7 @@ class Proot {
     suspend fun attach(): ProcessBuilder = withContext(Dispatchers.IO) {
         val rootfs = Consts.rootfsCurrDir
         val tmpdir = Consts.tmpDir
+        val lang = Consts.Pref.general_rootfs_lang.get()
 
         //TODO 每次运行前清空tmp。不对不能在tx11启动后清空 不然和容器连不上了
 //        tmpdir.deleteRecursively()
@@ -36,13 +40,12 @@ class Proot {
         chmod(rootfsCurrL2sDir, "755")
 //        ProotHelper.createStartSh()
         ProotHelper.setup_fake_data()
+        editEtcLocaleGen(rootfs, lang)
 
         //proot命令的参数使用 大量参考Proot-Distro
 
         //登陆时使用指定用户名。优先使用非root用户。从/etc/passwd获取uid, gid, home, shell
         val userInfo = ProotRootfs.getPreferredUser(rootfs.canonicalFile.name)
-        Log.d(TAG, "attach: proot使用的用户：$userInfo")
-
 
         val prootCmd = mutableListOf(
             Consts.prootBin.absolutePath,
@@ -100,7 +103,7 @@ class Proot {
 //        loginEnvs.put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games") // etc/environment 里应该有
 //        loginEnvs.put("LD_LIBRARY_PATH","/usr/lib/aarch64-linux-gnu:/usr/lib/arm-linux-gnueabihf")
 //        loginEnvs.put("LC_ALL", "en_US.UTF-8", true) //LC_ALL仅供调试用，覆盖LANG及所有LC_
-        loginEnvs.put("LANG", Consts.Pref.general_rootfs_lang.get(), true)//覆盖未通过LC_ 指定的变量
+        loginEnvs.put("LANG", lang, true)//覆盖未通过LC_ 指定的变量
         loginEnvs.put("HOME", userInfo.home, true)
         loginEnvs.put("USER", userInfo.name, true)
         loginEnvs.put("TMPDIR", "/tmp", true)
@@ -123,7 +126,7 @@ class Proot {
         prootCmd.clear()
         //sh -c 之后应该用一个字符串 不应再分割了
         prootCmd.addAll(listOf("sh", "-c", prootCmdProotPart.joinToString(" "))) //umask 0022 ;//TODO umask先不设置了？
-        lastTimeCmd = "sh -c umask 0022 ; \\\n" + prootCmdProotPart.joinToString(" \\\n")
+        lastTimeCmd = "sh -c \\\n" + prootCmdProotPart.joinToString(" \\\n")
         Log.d(TAG, "attach: 最终prootcmd=$lastTimeCmd")
 
         val processBuilder = ProcessBuilder(prootCmd)
@@ -131,6 +134,7 @@ class Proot {
             .also {
                 it.environment()["PROOT_TMP_DIR"] = Consts.tmpDir.absolutePath
                 it.environment()["LD_PRELOAD"] = ""
+                //TODO 设置l2s_dir时 locale-gen无法正常工作。临时去掉。后续查明原因再加回来。
 //                it.environment()["PROOT_L2S_DIR"] = rootfsCurrL2sDir.absolutePath // link2symlink 相关
             }
             .redirectErrorStream(true)
@@ -141,7 +145,7 @@ class Proot {
     /**
      * 读取/etc/environment下的环境变量 并添加到 [envMap]
      */
-    private fun readEtcEnvironment(rootfs:File, envMap: EnvMap) {
+    private fun readEtcEnvironment(rootfs: File, envMap: EnvMap) {
         try {
             for (l in File(rootfs, "/etc/environment").readLines()) {
                 val line = l.trim()
@@ -150,6 +154,25 @@ class Proot {
                     envMap.put(split[0], split[1].trim('\"'))
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** 编辑/etc/locale.gen,后续会执行locale-gen 生成对应语言文件 */
+    private fun editEtcLocaleGen(rootfs: File, targetLocale: String) {
+        try {
+            val file = File(rootfs, "/etc/locale.gen").takeIf { it.exists() } ?: return
+            val regexCharNum = "[^a-zA-Z0-9]".toRegex()
+            val lines = FileUtils.readLines(file, StandardCharsets.UTF_8).map {
+                //遍历文件，找到对应语言那行，去掉开头注释（如果有）
+                val uncommentLine = it.trimStart('#').trim()
+                val locale = uncommentLine.split(' ').takeIf { parts -> parts.size == 2 }?.get(0) ?: return@map it
+                val comp1 = locale.replace(regexCharNum, "").lowercase()
+                val comp2 = targetLocale.replace(regexCharNum, "").lowercase()
+                return@map if (comp1 == comp2) uncommentLine else it
+            }
+            FileUtils.writeLines(file, lines)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -171,7 +194,7 @@ class Proot {
      * @param bindFrom rootfs中某个文件的安卓绝对路径
      * @return --bind 的字符串，未绑定时返回null
      */
-    private fun bindIfNotReadable(rootfs: File,  bindFrom: String, bindTo: String,): String? {
+    private fun bindIfNotReadable(rootfs: File, bindFrom: String, bindTo: String): String? {
         return File(bindTo).takeIfCantRead()?.let { "--bind=${File(rootfs, bindFrom).absolutePath}:$bindTo" }
     }
 

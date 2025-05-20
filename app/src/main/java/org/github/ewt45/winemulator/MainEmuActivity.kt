@@ -166,8 +166,9 @@ class MainEmuActivity : MainActivity() {
             //添加observer时会立刻发送一遍从头到现在的状态，所以onCreate会触发
             lifecycle.addObserver(EmuManager(lifecycleScope))
             val LANG = general_rootfs_lang.get()
-//            terminalViewModel.runCommand("locale-gen ${general_rootfs_lang.get()}")
-            terminalViewModel.runCommand("""if [ "${'$'}(locale -a | grep $LANG)" != "$LANG" ]; then locale-gen --no-archive $LANG; fi; export LANG=$LANG""")
+//            terminalViewModel.runCommand("echo \$LANG")
+//            terminalViewModel.runCommand("locale-gen") //在Proot中修改etc/locale.gen中对应语言。此处不添加参数
+            terminalViewModel.runCommand("""if [ "$(locale -a | grep $LANG)" != $LANG ]; then locale-gen; fi; export LANG=$LANG""")
             proot_startup_cmd.get().takeIf { it.isNotBlank() } ?.let {
                 terminalViewModel.runCommand("$it &")
             }
