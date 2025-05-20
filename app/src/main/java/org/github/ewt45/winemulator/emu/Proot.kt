@@ -134,7 +134,7 @@ class Proot {
             .also {
                 it.environment()["PROOT_TMP_DIR"] = Consts.tmpDir.absolutePath
                 it.environment()["LD_PRELOAD"] = ""
-                //TODO 设置l2s_dir时 locale-gen无法正常工作。临时去掉。后续查明原因再加回来。
+                //FIXME 设置l2s_dir时 locale-gen无法正常工作。临时去掉。后续查明原因再加回来。
 //                it.environment()["PROOT_L2S_DIR"] = rootfsCurrL2sDir.absolutePath // link2symlink 相关
             }
             .redirectErrorStream(true)
