@@ -168,7 +168,8 @@ class MainEmuActivity : MainActivity() {
             val LANG = general_rootfs_lang.get()
 //            terminalViewModel.runCommand("echo \$LANG")
 //            terminalViewModel.runCommand("locale-gen") //在Proot中修改etc/locale.gen中对应语言。此处不添加参数
-            terminalViewModel.runCommand("""if [ "$(locale -a | grep $LANG)" != $LANG ]; then locale-gen; fi; export LANG=$LANG""")
+            // grep的$LANG应该还是从环境变量获取 因为有时候如果没生效的话LANG会被还原会C,可以用这个判断是否需要
+            terminalViewModel.runCommand("""if [ "$(locale -a | grep ${'$'}LANG)" != $LANG ]; then locale-gen; fi; export LANG=$LANG""")
             proot_startup_cmd.get().takeIf { it.isNotBlank() } ?.let {
                 terminalViewModel.runCommand("$it &")
             }

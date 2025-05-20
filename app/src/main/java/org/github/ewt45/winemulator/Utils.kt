@@ -75,8 +75,12 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.io.path.deleteExisting
+import kotlin.io.path.deleteIfExists
+import kotlin.io.path.name
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.jvm.isAccessible
@@ -354,7 +358,7 @@ object Utils {
             val confirmRootfsSubDirs = listOf("etc", "usr")
             val searchDirs = mutableListOf(tmpOutDir)
             var foundRootfsDir: File? = null
-            while(searchDirs.size > 0 && foundRootfsDir == null) {
+            while (searchDirs.size > 0 && foundRootfsDir == null) {
                 val nowDir = searchDirs.removeAt(0)
                 foundRootfsDir = nowDir.takeIf { it.list()?.toList()?.containsAll(confirmRootfsSubDirs) == true }
                 nowDir.listFiles()?.let { searchDirs.addAll(it) }
@@ -377,7 +381,7 @@ object Utils {
         /**
          * 将指定rootfs压缩为压缩包并导出。压缩包内第一层是该rootfs文件夹，再内部是各基本目录
          */
-        suspend fun exportRootfsArchive(ctx: Context, uri: Uri, rootfsFile: File, compType: CompressedType,reporter: TaskReporter) = withContext(IO) {
+        suspend fun exportRootfsArchive(ctx: Context, uri: Uri, rootfsFile: File, compType: CompressedType, reporter: TaskReporter) = withContext(IO) {
             /** 压缩包内文件去掉rootfs父目录的路径 */
             TODO("实现解压逻辑")
             val pathPrefix = rootfsFile.parentFile!!.absolutePath
@@ -391,6 +395,7 @@ object Utils {
                 }
             }
         }
+
         /** 获取当前选择的rootfs。
          * 确保：1. 不为 [rootfsCurrDir] 2. 优先读取上次设置的，如果不存在则随机选一个
          */
@@ -490,7 +495,7 @@ object Utils {
                 TarArchiveInputStream(zis).use { tis ->
                     var entry: TarArchiveEntry
                     while (tis.nextEntry.also { entry = it } != null) {
-                        extractCount ++
+                        extractCount++
                         statistics?.let { reporter.progressValue(statistics.compressedCount) } //更新解压进度
                         val name = entryNameMapper(entry.name)
                         if (name.isEmpty())
@@ -535,15 +540,47 @@ object Utils {
                     reporter.msg("创建符号链接时出错。文件=$item 。错误消息=${e.stackTraceToString()}")
                 }
             }
-
-            val skipL2s = false
-            if (skipL2s) {
-                reporter.msg("跳过处理l2s文件并返回。")
-                return
-            }
             //先完整循环一遍， 确保中间文件和最终文件都已创建。
 
-            reporter.msg(null, "符号链接创建完毕，开始寻找l2s文件...")
+            //FIXME 由于目前设置PROOT_L2S_DIR为.l2s文件夹时 locale-gen无法创建语言文件，而目前修复l2s又会将文件都放到.l2s文件夹，所以先不处理了，
+            fixL2sFiles(outDir, symLinkList, reporter, skipProcess = true)
+        }
+
+        /**
+         * 修复l2s文件软链接指向的路径
+         * @param skipProcess 跳过处理。目前指定l2s变量会有问题，所以先不处理了
+         */
+        private fun fixL2sFiles(outDir: File, symLinkList: List<SymLink>, reporter: TaskReporter, skipProcess: Boolean = false) {
+            if (skipProcess) {
+                reporter.msg("跳过修复l2s文件")
+                fun delL2s(files: List<File>, reporter: TaskReporter) =
+                    files.forEach { if (it.delete()) reporter.msg("删除l2s文件：${it.absolutePath}") }
+
+                val l2sDir = File(outDir, ".l2s")
+                //如果不处理，把相关文件都删掉。靠程序重新创建
+                for (item in symLinkList) {
+                    try {
+                        val symlinkFile = File(item.symlink)
+                        val pointToFile = File(item.pointTo)
+                        //自己是中间文件或硬链接模拟，都可以执行相同操作：删除自身，同目录/l2s目录下指向文件名
+                        if (symlinkFile.name.startsWith(".l2s.") || pointToFile.name.startsWith(".l2s.")) {
+                            delL2s(listOf(symlinkFile, File(symlinkFile.parentFile!!, pointToFile.name), File(l2sDir, pointToFile.name)), reporter)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        reporter.msg("删除l2s文件时出错。文件=$item 。错误消息 = ${e.stackTraceToString()}")
+                    }
+                }
+                try {
+                    File(outDir, "/.l2s").let { FileUtils.deleteDirectory(it) }.also { reporter.msg("删除 .l2s 文件夹") }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    reporter.msg("删除 .l2s 文件夹失败。错误消息 = ${e.stackTraceToString()}")
+                }
+                return
+            }
+
+            reporter.msg("开始修复l2s文件...")
 
             /** l2s相关文件信息。key为中间文件错误路径（别的包名开头），value为该文件相关信息。 */
             val interToL2sMap: MutableMap<String, L2sInfo> = mutableMapOf()
@@ -554,30 +591,22 @@ object Utils {
             val regex4Dec = "^[0-9]{4}$".toRegex()
             for (idx in symLinkList.indices) {
                 val item = symLinkList[idx]
-                //修复 proot l2s文件相关的符号链接指向路径
-                /*
-                - 如果符号链接指向的路径以.l2s.开头，说明该符号链接可能是硬链接模拟，指向的路径可能是中间文件。循环一次获取硬链接模拟到中间文件的 `map<中间文件路径，List<硬链接模拟路径>>`
-                - 如果中间文件是符号链接且指向的路径与自己同目录，且文件名只多了后缀 `.0001` 之类的数字，说明确定了中间文件和最终文件
-                - 注意，解压后的中间文件路径 不等于 硬链接模拟指向的路径，因为硬链接解压到自己包名子目录下了，检查中间文件指向的路径的时候不应该从硬链接指向的路径获取中间文件，而是应该从.l2s文件夹（或者硬链接同目录）寻找文件名相同的作为中间路径，寻找最终文件时同理
-                - 注意，列表中的软链接可能为 硬链接 -> 中间文件，也可能为 中间文件 -> 最终文件
-                - 注意，File.exists()判断软链接自身存在不可靠！用nio的Files.exists 传入NOFOLLOW_LINKS 判断是准确的
-                 */
                 reporter.progressValue(idx.toLong())
+                // 修复 proot l2s文件相关的符号链接指向路径。注意列表中的软链接可能为 硬链接 -> 中间文件，也可能为 中间文件 -> 最终文件
+                // File.exists()判断软链接自身存在不可靠！用nio的 Files.exists 传入NOFOLLOW_LINKS 判断是准确的
                 try {
-                    //硬链接模拟的文件名
-                    val hardFile = File(item.symlink).takeIf { it.selfExists() } ?: continue
                     val interPrefix = ".l2s."
-                    if (hardFile.name.startsWith(interPrefix))
-                        continue //该软链接 不是硬链接模拟，而是中间文件，跳过处理
-                    // 中间文件 错误指向的 那个不存在路径
-                    val interWrongFile = File(item.pointTo)
-                    //中间文件名:  .l2s. + 任意文字 + .四位整数
-                    val interName = interWrongFile.name.takeIf {
-                        it.startsWith(interPrefix) && it.takeLast(4).matches(regex4Dec)  //中间文件名符合格式
-                    } ?: continue
+                    //硬链接模拟的文件名 (如果该文件是中间文件就直接跳过）
+                    val hardFile = File(item.symlink).takeIf { it.selfExists() && !it.name.startsWith(interPrefix) }
+                        ?: continue
+                    // 中间文件 错误指向的 那个不存在路径。检查：文件名格式 .l2s. + 任意文字 + .四位整数
+                    val interWrongFile = File(item.pointTo).takeIf { it.name.startsWith(interPrefix) && it.name.takeLast(4).matches(regex4Dec) }
+                        ?: continue
+                    //中间文件名
+                    val interName = interWrongFile.name
                     //中间文件目前存在路径:  .l2s或同目录下 + 文件名符合格式 + 文件存在
                     val interExistFile = (l2sDirFiles.find { it.name == interName } ?: File(hardFile.parent!!, interName).takeIf { it.selfExists() })
-                        ?: throw RuntimeException("存在硬链接模拟文件，但找不到中间文件。")
+                        ?: throw RuntimeException("存在硬链接模拟文件，但找不到中间存在文件。")
                     // 最终文件 错误不存在的路径:  中间文件为软链接 + 指向的路径
 
                     val finalWrongFile = java.nio.file.Files.readSymbolicLink(interExistFile.toPath()).toFile()
@@ -587,8 +616,9 @@ object Utils {
                     val finalName = finalWrongFile.name.takeIf { it.startsWith(finalPrefix) && it.substring(finalPrefix.length).matches(regex4Dec) }
                         ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但最终文件名格式错误。")
                     //最终文件目前存在路径:  .l2s或同目录下 + 文件名符合格式 + 文件存在
-                    val finalExistFile = (l2sDirFiles.find { it.name == finalName } ?: File(interExistFile.parent!!, finalName).takeIf { it.selfExists() })
-                        ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但找不到最终存在文件。")
+                    val finalExistFile =
+                        (l2sDirFiles.find { it.name == finalName } ?: File(interExistFile.parent!!, finalName).takeIf { it.selfExists() })
+                            ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但找不到最终存在文件。")
 
                     //最后一起处理。这里先存起来。如果半道直接处理，后面再读错误路径可能就读到正确路径上了。
                     val l2sInfo = interToL2sMap[interWrongFile.absolutePath]
@@ -628,8 +658,8 @@ object Utils {
             }
 
             reporter.msg(null, "修复l2s文件完成")
-
             //TODO 要不再检查一遍软链接列表，看看还有没有指向termux的？因为目前检查l2s的时候只检查硬链接，如果是中间文件的话不会做处理。虽然正常情况下有中间文件的话就应该有硬链接？
+
         }
 
         /**
