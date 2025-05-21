@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -935,6 +936,31 @@ object Utils {
                 override fun progress(percent: Float) {}
                 override fun done(error: Exception?) {}
                 override fun msg(text: String?, title: String?) {}
+            }
+
+            /**
+             * 传入对应数据的state. 创建一个会在对应函数修改这些数据的TaskReporter
+             */
+            fun createTaskReporter(
+                progress: MutableIntState,
+                msgTitle: MutableState<String>,
+                msg: MutableState<String>,
+            ): TaskReporter {
+                return object : TaskReporter() {
+                    override fun progress(percent: Float) {
+                        progress.intValue = (percent * 100).toInt()
+                    }
+
+                    override fun done(error: Exception?) {
+                        progress.intValue = 100
+                        if (error != null) throw error
+                    }
+
+                    override fun msg(text: String?, title: String?) {
+                        if (!text.isNullOrBlank()) msg.value += "\n$text"
+                        if (title != null) msgTitle.value = title
+                    }
+                }
             }
 
         }

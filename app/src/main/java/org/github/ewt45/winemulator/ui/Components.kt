@@ -1,8 +1,7 @@
 package org.github.ewt45.winemulator.ui
 
 import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -26,15 +25,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,17 +45,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -64,143 +61,73 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
-import org.github.ewt45.winemulator.Consts
-import org.github.ewt45.winemulator.FuncOnChangeAction
-import org.github.ewt45.winemulator.MainEmuActivity
 import org.github.ewt45.winemulator.Utils
-import org.github.ewt45.winemulator.emu.ProotRootfs
-import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_LoginUserSelect
-import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
-import java.io.File
 
+enum class ProgressStage {
+    NOT_STARTED, PROCESSING, DONE_SUCCESS, DONE_FAILURE
+}
 
+/**
+ * @param progress 0-100
+ */
 @Composable
-fun rememberProgressDisplay() {
-    val TAG = "rememberProgressDisplay"
-    val scope = rememberCoroutineScope()
-    val ctx = LocalContext.current
-
-    var extractProgress by remember { mutableFloatStateOf(0F) }
-    val displayProgress by remember { derivedStateOf { (extractProgress * 100).toInt() } }
-    var isError by remember { mutableStateOf(false) }      // 完成结果是 成功还是失败。
-    var isProcessing by remember { mutableStateOf(false) } // 是否正在处理选择的压缩包。
-    var isFinished by remember { mutableStateOf(false) } //是否完成。解压成功后提示重启
-
-    var processingMsgTitle by remember { mutableStateOf("") }
-    var processingMsg by remember { mutableStateOf("") }
-    var rootfsName by remember { mutableStateOf("") }
-    var isSetCurrent by remember { mutableStateOf(true) }
-
-    val processReporter = object : Utils.TaskReporter(-1) {
-        override fun progress(percent: Float) {
-            extractProgress = percent
-        }
-
-        override fun done(error: Exception?) {
-            if (error != null) throw error
-        }
-
-        override fun msg(text: String?, title: String?) {
-            if (!text.isNullOrBlank()) processingMsg += "\n$text"
-            if (title != null) processingMsgTitle = title
-        }
-    }
-
-    val readFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        isProcessing = true
-        scope.launch {
-            extractProgress = 0F
-            processingMsgTitle = ""
-            processingMsg = "日志："
-            isError = false
-            try {
-                rootfsName = Utils.Rootfs.installRootfsArchive(ctx, uri, processReporter).name
-                processingMsgTitle = "解压成功，点击按钮将退出。请手动重启。"
-                isFinished = true
-            } catch (e: Throwable) {
-                e.printStackTrace()
-                processingMsg += "\n出现错误，请重新选择压缩包\n" + e.stackTraceToString()
-                isError = true
-            }
-            isProcessing = false
-        }
-    }
-
-    val onClickFinish:() -> Unit = {
-        if (isFinished) {
-            scope.launch {
-                if (isSetCurrent) MainEmuActivity.instance.settingViewModel.onChangeRootfsSelect(rootfsName)
-                else MainEmuActivity.instance.finish()
-            }
-        } else {
-            readFileLauncher.launch(arrayOf("application/x-xz", "*/*"))
-        }
-    }
+fun ProgressDisplay(
+    stage: ProgressStage,
+    progress: Int,
+    msgTitle: String,
+    msg: String,
+) {
+    val TAG = "ProgressDisplay"
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+        Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (processingMsgTitle.isNotBlank()) {
-            Text(processingMsgTitle)
-            Spacer(Modifier.height(16.dp))
-        }
+        Column(
+//            Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // 标题
+            Text(msgTitle, style = MaterialTheme.typography.titleMedium)
 
-        if (isProcessing) {
-            LinearProgressIndicator(progress = { displayProgress / 100F })
-            Text("${displayProgress}%")
-            Spacer(Modifier.height(16.dp))
-        } else {
-            Button(onClick = onClickFinish) { Text(if (isFinished) "完成" else "选择") }
-            Spacer(Modifier.height(16.dp))
-        }
+            when (stage) {
+                ProgressStage.NOT_STARTED -> Unit
+                ProgressStage.PROCESSING ->
+                    // 处理过程中显示进度条
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        LinearProgressIndicator(progress = { progress / 100F })
+                        Text("$progress%")
+                    }
 
-        if (isFinished && !isError && rootfsName.isNotEmpty()) {
-//            Log.e(TAG, "RootfsSelectScreen: 解压完成后进入这里检查可登陆用户列表。平时不会进入吧？")
-//
-//            Text("退出之前，您还可以编辑以下内容")
-//            Spacer(Modifier.height(16.dp))
-//            GeneralRootfsSelect_RootfsName(rootfsName, false) { oldRootfsName, newRootfsName, _ ->
-//                onRootfsNameChange(oldRootfsName, newRootfsName, FuncOnChangeAction.EDIT)
-//            }
-//
-//            val userList = ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfsName)).map { it.name }
-//            val nonRootUser = userList.find { it != "root" }
-//            if (nonRootUser != null) {
-//                var userName by remember { mutableStateOf(nonRootUser) }
-//                Spacer(Modifier.height(16.dp))
-//                GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { rootfsName, newUserName ->
-//                    userName = newUserName
-//                    scope.launch { onChangeUser(rootfsName, newUserName) }
-//                }
-//            }
-//            Spacer(Modifier.height(16.dp))
-//
-//            Row(verticalAlignment = Alignment.CenterVertically) {
-//                Text("下次启动app运行该容器")
-//                Checkbox(isSetCurrent, { isSetCurrent = it })
-//            }
-//            Spacer(Modifier.height(16.dp))
-        }
+                ProgressStage.DONE_SUCCESS ->
+                    Icon(Icons.Rounded.CheckCircle, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.secondary)
 
-        // 解压过程中的输出信息
-        HorizontalDivider(Modifier.padding(vertical = 24.dp))
-        Text(
-            processingMsg, Modifier
-                .padding(top = 24.dp)
-                .horizontalScroll(rememberScrollState()),
-            color = MaterialTheme.colorScheme.run { if (isError) error else onSurface },
-            style = MaterialTheme.typography.bodySmall
-        )
-        Spacer(Modifier.height(16.dp))
+                ProgressStage.DONE_FAILURE ->
+                    Icon(Icons.Rounded.Warning, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
+            }
+
+
+            // 处理时或处理后显示日志。解压成功后折叠
+            var msgExpanded by remember(stage) { mutableStateOf(stage == ProgressStage.PROCESSING) }
+            if (stage != ProgressStage.NOT_STARTED) {
+                // weight 占据剩余空间，保证优先满足按钮的高度。否则会把按钮挤没。然后高度过高时可滚动。这俩modifier要加到包裹column上，加到text自身没用
+                // 但是weight会在内容没那么高的时候还是占据所有剩余空间 导致空出来一大块。
+                Text(
+                    msg,
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { msgExpanded = !msgExpanded }
+                        .animateContentSize()
+                        .horizontalScroll(rememberScrollState()),
+                    color = MaterialTheme.colorScheme.run { if (stage == ProgressStage.DONE_FAILURE) error else onSurface },
+                    maxLines = if (msgExpanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
-
 }
 
 
@@ -208,7 +135,7 @@ fun rememberProgressDisplay() {
  * 返回一个状态 控制显示一个对话框提示尚未实现
  */
 @Composable
-fun rememberNotImplDialog():MutableState<Boolean> {
+fun rememberNotImplDialog(): MutableState<Boolean> {
     return rememberSimpleDialog("尚未实现！")
 }
 
@@ -217,9 +144,9 @@ fun rememberNotImplDialog():MutableState<Boolean> {
  * @param onDismiss dialog关闭时的回调。无需在这里处理显隐状态。
  */
 @Composable
-fun rememberSimpleDialog(text: String, title: String? = null, onDismiss: (() -> Unit)? = null):MutableState<Boolean> {
+fun rememberSimpleDialog(text: String, title: String? = null, onDismiss: (() -> Unit)? = null): MutableState<Boolean> {
     val visibleState = remember { mutableStateOf(false) }
-    SimpleDialog(visibleState.value, text, title, ) {
+    SimpleDialog(visibleState.value, text, title) {
         visibleState.value = false
         if (onDismiss != null) onDismiss()
     }
