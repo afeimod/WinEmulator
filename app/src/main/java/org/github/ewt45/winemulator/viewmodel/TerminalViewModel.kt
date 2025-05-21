@@ -22,7 +22,7 @@ import java.io.OutputStreamWriter
 class TerminalViewModel : ViewModel() {
     private val TAG = "TerminalViewModel"
     private val terminal: Proot = Proot()
-    private var process : Process? = null
+    private var process: Process? = null
 
     /** 输入 */
     private var processWriter: OutputStreamWriter? = null
@@ -34,9 +34,9 @@ class TerminalViewModel : ViewModel() {
     /**
      * 启动终端
      */
-    suspend fun startTerminal () {
+    suspend fun startTerminal() {
         if (process != null) return
-        process = withContext(Dispatchers.IO){
+        process = withContext(Dispatchers.IO) {
             terminal.attach().start()
         }
 
@@ -57,12 +57,12 @@ class TerminalViewModel : ViewModel() {
                     // FIXME adduser 最后一条确认没显示出来？
                     val updateInlineOutputJob = launch {
                         var lastReadCharTimeCopy = 0L
-                        while(process?.isAlive == true) {
+                        while (process?.isAlive == true) {
                             delay(500)
                             outputMutex.withLock {
 //                                    Log.d(TAG, "startTerminal: 检测缓存字符串：${lastReadCharTime == lastReadCharTimeCopy} ${builder.isNotEmpty()} 字符串=${builder.toString()}")
                                 // 如果500ms内字符输出没有更新过，则将当前缓存的无换行字符串显示出来。
-                                if  (lastReadCharTime == lastReadCharTimeCopy && lastReadCharTimeCopy !=0L && builder.isNotEmpty()) {
+                                if (lastReadCharTime == lastReadCharTimeCopy && lastReadCharTimeCopy != 0L && builder.isNotEmpty()) {
                                     val lastLine = output.lastOrNull()
                                     if (lastLine?.endsWith('\n') != false) output.add(builder.toString())
                                     else output[output.lastIndex] = lastLine + builder.toString()
@@ -72,7 +72,7 @@ class TerminalViewModel : ViewModel() {
                             }
                         }
                     }
-                    while(reader.read().also { readInt = it } != -1) {
+                    while (reader.read().also { readInt = it } != -1) {
                         charRead = readInt.toChar()
                         outputMutex.withLock {
                             lastReadCharTime = System.currentTimeMillis()
@@ -101,7 +101,7 @@ class TerminalViewModel : ViewModel() {
             closeResources()
         }
 
-        if(Proot.lastTimeCmd.isNotBlank())
+        if (Proot.lastTimeCmd.isNotBlank())
             output.add("使用以下参数启动proot：\n${Proot.lastTimeCmd}\n\n")
         return
     }
@@ -110,7 +110,7 @@ class TerminalViewModel : ViewModel() {
      * 执行某个命令
      * @param display 为false时不显示在屏幕上
      */
-    fun runCommand(command: String, display:Boolean=true) = viewModelScope.launch(Dispatchers.IO){
+    fun runCommand(command: String, display: Boolean = true) = viewModelScope.launch(Dispatchers.IO) {
 
         if (processWriter == null || process?.isAlive != true) {
             output.add("进程已关闭。无法执行命令 $command。\n")
@@ -120,7 +120,7 @@ class TerminalViewModel : ViewModel() {
 
         outputMutex.takeIf { display }?.withLock {
             val shouldNewLine = output.lastOrNull()?.endsWith('\n') ?: true
-            output.add((if (shouldNewLine) "$ "  else "") + "$command\n") //如果当前未换行则添加到当前行结尾，否则新起一行
+            output.add((if (shouldNewLine) "$ " else "") + "$command\n") //如果当前未换行则添加到当前行结尾，否则新起一行
         }
 
         try {
@@ -146,11 +146,19 @@ class TerminalViewModel : ViewModel() {
      * 清理资源
      */
     private fun closeResources() {
-        try { processWriter?.close() } catch (e: Exception) { /* Ignore */ }
-        try { process?.outputStream?.close() } catch (e: Exception) { /* Ignore */ }
-        try { process?.inputStream?.close() } catch (e: Exception) { /* Ignore */ }
-        try { process?.errorStream?.close() } catch (e: Exception) { /* Ignore */ }
-        try { process?.destroy() } catch (e: Exception) { /* Ignore */ }
+        try {
+            processWriter?.close()
+            process?.outputStream?.close()
+            process?.inputStream?.close()
+            process?.errorStream?.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        try {
+            process?.destroy()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         process = null
         processWriter = null
     }
