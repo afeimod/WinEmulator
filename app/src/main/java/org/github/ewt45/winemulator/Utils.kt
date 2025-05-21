@@ -78,7 +78,9 @@ import java.nio.file.LinkOption
 import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.io.path.deleteExisting
 import kotlin.io.path.deleteIfExists
+import kotlin.io.path.name
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.jvm.isAccessible
@@ -550,21 +552,35 @@ object Utils {
          */
         private fun fixL2sFiles(outDir: File, symLinkList: List<SymLink>, reporter: TaskReporter, skipProcess: Boolean = false) {
             if (skipProcess) {
-                reporter.msg("跳过处理l2s文件")
+                reporter.msg("跳过修复l2s文件")
+                fun delL2s(files: List<File>, reporter: TaskReporter) =
+                    files.forEach { if (it.delete()) reporter.msg("删除l2s文件：${it.absolutePath}") }
+
+                val l2sDir = File(outDir, ".l2s")
                 //如果不处理，把相关文件都删掉。靠程序重新创建
                 for (item in symLinkList) {
-                    if (!item.symlink.startsWith(".l2s.") && !item.pointTo.startsWith(".l2s.")) continue
                     try {
-                        Paths.get(item.symlink).deleteIfExists()
+                        val symlinkFile = File(item.symlink)
+                        val pointToFile = File(item.pointTo)
+                        //自己是中间文件或硬链接模拟，都可以执行相同操作：删除自身，同目录/l2s目录下指向文件名
+                        if (symlinkFile.name.startsWith(".l2s.") || pointToFile.name.startsWith(".l2s.")) {
+                            delL2s(listOf(symlinkFile, File(symlinkFile.parentFile!!, pointToFile.name), File(l2sDir, pointToFile.name)), reporter)
+                        }
                     } catch (e: Exception) {
                         e.printStackTrace()
                         reporter.msg("删除l2s文件时出错。文件=$item 。错误消息 = ${e.stackTraceToString()}")
                     }
                 }
+                try {
+                    File(outDir, "/.l2s").let { FileUtils.deleteDirectory(it) }.also { reporter.msg("删除 .l2s 文件夹") }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    reporter.msg("删除 .l2s 文件夹失败。错误消息 = ${e.stackTraceToString()}")
+                }
                 return
             }
 
-            reporter.msg(null, "符号链接创建完毕，开始寻找l2s文件...")
+            reporter.msg("开始修复l2s文件...")
 
             /** l2s相关文件信息。key为中间文件错误路径（别的包名开头），value为该文件相关信息。 */
             val interToL2sMap: MutableMap<String, L2sInfo> = mutableMapOf()
@@ -600,8 +616,9 @@ object Utils {
                     val finalName = finalWrongFile.name.takeIf { it.startsWith(finalPrefix) && it.substring(finalPrefix.length).matches(regex4Dec) }
                         ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但最终文件名格式错误。")
                     //最终文件目前存在路径:  .l2s或同目录下 + 文件名符合格式 + 文件存在
-                    val finalExistFile = (l2sDirFiles.find { it.name == finalName } ?: File(interExistFile.parent!!, finalName).takeIf { it.selfExists() })
-                        ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但找不到最终存在文件。")
+                    val finalExistFile =
+                        (l2sDirFiles.find { it.name == finalName } ?: File(interExistFile.parent!!, finalName).takeIf { it.selfExists() })
+                            ?: throw RuntimeException("存在硬链接模拟文件和中间文件，但找不到最终存在文件。")
 
                     //最后一起处理。这里先存起来。如果半道直接处理，后面再读错误路径可能就读到正确路径上了。
                     val l2sInfo = interToL2sMap[interWrongFile.absolutePath]
