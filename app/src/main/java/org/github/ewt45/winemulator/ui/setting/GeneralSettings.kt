@@ -77,6 +77,8 @@ import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import java.io.File
 import java.nio.file.Files
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Random
 
 private val TAG = "GeneralSettings"
@@ -231,9 +233,9 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
     }, modifier)
     { Icon(painterResource(R.drawable.ic_archive_save), null) }
 
-    fun getMimeType(extension: String) =  MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+    fun getMimeType(extension: String) = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
     if (showDialog) {
-        var currCompType = CompressedType.GZ
+        var currCompType by remember { mutableStateOf(CompressedType.GZ) }
         val compSuffix = mapOf(CompressedType.GZ to ".tar.gz", CompressedType.XZ to ".tar.xz")
         val compMimeTypes = mapOf(CompressedType.GZ to "application/gzip", CompressedType.XZ to "application/x-xz")
         val ctx = LocalContext.current
@@ -244,7 +246,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
         val msg = remember { mutableStateOf("") }
         val reporter = Utils.TaskReporter.createTaskReporter(progress, msgTitle, msg)
 
-        val launcher  = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(compMimeTypes[currCompType] ?: "*/*")) { uri ->
+        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(compMimeTypes[currCompType]!!)) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
             stage = ProgressStage.PROCESSING
             progress.intValue = 0
@@ -254,7 +256,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
                 try {
                     Utils.Rootfs.exportRootfsArchive(ctx, uri, File(Consts.rootfsAllDir, rootfsName), currCompType, reporter)
                     reporter.msg("导出成功。", "导出成功！已保存到指定目录。\n（日志可点击展开查看）")
-                    stage  = ProgressStage.DONE_SUCCESS
+                    stage = ProgressStage.DONE_SUCCESS
                 } catch (e: Exception) {
                     e.printStackTrace()
                     reporter.msg("压缩rootfs过程中出现错误，结束。错误：${e.stackTraceToString()}", "导出失败！\n（日志可点击展开查看）")
@@ -276,9 +278,14 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
                     Spacer(Modifier.height(16.dp))
                     // 只有在最初的时候可以设置并导出
                     if (stage == ProgressStage.NOT_STARTED) {
-                        ComposeSpinner(currCompType, compSuffix.keys.toList(), compSuffix.values.toList(), label = "压缩格式") { _, new -> currCompType = new }
+                        ComposeSpinner(currCompType, compSuffix.keys.toList(), compSuffix.values.toList(), label = "压缩格式")
+                        { _, new -> currCompType = new }
                         Spacer(Modifier.height(24.dp))
-                        Button({launcher.launch(rootfsName+compSuffix[currCompType]!!)}) { Text("导出到...") }
+                        Button({
+                            // 添加时间防止文件名冲突，因为冲突后序号会被默认放在中间 .tar(1).gz 这种
+                            val timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yy-MM-dd_HH-mm-ss"))
+                            launcher.launch("${rootfsName}_$timeStr${compSuffix[currCompType]!!}")
+                        }) { Text("导出到...") }
                         TextButton({ showDialog = false }) { Text("取消") }
                     }
                     // 压缩结束后 显示关闭按钮
@@ -321,9 +328,9 @@ fun GeneralRootfsSelect_RootfsName(
     onRootfsNameChange: suspend (String, String, Boolean) -> String,
 ) {
     val scope = rememberCoroutineScope()
-    TextFieldOption(rootfsName, title = "Rootfs名称", outlined = true,) {
+    TextFieldOption(rootfsName, title = "Rootfs名称", outlined = true) {
 
-        val newName = it.filter { ch ->!ch.isWhitespace() }
+        val newName = it.filter { ch -> !ch.isWhitespace() }
         scope.launch {
             if (newName.isBlank()) return@launch
             val extraTip = if (isCurr) "\n\n该Rootfs当前正在使用，重命名后会退出app，请手动重启。" else ""
