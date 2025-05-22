@@ -4,6 +4,10 @@ import org.junit.Test
 
 import org.junit.Assert.*
 import java.io.File
+import java.nio.file.attribute.PosixFileAttributes
+import java.nio.file.attribute.PosixFilePermission.*
+import java.nio.file.attribute.PosixFilePermissions
+import kotlin.math.pow
 
 /**
  * Example local unit test, which will execute on the development machine (host).
@@ -16,29 +20,43 @@ class ExampleUnitTest {
         assertEquals(4, 2 + 2)
     }
 
-    fun removeNonAlphanumeric(input: String): String {
-        // 正则表达式 ^[a-zA-Z0-9] 匹配任何非字母或非数字的字符
-        // `toRegex()` 将字符串转换为正则表达式对象
-        return input.replace("[^a-zA-Z0-9]".toRegex(), "")
+    fun parseString(input: String): Pair<String, Int> {
+        // 正则表达式解释：
+        // ^      : 匹配字符串的开头
+        // (.*)   : 第一个捕获组，匹配任意数量的任意字符（非贪婪模式）
+        // -      : 匹配字面字符 '-'
+        // (\d+)  : 第二个捕获组，匹配一个或多个数字 (0-9)
+        // $      : 匹配字符串的结尾
+
+        return "^(.+)-(\\d+)$".toRegex().matchEntire(input)?.let {
+            val (baseString, numberString) = it.destructured
+            Pair(baseString, numberString.toInt())
+        } ?: Pair("basename", 1)
     }
 
+    fun main() {
+
+    }
 
     @Test
     fun fun1() {
-        val originalString1 = "Hello, World! 123 @#$"
-        val cleanedString1 = removeNonAlphanumeric(originalString1)
-        println("原始字符串: \"$originalString1\"")
-        println("清理后: \"$cleanedString1\"")
-        // Output: 原始字符串: "Hello, World! 123 @#$"，清理后: "HelloWorld123"
+// 符合格式的例子
+        println(parseString("abc-123"))        // Pair(abc, 123)
+        println(parseString("abc-123-def-345"))        // Pair(abc, 123)
+        println(parseString("hello-world-45")) // Pair(hello_world, 45)
+        println(parseString("123abc-789"))     // Pair(123abc, 789)
+        println(parseString("something-0"))    // Pair(something, 0)
+        println(parseString("a-1"))            // Pair(a, 1)
 
-        val originalString2 = "Kotlin is Fun! #123_abc"
-        val cleanedString2 = removeNonAlphanumeric(originalString2)
-        println("原始字符串: \"$originalString2\"")
-        println("清理后: \"$cleanedString2\"")
-        // Output: 原始字符串: "Kotlin is Fun! #123_abc"，清理后: "KotlinisFun123abc"
-
-        print(removeNonAlphanumeric("en_US.UTF-8"))
-
+        // 不符合格式的例子
+        println(parseString("-1"))             // Pair(, 1) - 第一个部分为空字符串
+        println(parseString("abc"))            // Pair(basename, 1) - 没有 '-'
+        println(parseString("abc-"))           // Pair(basename, 1) - '-' 后面没有数字
+        println(parseString("-abc"))           // Pair(basename, 1) - '-' 后面不是数字
+        println(parseString("abc-123-def"))    // Pair(basename, 1) - 格式不完全匹配
+        println(parseString("123"))            // Pair(basename, 1)
+        println(parseString(""))               // Pair(basename, 1)
+        println(parseString("test-123x"))      // Pair(basename, 1) - 后面有非数字
     }
 
 

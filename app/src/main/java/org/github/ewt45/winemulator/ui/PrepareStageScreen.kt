@@ -82,6 +82,7 @@ fun RootfsSelectScreen(
 
     val readFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        Log.d(TAG, "RootfsSelectScreen: 尝试从contentResolver获取mimetype？${ctx.contentResolver.getType(uri)}")
         stage = ProgressStage.PROCESSING
         scope.launch {
             progress.intValue = 0
@@ -119,7 +120,7 @@ fun RootfsSelectScreen(
 
             // 需要解压时显示选择按钮
             if (stage == ProgressStage.NOT_STARTED || stage == ProgressStage.DONE_FAILURE) {
-                Button({ readFileLauncher.launch(arrayOf("application/x-xz", "*/*")) })
+                Button({ readFileLauncher.launch(arrayOf("application/x-xz", "application/gzip", "*/*")) })
                 { Text("选择") }
             }
             // 解压成功后显示完成按钮
@@ -135,40 +136,32 @@ fun RootfsSelectScreen(
             // 解压成功后后的其他选项，重命名，登陆用户，下次启动该容器。
             if (stage == ProgressStage.DONE_SUCCESS && rootfsName.isNotEmpty()) {
                 Log.e(TAG, "RootfsSelectScreen: 解压完成后进入这里检查可登陆用户列表。平时不会进入吧？")
-                ElevatedCard() {
-                    Column(
-                        Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-//                        HorizontalDivider(Modifier.padding(16.dp), 2.dp)
-                        Text("退出之前，您还可以编辑以下内容")
+                HorizontalDivider(Modifier.padding(16.dp), 2.dp)
+                Text("退出之前，您还可以编辑以下内容")
 
-                        GeneralRootfsSelect_RootfsName(rootfsName, false) { oldRootfsName, newRootfsName, _ ->
-                            onRootfsNameChange(oldRootfsName, newRootfsName, FuncOnChangeAction.EDIT)
-                        }
+                GeneralRootfsSelect_RootfsName(rootfsName, false) { oldRootfsName, newRootfsName, _ ->
+                    onRootfsNameChange(oldRootfsName, newRootfsName, FuncOnChangeAction.EDIT)
+                }
 
-                        val userList = ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfsName)).map { it.name }
-                        userList.find { it != "root" }?.let { nonRootUser ->
-                            var userName by remember { mutableStateOf(nonRootUser) }
-                            GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { rootfsName, newUserName ->
-                                userName = newUserName
-                                scope.launch { onChangeUser(rootfsName, newUserName) }
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("下次启动app运行该容器")
-                            Checkbox(isSetCurrent, { isSetCurrent = it })
-                        }
+                val userList = ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfsName)).map { it.name }
+                userList.find { it != "root" }?.let { nonRootUser ->
+                    var userName by remember { mutableStateOf(nonRootUser) }
+                    GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { rootfsName, newUserName ->
+                        userName = newUserName
+                        scope.launch { onChangeUser(rootfsName, newUserName) }
                     }
                 }
-                Spacer(Modifier.height(16.dp)) // 底部阴影显示不全了
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("下次启动app运行该容器")
+                    Checkbox(isSetCurrent, { isSetCurrent = it })
+                }
             }
         }
     }
 }
 
-@Preview(widthDp = 300, heightDp = 600)
+//@Preview(widthDp = 300, heightDp = 600)
 @Composable
 fun PrepareStageScreenFinishPreview() {
     ElevatedCard(Modifier.padding(16.dp)) {

@@ -51,6 +51,7 @@ import okio.source
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+import org.apache.commons.compress.archivers.tar.TarConstants
 import org.apache.commons.compress.compressors.CompressorInputStream
 import org.apache.commons.compress.compressors.CompressorOutputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
@@ -79,10 +80,12 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFileAttributes
+import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.absolutePathString
+import kotlin.io.path.getPosixFilePermissions
 import kotlin.io.path.inputStream
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
@@ -91,6 +94,7 @@ import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlin.io.path.pathString
 import kotlin.io.path.readSymbolicLink
+import kotlin.math.pow
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.declaredMemberProperties
 import kotlin.reflect.jvm.isAccessible
@@ -233,6 +237,16 @@ object Utils {
         }
     }
 
+    /** 返回一个path的权限（755这种） */
+    fun Path.getMode(): Int {
+        var result = 0
+        //TODO 代码缩减时enum的ordinal会保留吗
+        getPosixFilePermissions(LinkOption.NOFOLLOW_LINKS).forEach { item ->
+            result = result or (1 * 2.0.pow((8 - item.ordinal))).toInt() //懒得挨个对比了，直接用序号，应该没问题吧？
+        }
+        return result
+    }
+
     object Files {
         suspend fun writeToUri(ctx: Context, uri: Uri, content: String): Result<Unit> = withContext(Dispatchers.IO) {
             kotlin.runCatching {
@@ -364,10 +378,11 @@ object Utils {
             if (foundRootfsDir == null)
                 throw RuntimeException("无法在解压内容中找到rootfs根目录（包含 etc usr 的文件夹）")
 
-            //确保目标目录没有同名文件夹
-            var num = 1
-            rootfsAllDir.list()?.let { while (it.contains("${foundRootfsDir.name}-$num")) num++ }
-            val targetOutDir = File(rootfsAllDir, "${foundRootfsDir.name}-$num")
+            //确保目标目录没有同名文件夹. 序号优先使用原文件夹名已包含的序号
+            var (baseName, num) = "^(.+)-(\\d+)$".toRegex().matchEntire(foundRootfsDir.name)?.destructured
+                ?.run { Pair(component1(), component2().toInt()) } ?: Pair(foundRootfsDir.name, 1)
+            rootfsAllDir.list()?.let { while (it.contains("$baseName-$num")) num++ }
+            val targetOutDir = File(rootfsAllDir, "$baseName-$num")
             reporter.msg("移动rootfs: $foundRootfsDir -> $targetOutDir")
 
             FileUtils.moveDirectory(foundRootfsDir, targetOutDir)
@@ -383,9 +398,15 @@ object Utils {
         }
 
         /** 根据[path]创建TarArchiveEntry. 将path路径去掉rootfs父目录的路径([removeLen]个字符）作为名字。如果为文件夹在末尾加上 / */
-        private fun getTarEntry(path: Path, removeLen: Int) = path.absolutePathString().substring(removeLen).trim('/')
-            .let { if (path.isDirectory(LinkOption.NOFOLLOW_LINKS)) "$it/" else it }
-            .let { TarArchiveEntry(path, it, LinkOption.NOFOLLOW_LINKS) }
+        private fun getTarEntry(path: Path, removeLen: Int): TarArchiveEntry {
+            var entryName = path.absolutePathString().substring(removeLen).trim('/')
+            if (path.isDirectory(LinkOption.NOFOLLOW_LINKS)) entryName += "/"
+            //符号链接时要自己构建，它读文件不会检查符号链接（文件夹倒会。。。它这库也不行啊还以为多好用呢）
+            return if (path.isSymbolicLink())
+                TarArchiveEntry(entryName, TarConstants.LF_SYMLINK).also { it.linkName = path.readSymbolicLink().pathString }
+            else
+                TarArchiveEntry(path, entryName, LinkOption.NOFOLLOW_LINKS)
+        }
 
         /**
          * 将指定rootfs压缩为压缩包并导出。压缩包内第一层是该rootfs文件夹，再内部是各基本目录
@@ -405,29 +426,23 @@ object Utils {
             reporter.msg("共找到${fileCount}个文件")
 
             reporter.msg(null, "正在压缩全部文件...")
+            reporter.totalValue = fileCount.toLong()
             TarArchiveOutputStream(Archive.getCompressedOutput(compType, ctx.openOutput(uri))).use { tOut ->
                 // 长文件名
                 tOut.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU)
                 //添加rootfs目录
                 tOut.putArchiveEntry(getTarEntry(rootfsDir.toPath(), parentPrefixLen))
-                tOut.closeArchiveEntry()
+//                tOut.closeArchiveEntry()
                 var tmpCount = 0L
+                var tarEntry: TarArchiveEntry? = null
                 rootfsContents.toMutableList().walk { filePath ->
                     try {
                         tmpCount++
                         reporter.progressValue(tmpCount)
-                        val tarEntry = getTarEntry(filePath, parentPrefixLen)
-                        //符号链接
-                        //TODO 符号链接不设置linkFlag 会正常读取本地的存入吗？符号链接解压是否正常？
-                        if (filePath.isSymbolicLink()) {
-                            tarEntry.linkName = filePath.readSymbolicLink().pathString
-                            if (!tarEntry.isSymbolicLink) {
-                                reporter.msg("文件符号链接状态读取错误：tarEntry.isSymbolicLink=false!, ${tarEntry.name}")
-                            }
-                        }
-                        //TODO mode设置会成功吗？
-                        val attrs = java.nio.file.Files.readAttributes(filePath, PosixFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
-                        tarEntry.mode = PosixFilePermissions.toString(attrs.permissions()).toInt(8)
+                        tarEntry = getTarEntry(filePath, parentPrefixLen)
+                        // 传入path构建的entry有bug 不会识别文件软链接。不能直接传入path,而是要手动传入文件名和linkFlag...
+
+                        tarEntry!!.mode = filePath.getMode()//PosixFilePermissions.toString(attrs.permissions()).toInt(8)
                         tOut.putArchiveEntry(tarEntry)
                         //文件
                         if (filePath.isRegularFile(LinkOption.NOFOLLOW_LINKS)) {
@@ -441,11 +456,13 @@ object Utils {
                 }
                 // 绑定文件夹变为空文件夹放进压缩包
                 for (dir in ignoreRootfsSubDirs.filter { it != "storage" }) {
-                    val path = Paths.get(dir)
-                    tOut.putArchiveEntry(getTarEntry(path, parentPrefixLen))
+                    val path = Paths.get(rootfsDir.absolutePath, dir)
+                    tOut.putArchiveEntry(getTarEntry(path, parentPrefixLen).also { if (dir == "tmp") it.mode = "777".toInt(8) })
                     tOut.closeArchiveEntry()
                 }
+                tOut.finish()
             }
+
             reporter.msg(null, "压缩包导出完成！")
         }
 

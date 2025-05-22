@@ -76,6 +76,7 @@ import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import java.io.File
+import java.nio.file.Files
 import java.util.Random
 
 private val TAG = "GeneralSettings"
@@ -234,7 +235,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
     if (showDialog) {
         var currCompType = CompressedType.GZ
         val compSuffix = mapOf(CompressedType.GZ to ".tar.gz", CompressedType.XZ to ".tar.xz")
-        val compMimeTypes = mapOf(CompressedType.GZ to getMimeType("gz"), CompressedType.XZ to getMimeType("xz"))
+        val compMimeTypes = mapOf(CompressedType.GZ to "application/gzip", CompressedType.XZ to "application/x-xz")
         val ctx = LocalContext.current
         val scope = rememberCoroutineScope()
         var stage by remember { mutableStateOf(ProgressStage.NOT_STARTED) }
@@ -243,7 +244,6 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
         val msg = remember { mutableStateOf("") }
         val reporter = Utils.TaskReporter.createTaskReporter(progress, msgTitle, msg)
 
-        Log.d(TAG, "GeneralRootfsSelect_ExportRootfs: 能否获取到mimetype? $compMimeTypes")
         val launcher  = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(compMimeTypes[currCompType] ?: "*/*")) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
             stage = ProgressStage.PROCESSING
@@ -257,7 +257,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
                     stage  = ProgressStage.DONE_SUCCESS
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    reporter.msg("压缩rootfs过程中出现错误，结束。错误：${e.stackTraceToString()}", "导出失败！\n日志可点击展开查看）")
+                    reporter.msg("压缩rootfs过程中出现错误，结束。错误：${e.stackTraceToString()}", "导出失败！\n（日志可点击展开查看）")
                     stage = ProgressStage.DONE_FAILURE
                 }
             }
