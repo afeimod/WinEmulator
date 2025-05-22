@@ -33,6 +33,18 @@
     <fields>;
     <methods>;
 }
+-keep class com.termux.x11.CmdEntryPoint {
+    <fields>;
+    <methods>;
+}
+-keep class com.termux.x11.LoriePreferences {
+    <fields>;
+    <methods>;
+}
+-keep class com.termux.x11.Prefs {
+    <fields>;
+    <methods>;
+}
 -keep class org.github.ewt45.winemulator.MainEmuActivity {
     <fields>;
     <methods>;

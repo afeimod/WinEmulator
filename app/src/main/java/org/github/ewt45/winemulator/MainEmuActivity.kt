@@ -4,12 +4,9 @@ import a.io.github.ewt45.winemulator.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service.START_NOT_STICKY
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.Looper
-import android.system.Os
 import android.util.Log
 import android.widget.FrameLayout
 import androidx.activity.enableEdgeToEdge
@@ -17,18 +14,15 @@ import androidx.activity.viewModels
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
-import com.termux.x11.CmdEntryPoint
 import com.termux.x11.MainActivity
 import com.termux.x11.Prefs
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.github.ewt45.winemulator.Consts.Pref.general_rootfs_lang
 import org.github.ewt45.winemulator.Consts.Pref.proot_startup_cmd
-import org.github.ewt45.winemulator.Utils.Ui.editDateStore
-import org.github.ewt45.winemulator.emu.Proot
+import org.github.ewt45.winemulator.Utils.getX11ServicePid
 import org.github.ewt45.winemulator.emu.X11Service
 import org.github.ewt45.winemulator.emu.manager.EmuManager
 import org.github.ewt45.winemulator.ui.MainScreen
@@ -37,7 +31,6 @@ import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
-import java.io.File
 
 
 class MainEmuActivity : MainActivity() {
@@ -90,7 +83,6 @@ class MainEmuActivity : MainActivity() {
         prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
 
 
-
         //将composeView添加到原视图布局中
         //TODO wrap不生效
         val composeView = ComposeView(this).apply {
@@ -111,7 +103,7 @@ class MainEmuActivity : MainActivity() {
         if (!noRootfs && haveStoragePermission)
             prepareAndStart()
 
-        
+
 //        setContent {
 //            MainTheme {
 //                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -144,7 +136,7 @@ class MainEmuActivity : MainActivity() {
             val selectedRootfs = Utils.Rootfs.getSelectedRootfs()
             if (selectedRootfs == null) {
                 prepareViewModel.setNoRootfs(true)
-                Log.e(TAG, "prepareAndStart: 未找到可用的rootfs，请在执行此函数前提醒用户选择rootfs" )
+                Log.e(TAG, "prepareAndStart: 未找到可用的rootfs，请在执行此函数前提醒用户选择rootfs")
                 return@launch
             }
             //rootfs处理（目前绑定外部存储路径在Proot里执行）
@@ -154,12 +146,14 @@ class MainEmuActivity : MainActivity() {
 
             //启动xserver
             if (Consts.rootfsCurrXkbDir.exists()) {
-                startService(startX11Intent)
-                waitForXStartedWithDialog() // 等待x11启动完成
+                // debug没事release就有事？？
+                if (!isConnected()) {
+                    startService(startX11Intent)
+                    waitForXStartedWithDialog() // 等待x11启动完成
+                }
             } else {
                 viewModel.showConfirmDialog("rootfs下缺少xkb文件夹，x11不会启动。可以安装类似 ' libxkbcommon-x11 ' 的软件包来补全。")
             }
-
 
             //这里还不能用state因为state第一次获取的是默认值而非datastore来的值
             terminalViewModel.startTerminal()
@@ -170,7 +164,7 @@ class MainEmuActivity : MainActivity() {
 //            terminalViewModel.runCommand("locale-gen") //在Proot中修改etc/locale.gen中对应语言。此处不添加参数
             // grep的$LANG应该还是从环境变量获取 因为有时候如果没生效的话LANG会被还原会C,可以用这个判断是否需要
             terminalViewModel.runCommand("""if [ "$(locale -a | grep ${'$'}LANG)" != $LANG ]; then locale-gen; fi; export LANG=$LANG""")
-            proot_startup_cmd.get().takeIf { it.isNotBlank() } ?.let {
+            proot_startup_cmd.get().takeIf { it.isNotBlank() }?.let {
                 terminalViewModel.runCommand("$it &")
             }
         }
@@ -180,6 +174,8 @@ class MainEmuActivity : MainActivity() {
         super.onDestroy()
         terminalViewModel.stopTerminal()
         stopService(startX11Intent)
+        // FIXME 目前release构建 finish 无法结束 service 进程 导致下次启动 xserver启动失败。需要手动强制结束进程
+        android.os.Process.killProcess(getX11ServicePid())
 
         // 删除通知 从onPause改到onDestroy
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -190,10 +186,11 @@ class MainEmuActivity : MainActivity() {
     }
 
     /**
-     * 等待xserver启动完成
+     * 等待xserver启动完成。最多等待5秒
      */
     suspend fun waitForXStarted() {
-        while (true) {
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < 5000) {
             if (isConnected()) break
             else delay(200)
         }
@@ -209,7 +206,7 @@ class MainEmuActivity : MainActivity() {
         val channelName = this.resources.getString(R.string.app_name)
         val channel = NotificationChannel(channelName, channelName, NotificationManager.IMPORTANCE_HIGH)
         channel.lockscreenVisibility = Notification.VISIBILITY_SECRET
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)  channel.setAllowBubbles(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) channel.setAllowBubbles(false)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         val builder: NotificationCompat.Builder =
             (NotificationCompat.Builder(this, channelName)).setContentTitle(channelName)
@@ -217,7 +214,7 @@ class MainEmuActivity : MainActivity() {
                 .setOngoing(true).setPriority(NotificationCompat.PRIORITY_MAX)
                 .setSilent(true).setShowWhen(false)
 //                .setContentIntent(PendingIntent.getActivity(this, 0, Intent.makeMainActivity(componentName), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-                //.setColor(-10453621)
+        //.setColor(-10453621)
         return builder.build()
     }
 
