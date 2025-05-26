@@ -1,16 +1,15 @@
 package org.github.ewt45.winemulator.ui
 
 import a.io.github.ewt45.winemulator.R
+import android.content.Context
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
-import androidx.collection.mutableIntListOf
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,13 +35,12 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,18 +59,41 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.withCreated
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import kotlinx.serialization.Serializable
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.DialogType
+import org.github.ewt45.winemulator.viewmodel.MainUiState
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareStageViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
+import kotlin.reflect.KClass
+
+@Serializable
+data object RouteTerminal
+
+@Serializable
+data object RouteX11
+
+@Serializable
+data object RouteSettings
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
+    tx11Content: (Context) -> View,
+    startDest: Destination = Destination.Terminal,
 ) {
     val TAG = "MainScreen"
     val viewModel: MainViewModel = viewModel()
@@ -80,9 +101,15 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val prepareVM: PrepareStageViewModel = viewModel()
 
+    val navController = rememberNavController()
+
     val (minimize, setMinimize) = remember { mutableStateOf(false) }
     val (showSetting, setShowSetting) = remember { mutableStateOf(false) }
     val isPreparing by remember { prepareVM.isNoRootfs }
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currDestination = navBackStackEntry?.destination
+    navController.currentDestination
+//    val showAppBar = !isPreparing && currDestination?.hasRoute(RouteX11::class) == false
 
     //进入设置时手动更新一些可能过期的数据，比如文件列表。 这个不能直接放下面的if里，不然会频繁执行
     LaunchedEffect(showSetting) {
@@ -91,13 +118,11 @@ fun MainScreen(
 
     Scaffold(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxSize(),
 //        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
+//            .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
         topBar = {
-            if (!isPreparing) {
-                TopAppBar(minimize, setMinimize, showSetting, setShowSetting)
-            }
+            MyTopAppBar(currDestination, { navController.navigate(it.route) })
         },
     ) { innerPadding ->
         // FIXME tx11已经处理键盘高度变更了，这里应该不用innerPadding 否则会有空白
@@ -115,92 +140,102 @@ fun MainScreen(
             ) {
                 if (isPreparing) {
                     PrepareStageScreen()
-                } else if (!minimize)  {
-                    if (showSetting) SettingScreen()
-//                    else ProotTerminalScreen()
-                    else TerminalScreen()
+                } else if (!minimize) {
+                    NavHost(navController, startDest.route) {
+                        composable<RouteTerminal> { ProotTerminalScreen() }
+//                        composable<NavDest.Terminal> { TerminalScreen() }
+                        composable<RouteX11> {
+                            X11Screen(tx11Content, { navController.navigate(RouteTerminal) })
+                        }
+                        composable<RouteSettings> { SettingScreen() }
+                    }
                 }
             }
         }
 
+        MainDialog(uiState) { viewModel.closeConfirmDialog(it) }
 
-        // 对话框
-        val dialogType = uiState.dialogType
-        val isConfirm = uiState.dialogType == DialogType.CONFIRM
-        val isBlock = uiState.dialogType == DialogType.BLOCK
-        if (dialogType != DialogType.NONE) {
-            AlertDialog(
-                onDismissRequest = {}, //阻止点击外部区域关闭
+    }
+}
+
+@Composable
+private fun MainDialog(uiState: MainUiState, onClose: (Boolean) -> Unit) {
+    // 对话框
+    val dialogType = uiState.dialogType
+    val isConfirm = uiState.dialogType == DialogType.CONFIRM
+    val isBlock = uiState.dialogType == DialogType.BLOCK
+    if (dialogType != DialogType.NONE) {
+        AlertDialog(
+            onDismissRequest = {}, //阻止点击外部区域关闭
 //                title = { Text("加载中") },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth() // 让 Column 填充对话框宽度
-                            .wrapContentHeight(), // 根据内容调整高度
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        SelectionContainer {
-                            Text(uiState.msg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.verticalScroll(rememberScrollState()))
-                        }
-                        if (isBlock) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            CircularProgressIndicator()
-                        }
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth() // 让 Column 填充对话框宽度
+                        .wrapContentHeight(), // 根据内容调整高度
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    SelectionContainer {
+                        Text(uiState.msg, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.verticalScroll(rememberScrollState()))
                     }
-                },
-                confirmButton = {
-                    if (isConfirm) {
-                        TextButton(onClick = { viewModel.closeConfirmDialog(true) }) { Text(stringResource(android.R.string.ok)) }
-                    }
-                },
-                dismissButton = {
-                    if (isConfirm) {
-                        TextButton(onClick = { viewModel.closeConfirmDialog(false) }) { Text(stringResource(android.R.string.cancel)) }
+                    if (isBlock) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CircularProgressIndicator()
                     }
                 }
-            )
-        }
+            },
+            confirmButton = {
+                if (isConfirm) {
+                    TextButton(onClick = { onClose(true) }) { Text(stringResource(android.R.string.ok)) }
+                }
+            },
+            dismissButton = {
+                if (isConfirm) {
+                    TextButton(onClick = { onClose(false) }) { Text(stringResource(android.R.string.cancel)) }
+                }
+            }
+        )
     }
 }
 
 
 /**
- * 顶部的AppBar
+ * 顶部的AppBar，显示一个tabRow，包含一些导航目的地。如果传入当前目的地不在列表内，则不显示appbar
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopAppBar(
-    minimize: Boolean,
-    setMinimize: (Boolean) -> Unit,
-    showSetting: Boolean,
-    setShowSetting: (Boolean) -> Unit,
+private fun MyTopAppBar(
+    currDestination: NavDestination?,
+    setDestination: (Destination) -> Unit,
 ) {
-    var selectIdx by remember { mutableIntStateOf(0) }
-    TopAppBar(
-        title = {
-            if (!minimize) {
+    val selectIdx = appbarDestList.find { currDestination?.hasRoute(it.route::class) == true }?.let { appbarDestList.indexOf(it) }
+    if (selectIdx != null) {
+        TopAppBar(
+            title = {
                 //TODO 改为 navigation  参考 https://developer.android.com/develop/ui/compose/components/tabs?hl=zh-cn
                 PrimaryScrollableTabRow(selectIdx, divider = {}) {
-                    Tab(
-                        selected = selectIdx == 0,
-                        onClick = { selectIdx = 0 },
-                        text = {
-                            Text(
-                                text = "终端",
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    )
+                    appbarDestList.forEachIndexed { idx, dest ->
+                        Tab(
+                            selected = selectIdx == idx,
+                            onClick = { setDestination(dest) },
+                            text = {
+                                Text(
+                                    text = dest.title,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        )
+                    }
                 }
-            }
-        },
-        actions = {
-            SettingButton(showSetting) { setShowSetting(!showSetting) }
-            MinimizeButton(minimize, { setMinimize(!minimize) })
-        },
-        scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
-    )
+            },
+            actions = {
+                IconButton({ setDestination(Destination.X11) }) { Icon(painterResource(R.drawable.ic_hide), null) }
+            },
+//        scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
+        )
+    }
+
 }
 
 /** 按钮。点击可将compose部分的视图展开或折叠。
@@ -295,7 +330,12 @@ private fun MainScreenPreview() {
     val (minimize, setMinimize) = remember { mutableStateOf(false) }
     val (showSetting, setShowSetting) = remember { mutableStateOf(false) }
     val isPreparing by remember { mutableStateOf(false) }
-
+    val destList = listOf(
+        RouteTerminal to "终端",
+        RouteSettings to "设置",
+    )
+    val navController = rememberNavController()
+    val navBackEntry by navController.currentBackStackEntryAsState()
     MainTheme {
         Scaffold(
             modifier = Modifier
@@ -304,13 +344,10 @@ private fun MainScreenPreview() {
                 .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
             topBar = {
                 if (!isPreparing) {
-                    TopAppBar(minimize, setMinimize, showSetting, setShowSetting)
+                    MyTopAppBar(navBackEntry?.destination, { navController.navigate(it.route) })
                 }
             },
         ) { innerPadding ->
-            // FIXME tx11已经处理键盘高度变更了，这里应该不用innerPadding 否则会有空白
-            //  但是使用了scaffold的topbar之后需要应用顶部padding
-//            val ignoreSystemInsets = Modifier.padding(innerPadding)
             Box(
                 modifier = Modifier
                     .fillMaxSize()

@@ -8,10 +8,15 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
 import com.termux.x11.MainActivity
@@ -82,36 +87,36 @@ class MainEmuActivity : MainActivity() {
         prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
 
 
-        //将composeView添加到原视图布局中
-        //TODO wrap不生效
-        val composeView = ComposeView(this).apply {
-            id = R.id.compose_view
-            setContent {
-                MainTheme {
-                    MainScreen()
-                }
+//        //将composeView添加到原视图布局中
+//        val composeView = ComposeView(this).apply {
+//            id = R.id.compose_view
+//            setContent {
+//                MainTheme {
+//                    MainScreen()
+//                }
+//            }
+//        }
+//        val frame = findViewById<FrameLayout>(com.termux.x11.R.id.frame)
+//        frame.addView(composeView, FrameLayout.LayoutParams(-2, -2))
+
+        // 将原视图放到compose中
+        (frm.parent as? ViewGroup)?.removeView(frm)
+        setContent {
+            Box {
+                MainScreen(tx11Content = { frm })
             }
         }
-        val frame = findViewById<FrameLayout>(com.termux.x11.R.id.frame)
-        frame.addView(composeView, FrameLayout.LayoutParams(-2, -2))
+
         enableEdgeToEdge()
 
         val noRootfs = Utils.Rootfs.haveNoRootfs()
         val haveStoragePermission = Utils.Permissions.checkStoragePermission(this)
         prepareViewModel.setNoRootfs(noRootfs)
         if (!noRootfs && haveStoragePermission) {
-//            startEmu()
+            startEmu()
 
             //尝试termux终端
         }
-
-//        setContent {
-//            MainTheme {
-//                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-//                    MainScreen(modifier = Modifier.padding(innerPadding))
-//                }
-//            }
-//        }
     }
 
     fun startEmu() {
