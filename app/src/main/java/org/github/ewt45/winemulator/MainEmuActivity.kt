@@ -4,10 +4,12 @@ import a.io.github.ewt45.winemulator.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -97,10 +99,13 @@ class MainEmuActivity : MainActivity() {
 //        frame.addView(composeView, FrameLayout.LayoutParams(-2, -2))
 
         // 将原视图放到compose中
-        (frm.parent as? ViewGroup)?.removeView(frm)
+//        (frm.parent as? ViewGroup)?.removeView(frm)
         setContent {
             Box {
-                MainScreen(Modifier,{ frm }, Destination.ExceptX11, mainViewModel, terminalViewModel, settingViewModel, prepareViewModel)
+                val x11ViewFactory:(Context) -> View = {
+                    frm.also { (frm.parent as? ViewGroup)?.removeView(frm) }
+                }
+                MainScreen(Modifier,x11ViewFactory, Destination.ExceptX11, mainViewModel, terminalViewModel, settingViewModel, prepareViewModel)
             }
         }
 
