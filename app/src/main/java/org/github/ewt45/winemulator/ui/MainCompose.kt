@@ -132,7 +132,7 @@ fun MainScreen(
                 }
                 composable<RouteX11> { X11Screen(tx11Content, navigateTo) }
                 navigation<RouteExceptX11>(startDestination = RouteTerminal) {
-                    composable<RouteTerminal> { ProotTerminalScreen(viewModel = terminalVM) }
+                    composable<RouteTerminal> { ProotTerminalScreen(terminalVM) }
 //                        composable<NavDest.Terminal> { TerminalScreen() }
                     composable<RouteSettings> { SettingScreen(settingVM, terminalVM, navigateTo) }
                 }
@@ -313,23 +313,15 @@ fun SettingButton(show: Boolean, onClick: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 private fun MainScreenPreview() {
-    val (minimize, setMinimize) = remember { mutableStateOf(false) }
-    val (showSetting, setShowSetting) = remember { mutableStateOf(false) }
-    val isPreparing by remember { mutableStateOf(false) }
-
+    val startDest = Destination.ExceptX11
     val navController = rememberNavController()
     val navBackEntry by navController.currentBackStackEntryAsState()
     val currDestination = appbarDestList.find { navBackEntry?.destination?.hasRoute(it.route::class) == true }
     MainTheme {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-//        .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .then(if (minimize) Modifier.clip(RoundedCornerShape(100.dp)) else Modifier),
+            modifier = Modifier.fillMaxSize(),
             topBar = {
-                if (!isPreparing) {
-                    MyTopAppBar(currDestination, { navController.navigate(it.route) })
-                }
+                MyTopAppBar(currDestination, { navController.navigate(it.route) })
             },
         ) { innerPadding ->
             Box(
@@ -338,21 +330,21 @@ private fun MainScreenPreview() {
                     .padding(top = innerPadding.calculateTopPadding()),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    Modifier/*.padding(innerPadding)*/.fillMaxHeight()
-                        .widthIn(max = 600.dp)
+                NavHost(
+                    navController, startDest.route,
+                    enterTransition = { scaleIn() },
+                    exitTransition = { scaleOut() },
                 ) {
-                    if (isPreparing) {
-                        PrepareScreenPreview(initLackPermissions = true)
-                    } else {
-                        if (!minimize) {
-                            if (showSetting) SettingScreenPreview()
-//                            else ProotTerminalScreen()
-                            else TerminalScreenPreview()
-                        }
+                    composable<RoutePrepare> { PrepareScreenPreview() }
+                    composable<RouteX11> { X11ScreenPreview() }
+                    navigation<RouteExceptX11>(startDestination = RouteTerminal) {
+                        composable<RouteTerminal> { ProotTerminalScreenPreview() }
+//                        composable<NavDest.Terminal> { TerminalScreenPreview() }
+                        composable<RouteSettings> { SettingScreenPreview() }
                     }
                 }
             }
+//            MainDialog(uiState) { mainVM.closeConfirmDialog(it) }
         }
     }
 }

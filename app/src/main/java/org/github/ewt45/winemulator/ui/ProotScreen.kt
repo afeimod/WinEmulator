@@ -23,30 +23,35 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
 @Composable
-fun ProotTerminalScreen(
-    modifier: Modifier = Modifier,
-    viewModel: TerminalViewModel,
+fun ProotTerminalScreen(viewModel: TerminalViewModel) {
+    ProotTerminalScreenImpl(viewModel.output, viewModel::runCommand)
+}
+
+@Composable
+fun ProotTerminalScreenImpl(
+    output: SnapshotStateList<String>,
+    runCommand: (String) -> Unit,
 ) {
     val TAG = "ProotOutputScreen"
-    val output = viewModel.output
-
-    val scope = rememberCoroutineScope()
     var execCommand by remember { mutableStateOf("") }
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxHeight()
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
@@ -78,7 +83,7 @@ fun ProotTerminalScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         val onSend = {
-            viewModel.runCommand(execCommand)
+            runCommand(execCommand)
             execCommand = ""
         }
         TextField(
@@ -98,4 +103,11 @@ fun ProotTerminalScreen(
             keyboardActions = KeyboardActions(onSend = { onSend() })
         )
     }
+}
+
+@Preview
+@Composable
+fun ProotTerminalScreenPreview() {
+    val output = remember { mutableStateListOf<String>() }
+    ProotTerminalScreenImpl(output) { output.add(it + '\n') }
 }
