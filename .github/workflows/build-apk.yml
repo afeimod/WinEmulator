@@ -176,9 +176,11 @@ jobs:
           echo "📥 Downloading settings.gradle.kts..."
           curl -fL -o settings.gradle.kts "$BASE_URL/settings.gradle.kts" || { echo "❌ Failed to download settings.gradle.kts"; exit 1; }
 
-          # 2. Download termux-shared/build.gradle.kts
+          # 2. Download termux-shared/build.gradle.kts (must overwrite any existing build.gradle)
           echo "📥 Downloading termux-shared build.gradle.kts..."
           curl -fL -o termux-shared/build.gradle.kts "$BASE_URL/termux-shared.gradle.kts" || { echo "❌ Failed to download termux-shared.gradle.kts"; exit 1; }
+          # Remove old .gradle file if exists
+          rm -f termux-shared/build.gradle
 
           # 3. Download AndroidManifest.xml
           mkdir -p termux-shared/src/main
@@ -188,6 +190,9 @@ jobs:
           echo "✅ All files downloaded successfully"
           echo "📄 Current settings.gradle.kts:"
           cat settings.gradle.kts
+          echo ""
+          echo "📄 Current termux-shared/build.gradle.kts:"
+          cat termux-shared/build.gradle.kts
 
       - name: Verify Xfuncproto.h exists
         run: |
