@@ -35,6 +35,17 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-config-cache: false
+
+      - name: Configure Gradle properties
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+          echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
+          echo "org.gradle.caching=false" >> ~/.gradle/gradle.properties
+          cat ~/.gradle/gradle.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -96,9 +107,9 @@ jobs:
       - name: Build ${{ inputs.build_type }} APK
         run: |
           if [ "${{ inputs.build_type }}" = "release" ]; then
-            ./gradlew assembleRelease --stacktrace
+            ./gradlew assembleRelease --no-configuration-cache --stacktrace --info 2>&1 | tail -100
           else
-            ./gradlew assembleDebug --stacktrace
+            ./gradlew assembleDebug --no-configuration-cache --stacktrace --info 2>&1 | tail -100
           fi
 
       - name: Prepare APK name
