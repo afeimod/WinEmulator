@@ -29,56 +29,68 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Clone termux-app repository
+      - name: Clone termux-app for modules
         run: |
           echo "Cloning termux-app repository..."
           git clone --depth 1 https://github.com/termux/termux-app.git termux-app-temp
 
-          for module in terminal-view termux-shared terminal-emulator; do
+          for module in terminal-emulator terminal-view termux-shared; do
             if [ -d "termux-app-temp/$module" ]; then
               rm -rf "$module"
               cp -r "termux-app-temp/$module" .
               echo "$module cloned"
             fi
           done
-
           rm -rf termux-app-temp
 
       - name: Remove old build.gradle files
         run: |
-          rm -f terminal-view/build.gradle
-          rm -f termux-shared/build.gradle
-          rm -f terminal-emulator/build.gradle
+          rm -f terminal-view/build.gradle termux-view/build.gradle 2>/dev/null || true
+          rm -f termux-shared/build.gradle 2>/dev/null || true
+          rm -f terminal-emulator/build.gradle 2>/dev/null || true
           echo "Old build.gradle files removed"
 
-      - name: Download config files
+      - name: Download config files from patchs
         run: |
+          echo "Downloading config files..."
+
+          # Download settings.gradle.kts FIRST (this is critical!)
+          curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts"
+          echo "settings.gradle.kts downloaded"
+
+          # Download module configs
+          curl -fL -o terminal-emulator/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-emulator.gradle.kts"
           curl -fL -o terminal-view/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-view.gradle.kts"
           curl -fL -o termux-shared/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/termux-shared.gradle.kts"
-          curl -fL -o terminal-emulator/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-emulator.gradle.kts"
-          curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts"
-          echo "Config files downloaded"
+
+          echo "All config files downloaded"
 
       - name: Fix termux-shared FileUtils.java
         run: |
-          echo "Fixing FileUtils.java..."
+          echo "Fixing FileUtils.java for Guava compatibility..."
 
-          # Fix the import statement
           sed -i 's/import com.google.common.io.RecursiveDeleteOption;//g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
-
-          # Fix the deleteRecursively call - include semicolon
           sed -i 's/com.google.common.io.MoreFiles.deleteRecursively(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);/org.apache.commons.io.FileUtils.deleteDirectory(file);/g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
-
-          # Fix the deleteDirectoryContents call - include semicolon
           sed -i 's/com.google.common.io.MoreFiles.deleteDirectoryContents(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);/org.apache.commons.io.FileUtils.deleteDirectory(file);/g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
 
           echo "FileUtils.java fixed"
 
       - name: Update app dependencies
         run: |
+          echo "Updating app build.gradle.kts dependencies..."
           sed -i 's/implementation(libs.com.termux.terminal.view)/implementation(project(":terminal-view"))/g' app/build.gradle.kts
           sed -i 's/implementation(libs.com.termux.termux.shared)/implementation(project(":termux-shared"))/g' app/build.gradle.kts
           echo "App dependencies updated"
+
+      - name: Verify module setup
+        run: |
+          echo "=== Module Structure ==="
+          ls -la terminal-emulator/build.gradle.kts 2>/dev/null && echo "terminal-emulator: OK" || echo "terminal-emulator: MISSING"
+          ls -la terminal-view/build.gradle.kts 2>/dev/null && echo "terminal-view: OK" || echo "terminal-view: MISSING"
+          ls -la termux-shared/build.gradle.kts 2>/dev/null && echo "termux-shared: OK" || echo "termux-shared: MISSING"
+          ls -la settings.gradle.kts 2>/dev/null && echo "settings.gradle.kts: OK" || echo "settings.gradle.kts: MISSING"
+          echo "=== Settings Content ==="
+          cat settings.gradle.kts
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -129,8 +141,8 @@ jobs:
       - name: Show errors
         if: failure()
         run: |
-          grep -E "(error:|FAILED)" build.log | head -30 || true
-          tail -50 build.log
+          grep -E "(error:|FAILED|What went wrong)" build.log | head -50 || true
+          tail -100 build.log
 
       - name: Upload build log
         if: failure()
