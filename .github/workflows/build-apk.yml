@@ -104,6 +104,40 @@ jobs:
             echo "✅ Termux dependency exists on JitPack"
           fi
 
+      - name: Fix missing Xfuncproto.h header
+        run: |
+          XFUNCPROTO_PATH="tx11/src/main/cpp/xorgproto/include/X11/Xfuncproto.h"
+
+          if [ ! -f "$XFUNCPROTO_PATH" ]; then
+            echo "⚠️  Xfuncproto.h is missing, creating it..."
+
+            mkdir -p "tx11/src/main/cpp/xorgproto/include/X11"
+
+            cat > "$XFUNCPROTO_PATH" << 'XFPROTO_EOF'
+#ifndef XFUNCPROTO_H
+#define XFUNCPROTO_H
+
+#include <X11/Xlib.h>
+#include <X11/Xfuncs.h>
+
+#define _XFUNCTIONPREFIX_
+#define _X_ATTRIBUTE_PRINTF(a,b)
+
+#ifndef __attribute__
+#define __attribute__(x)
+#endif
+
+#define _X_SEND_FUNC(_type) _type
+#define _X_RECV_FUNC(_type) _type
+
+#endif /* XFUNCPROTO_H */
+XFPROTO_EOF
+
+            echo "✅ Created missing Xfuncproto.h"
+          else
+            echo "✅ Xfuncproto.h already exists"
+          fi
+
       - name: Build ${{ inputs.build_type }} APK
         run: |
           echo "Starting build..."
