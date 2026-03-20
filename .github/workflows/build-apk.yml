@@ -92,20 +92,36 @@ jobs:
         run: |
           echo "Checking termux dependencies..."
 
-          # Check if JitPack has the commit built
-          JITPACK_URL="https://jitpack.io/com/github/termux/termux-app/terminal-view/da3a0ac4e2/terminal-view-da3a0ac4e2.pom"
+          # The project code expects a specific termux API
+          # Try different versions to find one that works with the code
+          TERMUX_VERSIONS=("da3a0ac4e2" "v0.118.0" "v0.119.0" "v0.118.3" "v0.117.0")
 
-          if ! curl -s -f "$JITPACK_URL" > /dev/null 2>&1; then
-            echo "⚠️  JitPack doesn't have commit da3a0ac4e2 built"
-            echo "📋 Updating gradle configuration to use stable release version..."
+          CURRENT_VERSION=$(grep 'termux = ' gradle/libs.versions.toml | sed 's/termux = "\(.*\)"/\1/')
+          echo "Current termux version in project: $CURRENT_VERSION"
 
-            # Update libs.versions.toml to use a stable version
-            sed -i 's/termux = "da3a0ac4e2"/termux = "v0.118.0"/' gradle/libs.versions.toml
+          WORKING_VERSION=""
+          for VERSION in "${TERMUX_VERSIONS[@]}"; do
+            echo "Testing termux version: $VERSION"
+            JITPACK_URL="https://jitpack.io/com/github/termux/termux-app/terminal-view/${VERSION}/terminal-view-${VERSION}.pom"
+            if curl -s -f "$JITPACK_URL" > /dev/null 2>&1; then
+              echo "✅ Found working version: $VERSION"
+              WORKING_VERSION=$VERSION
+              break
+            else
+              echo "❌ Version $VERSION not found on JitPack"
+            fi
+          done
 
-            echo "✅ Changed termux version to v0.118.0"
+          if [ -z "$WORKING_VERSION" ]; then
+            echo "⚠️  No working version found, trying to trigger JitPack build for: $CURRENT_VERSION"
+            # Trigger JitPack build by accessing the build URL
+            curl -s -f "https://jitpack.io/com/github/termux/termux-app/terminal-view/${CURRENT_VERSION}/terminal-view-${CURRENT_VERSION}.pom" || true
           else
-            echo "✅ Termux dependency exists on JitPack"
+            echo "Updating to working version: $WORKING_VERSION"
+            sed -i "s/termux = \"[^\"]*\"/termux = \"$WORKING_VERSION\"/" gradle/libs.versions.toml
           fi
+
+          echo "Final termux version: $(grep 'termux = ' gradle/libs.versions.toml | sed 's/termux = "\(.*\)"/\1/')"
 
       - name: Verify Xfuncproto.h exists
         run: |
