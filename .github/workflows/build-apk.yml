@@ -55,20 +55,32 @@ jobs:
             echo "termux-app-master.zip not found"
           fi
 
+      - name: Remove old build.gradle files
+        run: |
+          echo "Removing old build.gradle files..."
+
+          # Remove old Groovy build.gradle files
+          rm -f terminal-view/build.gradle
+          rm -f termux-shared/build.gradle
+
+          echo "Old build.gradle files removed"
+
       - name: Download config files
         run: |
           echo "Downloading config files from patchs folder..."
 
           # Download terminal-view/build.gradle.kts
-          curl -fL -o terminal-view/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-view.gradle.kts" || true
+          curl -fL -o terminal-view/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-view.gradle.kts"
 
           # Download termux-shared/build.gradle.kts
-          curl -fL -o termux-shared/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/termux-shared.gradle.kts" || true
+          curl -fL -o termux-shared/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/termux-shared.gradle.kts"
 
           # Download settings.gradle.kts
-          curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts" || true
+          curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts"
 
           echo "Config files downloaded"
+          echo "terminal-view/build.gradle.kts:"
+          cat terminal-view/build.gradle.kts
 
       - name: Update app dependencies
         run: |
