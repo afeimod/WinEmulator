@@ -106,11 +106,29 @@ jobs:
 
       - name: Build ${{ inputs.build_type }} APK
         run: |
+          echo "Starting build..."
           if [ "${{ inputs.build_type }}" = "release" ]; then
-            ./gradlew assembleRelease --no-configuration-cache --stacktrace --info 2>&1 | tail -100
+            ./gradlew assembleRelease --no-configuration-cache 2>&1 | tee build.log
           else
-            ./gradlew assembleDebug --no-configuration-cache --stacktrace --info 2>&1 | tail -100
+            ./gradlew assembleDebug --no-configuration-cache 2>&1 | tee build.log
           fi
+
+      - name: Show Kotlin compilation errors
+        if: failure()
+        run: |
+          echo "=== Kotlin Compilation Errors ==="
+          grep -A 5 "error:" build.log | head -50 || echo "No 'error:' found, showing last 100 lines..."
+          echo ""
+          echo "=== Last 50 lines of build log ==="
+          tail -50 build.log
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ inputs.build_type }}
+          path: build.log
+          retention-days: 7
 
       - name: Prepare APK name
         id: apk_info
@@ -125,6 +143,7 @@ jobs:
           echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk_info.outputs.apk_name }}
@@ -132,6 +151,7 @@ jobs:
           retention-days: 30
 
       - name: Display APK info
+        if: success()
         run: |
           echo "✅ Build completed successfully!"
           echo "📦 APK location: ${{ steps.apk_info.outputs.apk_path }}"
