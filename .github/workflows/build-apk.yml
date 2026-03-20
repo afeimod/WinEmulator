@@ -224,35 +224,10 @@ jobs:
           echo "📄 Original app dependencies:"
           grep -n "termux" app/build.gradle.kts
 
-          # Replace ALL termux dependencies with local modules using Python
-          python3 << 'PYEOF'
-import re
-
-with open('app/build.gradle.kts', 'r') as f:
-    content = f.read()
-
-# Replace terminal-view dependencies
-terminal_view_patterns = [
-    r'implementation\s*\(\s*"com\.github\.termux\.termux-app:terminal-view:[^"]*"\s*\)',
-    r'implementation\s*\(\s*libs\.com\.termux\.terminal\.view\s*\)',
-    r'implementation\s*\(\s*libs\.com\.termux\.termux\.view\s*\)',
-]
-for p in terminal_view_patterns:
-    content = re.sub(p, 'implementation(project(":terminal-view"))', content)
-
-# Replace termux-shared dependencies
-termux_shared_patterns = [
-    r'implementation\s*\(\s*"com\.github\.termux\.termux-app:termux-shared:[^"]*"\s*\)',
-    r'implementation\s*\(\s*libs\.com\.termux\.termux\.shared\s*\)',
-]
-for p in termux_shared_patterns:
-    content = re.sub(p, 'implementation(project(":termux-shared"))', content)
-
-with open('app/build.gradle.kts', 'w') as f:
-    f.write(content)
-
-print("✅ Dependencies replaced")
-PYEOF
+          # Download fix_deps.py and execute
+          curl -fL -o fix_deps.py "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/fix_deps.py"
+          chmod +x fix_deps.py
+          python3 fix_deps.py
 
           echo "📄 Updated app dependencies:"
           grep -n "implementation" app/build.gradle.kts | head -20
