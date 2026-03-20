@@ -39,7 +39,10 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.annotation:annotation:1.9.0")
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.window:window:1.1.0")
     implementation("com.google.android.material:material:1.11.0")
+
+    // Guava - use full version for MoreFiles
     implementation("com.google.guava:guava:32.1.3-android")
 
     // Markwon for markdown
@@ -50,4 +53,10 @@ dependencies {
 
     // Apache Commons
     implementation("commons-io:commons-io:2.15.1")
+
+    // Hidden API Bypass
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+
+    // Termux AM Library
+    implementation("com.termux:termux-am-library:v2.0.0")
 }
