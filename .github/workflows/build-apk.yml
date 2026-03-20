@@ -34,7 +34,6 @@ jobs:
           echo "Cloning termux-app repository..."
           git clone --depth 1 https://github.com/termux/termux-app.git termux-app-temp
 
-          # Copy all termux modules
           for module in terminal-view termux-shared terminal-emulator; do
             if [ -d "termux-app-temp/$module" ]; then
               rm -rf "$module"
@@ -59,6 +58,21 @@ jobs:
           curl -fL -o terminal-emulator/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-emulator.gradle.kts"
           curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts"
           echo "Config files downloaded"
+
+      - name: Fix termux-shared FileUtils.java
+        run: |
+          echo "Fixing FileUtils.java..."
+
+          # Fix the import statement
+          sed -i 's/import com.google.common.io.RecursiveDeleteOption;//g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
+
+          # Fix the deleteRecursively call
+          sed -i 's/com.google.common.io.MoreFiles.deleteRecursively(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);/org.apache.commons.io.FileUtils.deleteDirectory(file)/g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
+
+          # Fix the deleteDirectoryContents call
+          sed -i 's/com.google.common.io.MoreFiles.deleteDirectoryContents(file.toPath(), RecursiveDeleteOption.ALLOW_INSECURE);/org.apache.commons.io.FileUtils.deleteDirectory(file)/g' termux-shared/src/main/java/com/termux/shared/file/FileUtils.java
+
+          echo "FileUtils.java fixed"
 
       - name: Update app dependencies
         run: |
