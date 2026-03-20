@@ -42,8 +42,8 @@ dependencies {
     implementation("androidx.window:window:1.1.0")
     implementation("com.google.android.material:material:1.11.0")
 
-    // Guava - use full version for MoreFiles
-    implementation("com.google.guava:guava:32.1.3-android")
+    // Guava - use non-android version for MoreFiles
+    implementation("com.google.guava:guava:33.0.0-jre")
 
     // Markwon for markdown
     implementation("io.noties.markwon:core:4.6.2")
