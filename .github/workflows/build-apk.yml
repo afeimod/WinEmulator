@@ -29,66 +29,42 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Extract termux modules
+      - name: Clone termux-app repository
         run: |
-          echo "Extracting termux modules from zip..."
+          echo "Cloning termux-app repository..."
+          git clone --depth 1 https://github.com/termux/termux-app.git termux-app-temp
 
-          if [ -f "termux-app-master.zip" ]; then
-            unzip -o termux-app-master.zip -d temp_termux
-
-            TERMUX_APP_DIR=$(find temp_termux -type d -name "termux-app*" | head -1)
-
-            if [ -d "$TERMUX_APP_DIR/terminal-view" ]; then
-              rm -rf terminal-view
-              cp -r "$TERMUX_APP_DIR/terminal-view" .
-              echo "terminal-view extracted"
-            fi
-
-            if [ -d "$TERMUX_APP_DIR/termux-shared" ]; then
-              rm -rf termux-shared
-              cp -r "$TERMUX_APP_DIR/termux-shared" .
-              echo "termux-shared extracted"
-            fi
-
-            rm -rf temp_termux
-          else
-            echo "termux-app-master.zip not found"
+          if [ -d "termux-app-temp/terminal-view" ]; then
+            rm -rf terminal-view
+            cp -r termux-app-temp/terminal-view .
+            echo "terminal-view cloned"
           fi
+
+          if [ -d "termux-app-temp/termux-shared" ]; then
+            rm -rf termux-shared
+            cp -r termux-app-temp/termux-shared .
+            echo "termux-shared cloned"
+          fi
+
+          rm -rf termux-app-temp
 
       - name: Remove old build.gradle files
         run: |
-          echo "Removing old build.gradle files..."
-
-          # Remove old Groovy build.gradle files
           rm -f terminal-view/build.gradle
           rm -f termux-shared/build.gradle
-
           echo "Old build.gradle files removed"
 
       - name: Download config files
         run: |
-          echo "Downloading config files from patchs folder..."
-
-          # Download terminal-view/build.gradle.kts
           curl -fL -o terminal-view/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/terminal-view.gradle.kts"
-
-          # Download termux-shared/build.gradle.kts
           curl -fL -o termux-shared/build.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/termux-shared.gradle.kts"
-
-          # Download settings.gradle.kts
           curl -fL -o settings.gradle.kts "https://raw.githubusercontent.com/afeimod/WinEmulator/master/patchs/settings.gradle.kts"
-
           echo "Config files downloaded"
-          echo "terminal-view/build.gradle.kts:"
-          cat terminal-view/build.gradle.kts
 
       - name: Update app dependencies
         run: |
-          echo "Updating app dependencies..."
-
           sed -i 's/implementation(libs.com.termux.terminal.view)/implementation(project(":terminal-view"))/g' app/build.gradle.kts
           sed -i 's/implementation(libs.com.termux.termux.shared)/implementation(project(":termux-shared"))/g' app/build.gradle.kts
-
           echo "App dependencies updated"
 
       - name: Set up JDK 17
@@ -103,12 +79,11 @@ jobs:
         with:
           gradle-config-cache: false
 
-      - name: Configure Gradle properties
+      - name: Configure Gradle
         run: |
           mkdir -p ~/.gradle
           echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m" >> ~/.gradle/gradle.properties
           echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
-          echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -141,7 +116,6 @@ jobs:
       - name: Show errors
         if: failure()
         run: |
-          echo "=== Build Errors ==="
           grep -E "(error:|FAILED)" build.log | head -30 || true
           tail -50 build.log
 
