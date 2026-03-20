@@ -35,9 +35,19 @@ android {
 dependencies {
     implementation(project(":terminal-emulator"))
     implementation(project(":terminal-view"))
+
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.annotation:annotation:1.9.0")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("com.google.android.material:material:1.11.0")
     implementation("com.google.guava:guava:32.1.3-android")
+
+    // Markwon for markdown
+    implementation("io.noties.markwon:core:4.6.2")
+    implementation("io.noties.markwon:ext-strikethrough:4.6.2")
+    implementation("io.noties.markwon:linkify:4.6.2")
+    implementation("io.noties.markwon:recycler:4.6.2")
+
+    // Apache Commons
+    implementation("commons-io:commons-io:2.15.1")
 }
