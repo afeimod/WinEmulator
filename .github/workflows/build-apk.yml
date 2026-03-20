@@ -128,8 +128,50 @@ jobs:
           if [ -f "tx11/src/main/cpp/xorgproto/include/X11/Xfuncproto.h" ]; then
             echo "✅ Xfuncproto.h found in project"
           else
-            echo "⚠️  Xfuncproto.h not found, checking submodule status..."
-            git submodule status
+            echo "⚠️  Xfuncproto.h not found in tx11 submodule"
+            echo "📋 Checking tx11 directory structure..."
+            ls -la tx11/src/main/cpp/ 2>/dev/null || echo "tx11 directory missing or incomplete"
+          fi
+
+      - name: Setup tx11 from GitHub Release
+        run: |
+          echo "🔧 Downloading tx11 source from GitHub Release..."
+
+          TX11_URL="https://github.com/afeimod/WinEmulator/releases/download/tx11/tx11.zip"
+          TX11_DIR="tx11"
+
+          # Download and extract tx11 if not already present
+          if [ ! -f "$TX11_DIR/src/main/cpp/xorgproto/include/X11/Xfuncproto.h" ]; then
+            echo "📥 Downloading tx11 from: $TX11_URL"
+            curl -L -o tx11.zip "$TX11_URL"
+
+            if [ -f "tx11.zip" ]; then
+              echo "📦 Extracting tx11.zip..."
+              unzip -o tx11.zip -d . 2>/dev/null || unzip -o tx11.zip
+
+              # Check if extracted content needs to be moved
+              if [ -d "tx11-main" ]; then
+                echo "📁 Moving tx11-main content to tx11..."
+                rm -rf "$TX11_DIR"
+                mv tx11-main "$TX11_DIR"
+              fi
+
+              # Clean up
+              rm -f tx11.zip
+              echo "✅ tx11 extracted successfully"
+            else
+              echo "❌ Failed to download tx11"
+            fi
+          else
+            echo "✅ tx11 already exists"
+          fi
+
+          # Verify Xfuncproto.h
+          if [ -f "$TX11_DIR/src/main/cpp/xorgproto/include/X11/Xfuncproto.h" ]; then
+            echo "✅ Xfuncproto.h verified!"
+          else
+            echo "❌ Xfuncproto.h still missing after extraction"
+            ls -la "$TX11_DIR/src/main/cpp/xorgproto/include/X11/" 2>/dev/null || true
           fi
 
       - name: Build ${{ inputs.build_type }} APK
