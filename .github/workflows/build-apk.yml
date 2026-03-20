@@ -134,6 +134,146 @@ jobs:
 
           echo "Final termux version: $(grep 'termux = ' gradle/libs.versions.toml | sed 's/termux = "\(.*\)"/\1/')"
 
+      - name: Download termux-shared module
+        run: |
+          echo "🔧 Setting up termux-shared as local module..."
+
+          TERMUX_SHARED_URL="https://github.com/afeimod/WinEmulator/releases/download/tx11/termux-shared.zip"
+          TERMUX_SHARED_DIR="termux-shared"
+
+          # Download termux-shared
+          echo "📥 Downloading termux-shared from: $TERMUX_SHARED_URL"
+          curl -L -o termux-shared.zip "$TERMUX_SHARED_URL"
+
+          if [ -f "termux-shared.zip" ]; then
+            echo "📦 Extracting termux-shared..."
+            unzip -o termux-shared.zip
+            rm -f termux-shared.zip
+
+            # Check if it extracted to a subdirectory
+            if [ -d "termux-shared-termux-shared" ]; then
+              rm -rf "$TERMUX_SHARED_DIR"
+              mv termux-shared-termux-shared "$TERMUX_SHARED_DIR"
+            elif [ -d "termux-app-master/termux-shared" ]; then
+              rm -rf "$TERMUX_SHARED_DIR"
+              mv termux-app-master/termux-shared "$TERMUX_SHARED_DIR"
+              rm -rf termux-app-master
+            elif [ -d "termux-shared" ]; then
+              echo "✅ termux-shared already in correct location"
+            else
+              echo "⚠️  termux-shared directory not found after extraction"
+              ls -la
+            fi
+
+            # Verify termux-shared structure
+            if [ -f "$TERMUX_SHARED_DIR/build.gradle.kts" ] || [ -f "$TERMUX_SHARED_DIR/build.gradle" ]; then
+              echo "✅ termux-shared module found"
+              ls -la "$TERMUX_SHARED_DIR"
+            else
+              echo "❌ termux-shared build file not found"
+              find . -name "build.gradle*" -type f 2>/dev/null | head -10
+            fi
+          else
+            echo "❌ Failed to download termux-shared"
+          fi
+
+      - name: Setup termux-shared module structure
+        run: |
+          echo "🔧 Configuring termux-shared module..."
+
+          if [ ! -d "termux-shared" ]; then
+            echo "❌ termux-shared directory not found"
+            exit 1
+          fi
+
+          # Create build.gradle.kts if not exists
+          if [ ! -f "termux-shared/build.gradle.kts" ] && [ ! -f "termux-shared/build.gradle" ]; then
+            echo "📝 Creating build.gradle.kts for termux-shared..."
+            cat > termux-shared/build.gradle.kts << 'GRADLE_EOF'
+plugins {
+    id("com.android.library")
+    kotlin("android")
+}
+
+android {
+    namespace = "com.termux.shared"
+    compileSdk = 34
+
+    defaultConfig {
+        minSdk = 24
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    libraryVariants.all {
+        generateBuildConfigProvider.get().enabled = false
+    }
+}
+
+dependencies {
+    implementation("androidx.annotation:annotation:1.7.0")
+    implementation("com.google.code.gson:gson:2.10.1")
+}
+GRADLE_EOF
+            echo "✅ Created termux-shared/build.gradle.kts"
+          fi
+
+          # Create AndroidManifest.xml if not exists
+          if [ ! -f "termux-shared/src/main/AndroidManifest.xml" ]; then
+            mkdir -p termux-shared/src/main
+            cat > termux-shared/src/main/AndroidManifest.xml << 'MANIFEST_EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+</manifest>
+MANIFEST_EOF
+            echo "✅ Created AndroidManifest.xml"
+          fi
+
+      - name: Modify settings.gradle.kts for termux-shared
+        run: |
+          echo "🔧 Updating settings.gradle.kts..."
+
+          # Backup original
+          cp settings.gradle.kts settings.gradle.kts.bak 2>/dev/null || true
+
+          # Check if termux-shared is already included
+          if grep -q '":termux-shared"' settings.gradle.kts; then
+            echo "✅ termux-shared already included in settings"
+          else
+            # Add termux-shared include
+            if grep -q 'include(":' settings.gradle.kts; then
+              # Insert before first include
+              sed -i 's/include("/include(":termux-shared"\ninclude("/' settings.gradle.kts
+              echo "✅ Added termux-shared to settings.gradle.kts"
+            else
+              # Create new settings if empty or non-existent
+              echo 'include(":termux-shared")' >> settings.gradle.kts
+              echo "✅ Created settings with termux-shared"
+            fi
+          fi
+
+          cat settings.gradle.kts
+
+      - name: Modify app/build.gradle.kts to use local termux-shared
+        run: |
+          echo "🔧 Updating app/build.gradle.kts..."
+
+          # Backup original
+          cp app/build.gradle.kts app/build.gradle.kts.bak 2>/dev/null || true
+
+          # Replace JitPack termux-shared with local module
+          sed -i 's|implementation(libs.com.termux.termux.shared)|implementation(project(":termux-shared"))|g' app/build.gradle.kts
+
+          echo "✅ Updated app dependencies"
+          grep -n "termux" app/build.gradle.kts || echo "No termux deps found"
+
       - name: Verify Xfuncproto.h exists
         run: |
           if [ -f "tx11/src/main/cpp/xorgproto/include/X11/Xfuncproto.h" ]; then
