@@ -64,6 +64,16 @@ jobs:
             echo "sdk.dir=$ANDROID_HOME" > local.properties
           fi
 
+      - name: Create Android debug keystore
+        run: |
+          KEYSTORE_DIR="/home/runner/.config/.android"
+          mkdir -p "$KEYSTORE_DIR"
+          if [ ! -f "$KEYSTORE_DIR/debug.keystore" ]; then
+            echo "Creating debug keystore at $KEYSTORE_DIR..."
+            keytool -genkey -v -keystore "$KEYSTORE_DIR/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          echo "Debug keystore ready at $KEYSTORE_DIR"
+
       - name: Build ${{ inputs.build_type }} APK
         run: |
           if [ "${{ inputs.build_type }}" = "release" ]; then
