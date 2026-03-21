@@ -120,7 +120,8 @@ class ControlElement(
     fun setBindingAt(index: Int, binding: Binding) {
         if (index >= bindings.size) {
             val oldLength = bindings.size
-            bindings = bindings.copyOf(index + 1)
+            @Suppress("UNCHECKED_CAST")
+            bindings = bindings.copyOf(index + 1) as Array<Binding>
             for (i in oldLength until bindings.size) {
                 bindings[i] = Binding.NONE
             }

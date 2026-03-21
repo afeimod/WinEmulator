@@ -1,7 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.content.Context
-import com.github.ewt45.winemulator.Utils
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -55,7 +54,7 @@ class ControlsProfile(
 
             val elementsArray = JSONArray()
             if (!elementsLoaded && file.isFile) {
-                val profileJson = JSONObject(Utils.Files.readString(file))
+                val profileJson = JSONObject(file.readText())
                 elementsArray.put(profileJson.getJSONArray("elements"))
             } else {
                 for (element in elements) {
@@ -64,7 +63,7 @@ class ControlsProfile(
             }
             data.put("elements", elementsArray)
 
-            Utils.Files.writeString(file, data.toString())
+            file.writeText(data.toString())
         } catch (e: JSONException) {
             e.printStackTrace()
         }
@@ -79,7 +78,7 @@ class ControlsProfile(
         if (!file.isFile) return
 
         try {
-            val profileJson = JSONObject(Utils.Files.readString(file))
+            val profileJson = JSONObject(file.readText())
             val elementsArray = profileJson.getJSONArray("elements")
 
             for (i in 0 until elementsArray.length()) {

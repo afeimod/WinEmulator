@@ -3,10 +3,10 @@ package org.github.ewt45.winemulator.inputcontrols
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.AssetManager
+import android.content.pm.PackageInfo
 import android.media.MediaScannerConnection
 import android.os.Environment
 import androidx.preference.PreferenceManager
-import com.github.ewt45.winemulator.Utils
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
@@ -33,14 +33,19 @@ class InputControlsManager(private val context: Context) {
             profilesDir.mkdir()
         }
 
-        if (Utils.Files.isEmpty(profilesDir)) {
+        if (!profilesDir.isDirectory || profilesDir.listFiles()?.isEmpty() == true) {
             // Copy default profiles from assets
             copyAssetsToDir(context, "inputcontrols/profiles", profilesDir)
             return
         }
 
         val preferences = PreferenceManager.getDefaultSharedPreferences(context)
-        val newVersion = Utils.App.getVersionCode(context)
+        val newVersion = try {
+            val packageInfo: PackageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.longVersionCode.toInt()
+        } catch (e: Exception) {
+            1
+        }
         val oldVersion = preferences.getInt("inputcontrols_app_version", 0)
 
         if (oldVersion == newVersion) return
@@ -153,11 +158,12 @@ class InputControlsManager(private val context: Context) {
         val newFile = ControlsProfile.getProfileFile(context, newId)
 
         try {
-            val data = JSONObject(Utils.Files.readString(ControlsProfile.getProfileFile(context, source.id)))
+            val sourceFile = ControlsProfile.getProfileFile(context, source.id)
+            val data = JSONObject(sourceFile.readText())
             data.put("id", newId)
             data.put("name", newName)
             if (data.has("template")) data.remove("template")
-            Utils.Files.writeString(newFile, data.toString())
+            newFile.writeText(data.toString())
         } catch (e: JSONException) {
             e.printStackTrace()
         }
@@ -184,7 +190,7 @@ class InputControlsManager(private val context: Context) {
             val newId = ++maxProfileId
             val newFile = ControlsProfile.getProfileFile(context, newId)
             data.put("id", newId)
-            Utils.Files.writeString(newFile, data.toString())
+            newFile.writeText(data.toString())
 
             val newProfile = loadProfile(context, newFile) ?: return null
 
