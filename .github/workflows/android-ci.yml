@@ -12,15 +12,9 @@ on:
           - debug
           - release
           - both
-      release_tag:
-        description: 'Release 标签（留空则不发布）'
-        required: false
-        default: 'nightly'
-        type: string
 
 env:
   JAVA_VERSION: '17'
-  GRADLE_VERSION: '8.4'
   ANDROID_COMPILE_SDK: '35'
   ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
   ANDROID_SDK_VERSION: '28'
@@ -101,8 +95,6 @@ jobs:
             NEW_NAME="WinEmulator-${BRANCH_NAME}-v${VERSION_NAME}-${VERSION_CODE}-api${{ matrix.api_level }}-unsigned.apk"
             mv app/build/outputs/apk/debug/app-debug.apk "$NEW_NAME"
             echo "APK_FILE=$NEW_NAME" >> $GITHUB_ENV
-            echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-            echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           fi
       
       - name: Upload debug APK
@@ -115,7 +107,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================
-  # 发布版本构建（注入签名，自动发布到 Release）
+  # 发布版本构建（注入签名 + 自动发布到 nightly Release）
   # ============================================
   release-build:
     name: Release Build
@@ -189,20 +181,7 @@ jobs:
             NEW_NAME="WinEmulator-${BRANCH_NAME}-v${VERSION_NAME}-${VERSION_CODE}-release-unsigned.apk"
             mv app/build/outputs/apk/release/app-release.apk "$NEW_NAME"
             echo "APK_FILE=$NEW_NAME" >> $GITHUB_ENV
-            echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
-            echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           fi
-      
-      - name: Upload release APK to GitHub Release
-        if: ${{ github.event.inputs.release_tag != '' && env.APK_FILE != '' }}
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.event.inputs.release_tag }}
-          files: ${{ env.APK_FILE }}
-          generate_release_notes: true
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Upload release APK as artifact
         if: env.APK_FILE != ''
@@ -212,6 +191,22 @@ jobs:
           path: ${{ env.APK_FILE }}
           retention-days: 30
           if-no-files-found: error
+      
+      - name: Publish to GitHub Release (nightly)
+        if: ${{ env.APK_FILE != '' }}
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nightly
+          name: "Nightly Build"
+          body: |
+            ## 自动构建的夜间版本
+            - 分支: ${{ github.ref_name }}
+            - 提交: ${{ github.sha }}
+            - 构建时间: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          files: ${{ env.APK_FILE }}
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ============================================
   # 代码质量检查（仅在 debug 或 both 时运行）
@@ -366,7 +361,6 @@ jobs:
           echo "**触发事件:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**分支:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
           echo "**构建类型:** ${{ github.event.inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Release 标签:** ${{ github.event.inputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**注意:** 构建的APK文件未经过正式签名，请在发布前使用MT管理器进行签名。" >> $GITHUB_STEP_SUMMARY
+          echo "**注意:** 构建的APK文件未经过正式签名，发布前请用MT管理器签名。" >> $GITHUB_STEP_SUMMARY
