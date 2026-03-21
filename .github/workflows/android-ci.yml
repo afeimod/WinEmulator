@@ -205,7 +205,7 @@ jobs:
             - 构建时间: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           files: ${{ env.APK_FILE }}
           prerelease: true
-          allow_updates: true      # ← 关键添加项
+          overwrite_files: true      # ← 关键添加项
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
