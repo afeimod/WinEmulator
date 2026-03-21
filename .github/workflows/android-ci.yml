@@ -14,7 +14,7 @@ on:
           - both
 
 env:
-  JAVA_VERSION: '17'               # Android Gradle Plugin 8.0+ 需要 Java 17
+  JAVA_VERSION: '17'               # Android Gradle Plugin 需要 Java 17
   GRADLE_VERSION: '8.4'
   ANDROID_COMPILE_SDK: '35'
   ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
@@ -110,7 +110,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================
-  # 发布版本构建（使用 debug 签名，禁用混淆）
+  # 发布版本构建（注入签名，禁用混淆）
   # ============================================
   release-build:
     name: Release Build
@@ -154,46 +154,27 @@ jobs:
           chmod +x gradlew
           ./gradlew --version
       
-      - name: Create debug keystore (if missing)
+      - name: Create debug keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US" 2>/dev/null || true
       
-      - name: Modify build.gradle.kts for release build
+      - name: Inject signing config for release build
         run: |
-          # 备份原始文件
-          cp app/build.gradle.kts app/build.gradle.kts.bak
-          
-          # 禁用 release 构建的混淆和资源压缩（避免因配置错误导致失败）
-          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/g' app/build.gradle.kts
-          sed -i 's/isShrinkResources = true/isShrinkResources = false/g' app/build.gradle.kts
-          
-          # 在 release 块中添加或替换 signingConfig
-          # 如果已有 signingConfig 行，则替换为使用 debug 签名
-          sed -i '/release {/,/}/ s/signingConfig = .*/signingConfig = signingConfigs.debug/g' app/build.gradle.kts
-          
-          # 如果上面没有替换成功（即没有 signingConfig 行），则在 release { 下一行插入
-          if ! grep -q "signingConfig = signingConfigs.debug" app/build.gradle.kts; then
-            sed -i '/release {/a\            signingConfig = signingConfigs.debug' app/build.gradle.kts
-          fi
-          
-          # 确保 debug 签名配置存在（通常默认就有，但为了保险，在 android 块中添加）
-          if ! grep -q "signingConfigs {" app/build.gradle.kts; then
-            sed -i '/android {/a\    signingConfigs {\n        debug {\n            storeFile = file("debug.keystore")\n            storePassword = "android"\n            keyAlias = "androiddebugkey"\n            keyPassword = "android"\n        }\n    }' app/build.gradle.kts
-          fi
-          
-          # 确保 release 块使用 signingConfig
-          echo "Modified build.gradle.kts:"
-          grep -A 20 "release {" app/build.gradle.kts || true
+          # 注入签名配置，让 Android Gradle Plugin 自动使用 debug 密钥为 release 签名
+          echo "android.injected.signing.store.file=$PWD/debug.keystore" >> gradle.properties
+          echo "android.injected.signing.store.password=android" >> gradle.properties
+          echo "android.injected.signing.key.alias=androiddebugkey" >> gradle.properties
+          echo "android.injected.signing.key.password=android" >> gradle.properties
       
-      - name: Build release APK
+      - name: Build release APK (disable minify to avoid potential errors)
         run: |
           ./gradlew assembleRelease \
             -PminSdk=26 \
             -PtargetSdk=${{ env.ANDROID_SDK_VERSION }} \
+            -PminifyEnabled=false \
+            -PshrinkResources=false \
             --no-daemon \
             --stacktrace
-        env:
-          ORG_GRADLE_PROJECT_DEVELOPMENT_TEAM: ""
       
       - name: Rename release APK
         run: |
@@ -208,9 +189,6 @@ jobs:
             echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
             echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           fi
-      
-      - name: Restore original build.gradle.kts
-        run: mv app/build.gradle.kts.bak app/build.gradle.kts || true
       
       - name: Upload release APK
         if: env.APK_FILE != ''
