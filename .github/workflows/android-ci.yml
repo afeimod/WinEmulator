@@ -110,7 +110,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================
-  # 发布版本构建（使用注入签名）
+  # 发布版本构建（使用 debug 签名，禁用混淆）
   # ============================================
   release-build:
     name: Release Build
@@ -154,18 +154,36 @@ jobs:
           chmod +x gradlew
           ./gradlew --version
       
-      - name: Create debug keystore and inject signing config
+      - name: Create debug keystore (if missing)
         run: |
-          # 创建 debug keystore（如果项目没有）
           keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US" 2>/dev/null || true
+      
+      - name: Modify build.gradle.kts for release build
+        run: |
+          # 备份原始文件
+          cp app/build.gradle.kts app/build.gradle.kts.bak
           
-          # 将注入签名配置写入 gradle.properties（Android Gradle Plugin 会自动使用）
-          cat >> gradle.properties << EOF
-          android.injected.signing.store.file=$PWD/debug.keystore
-          android.injected.signing.store.password=android
-          android.injected.signing.key.alias=androiddebugkey
-          android.injected.signing.key.password=android
-          EOF
+          # 禁用 release 构建的混淆和资源压缩（避免因配置错误导致失败）
+          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/g' app/build.gradle.kts
+          sed -i 's/isShrinkResources = true/isShrinkResources = false/g' app/build.gradle.kts
+          
+          # 在 release 块中添加或替换 signingConfig
+          # 如果已有 signingConfig 行，则替换为使用 debug 签名
+          sed -i '/release {/,/}/ s/signingConfig = .*/signingConfig = signingConfigs.debug/g' app/build.gradle.kts
+          
+          # 如果上面没有替换成功（即没有 signingConfig 行），则在 release { 下一行插入
+          if ! grep -q "signingConfig = signingConfigs.debug" app/build.gradle.kts; then
+            sed -i '/release {/a\            signingConfig = signingConfigs.debug' app/build.gradle.kts
+          fi
+          
+          # 确保 debug 签名配置存在（通常默认就有，但为了保险，在 android 块中添加）
+          if ! grep -q "signingConfigs {" app/build.gradle.kts; then
+            sed -i '/android {/a\    signingConfigs {\n        debug {\n            storeFile = file("debug.keystore")\n            storePassword = "android"\n            keyAlias = "androiddebugkey"\n            keyPassword = "android"\n        }\n    }' app/build.gradle.kts
+          fi
+          
+          # 确保 release 块使用 signingConfig
+          echo "Modified build.gradle.kts:"
+          grep -A 20 "release {" app/build.gradle.kts || true
       
       - name: Build release APK
         run: |
@@ -174,6 +192,8 @@ jobs:
             -PtargetSdk=${{ env.ANDROID_SDK_VERSION }} \
             --no-daemon \
             --stacktrace
+        env:
+          ORG_GRADLE_PROJECT_DEVELOPMENT_TEAM: ""
       
       - name: Rename release APK
         run: |
@@ -189,6 +209,9 @@ jobs:
             echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           fi
       
+      - name: Restore original build.gradle.kts
+        run: mv app/build.gradle.kts.bak app/build.gradle.kts || true
+      
       - name: Upload release APK
         if: env.APK_FILE != ''
         uses: actions/upload-artifact@v4
@@ -199,7 +222,7 @@ jobs:
           if-no-files-found: error
 
   # ============================================
-  # 代码质量检查（仅在 debug 或 both 时运行，避免冗余）
+  # 代码质量检查（仅在 debug 或 both 时运行）
   # ============================================
   lint:
     name: Code Lint
