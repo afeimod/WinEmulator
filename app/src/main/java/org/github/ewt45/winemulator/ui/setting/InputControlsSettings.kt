@@ -300,6 +300,7 @@ fun InputControlsSettings(
         selectedProfile?.let { profile ->
             ControlsEditorDialog(
                 profile = profile,
+                dialogState = dialogState,
                 onDismiss = { showControlsEditor = false },
                 onSave = {
                     profile.save()
@@ -316,6 +317,7 @@ fun InputControlsSettings(
 @Composable
 fun ControlsEditorDialog(
     profile: ControlsProfile,
+    dialogState: org.github.ewt45.winemulator.ui.components.ConfirmDialogState,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
