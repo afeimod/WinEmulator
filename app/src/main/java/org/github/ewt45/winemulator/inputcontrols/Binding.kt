@@ -2,6 +2,7 @@ package org.github.ewt45.winemulator.inputcontrols
 
 /**
  * Binding types for control elements
+ * 按键绑定类型
  */
 enum class Binding(
     val keycode: Int = 0,
@@ -13,6 +14,8 @@ enum class Binding(
     NONE(),
 
     // Keyboard bindings - Main keys
+    // 常用按键 - 与配置文件兼容的名称
+    KEY_ESC(1, true),
     KEY_ESCAPE(1, true),
     KEY_F1(59, true),
     KEY_F2(60, true),
@@ -40,6 +43,7 @@ enum class Binding(
     KEY_0(11, true),
     KEY_MINUS(12, true),
     KEY_EQUALS(13, true),
+    KEY_BKSP(14, true),
     KEY_BACKSPACE(14, true),
 
     KEY_TAB(15, true),
@@ -58,6 +62,7 @@ enum class Binding(
     KEY_BACKSLASH(43, true),
 
     KEY_CAPITAL(58, true),
+    KEY_CAPS_LOCK(58, true),
     KEY_A(30, true),
     KEY_S(31, true),
     KEY_D(32, true),
@@ -71,7 +76,10 @@ enum class Binding(
     KEY_APOSTROPHE(40, true),
     KEY_ENTER(28, true),
 
+    KEY_SHIFT_L(42, true),
     KEY_LSHIFT(42, true),
+    KEY_SHIFT_R(54, true),
+    KEY_RSHIFT(54, true),
     KEY_Z(44, true),
     KEY_X(45, true),
     KEY_C(46, true),
@@ -82,34 +90,24 @@ enum class Binding(
     KEY_COMMA(51, true),
     KEY_PERIOD(52, true),
     KEY_SLASH(53, true),
-    KEY_RSHIFT(54, true),
 
+    // Control keys - 兼容多种命名方式
+    KEY_CTRL_L(29, true),
+    KEY_LCTRL(29, true),
     KEY_LCONTROL(29, true),
-    KEY_LWIN(125, true),
-    KEY_LMENU(56, true),
-    KEY_SPACE(57, true),
-    KEY_RMENU(126, true),
-    KEY_RWIN(127, true),
+    KEY_CTRL_R(157, true),
+    KEY_RCTRL(157, true),
     KEY_RCONTROL(157, true),
 
-    // Numpad
-    NUMPAD_0(82, true),
-    NUMPAD_1(79, true),
-    NUMPAD_2(80, true),
-    NUMPAD_3(81, true),
-    NUMPAD_4(75, true),
-    NUMPAD_5(76, true),
-    NUMPAD_6(77, true),
-    NUMPAD_7(71, true),
-    NUMPAD_8(72, true),
-    NUMPAD_9(73, true),
-    NUMPAD_DECIMAL(83, true),
-    NUMPAD_DIVIDE(84, true),
-    NUMPAD_MULTIPLY(85, true),
-    NUMPAD_MINUS(86, true),
-    NUMPAD_PLUS(87, true),
-    NUMPAD_EQUAL(117, true),
-    NUMPAD_ENTER(156, true),
+    KEY_LWIN(125, true),
+    KEY_LMENU(56, true),
+    KEY_LALT(56, true),
+    KEY_ALT_L(56, true),
+    KEY_SPACE(57, true),
+    KEY_RMENU(126, true),
+    KEY_RALT(126, true),
+    KEY_ALT_R(126, true),
+    KEY_RWIN(127, true),
 
     // Navigation keys
     KEY_UP(103, true),
@@ -118,12 +116,58 @@ enum class Binding(
     KEY_RIGHT(106, true),
     KEY_INSERT(110, true),
     KEY_HOME(102, true),
-    KEY_PAGEUP(104, true),
-    KEY_DELETE(111, true),
     KEY_END(107, true),
+    KEY_PGUP(104, true),
+    KEY_PAGEUP(104, true),
+    KEY_PGDN(109, true),
     KEY_PAGEDOWN(109, true),
+    KEY_DELETE(111, true),
+    KEY_DEL(111, true),
+    KEY_PRTSCN(127, true),
+    KEY_PRINT(127, true),
+    KEY_SCROLL_LOCK(70, true),
+    KEY_PAUSE(197, true),
 
-    // Mouse bindings
+    // Numpad - 兼容多种命名方式
+    NUMPAD_0(82, true),
+    KEY_KP_0(82, true),
+    NUMPAD_1(79, true),
+    KEY_KP_1(79, true),
+    NUMPAD_2(80, true),
+    KEY_KP_2(80, true),
+    NUMPAD_3(81, true),
+    KEY_KP_3(81, true),
+    NUMPAD_4(75, true),
+    KEY_KP_4(75, true),
+    NUMPAD_5(76, true),
+    KEY_KP_5(76, true),
+    NUMPAD_6(77, true),
+    KEY_KP_6(77, true),
+    NUMPAD_7(71, true),
+    KEY_KP_7(71, true),
+    NUMPAD_8(72, true),
+    KEY_KP_8(72, true),
+    NUMPAD_9(73, true),
+    KEY_KP_9(73, true),
+    NUMPAD_DECIMAL(83, true),
+    KEY_KP_DECIMAL(83, true),
+    NUMPAD_DIVIDE(84, true),
+    KEY_KP_DIVIDE(84, true),
+    NUMPAD_MULTIPLY(85, true),
+    KEY_KP_MULTIPLY(85, true),
+    NUMPAD_MINUS(86, true),
+    KEY_KP_SUBTRACT(86, true),
+    NUMPAD_PLUS(87, true),
+    KEY_KP_ADD(87, true),
+    NUMPAD_ENTER(156, true),
+    KEY_KP_ENTER(156, true),
+
+    // Additional special keys
+    KEY_NUM_LOCK(69, true),
+    KEY_NUMLOCK(69, true),
+    KEY_SCROLL(151, true),
+
+    // Mouse bindings - 鼠标绑定
     MOUSE_LEFT_BUTTON(0, false, true),
     MOUSE_RIGHT_BUTTON(0, false, true),
     MOUSE_MIDDLE_BUTTON(0, false, true),
@@ -136,7 +180,7 @@ enum class Binding(
     MOUSE_LEFT_RIGHT(0, false, true),
     MOUSE_TOUCHMODE_SWITCH(0, false, true),
 
-    // Gamepad bindings
+    // Gamepad bindings - 手柄绑定
     GAMEPAD_BUTTON_A(0, false, false, true),
     GAMEPAD_BUTTON_B(0, false, false, true),
     GAMEPAD_BUTTON_X(0, false, false, true),
@@ -164,11 +208,49 @@ enum class Binding(
     GAMEPAD_RIGHT_THUMB_RIGHT(0, false, false, true);
 
     companion object {
+        /**
+         * 从字符串解析Binding，支持多种命名变体
+         */
         fun fromString(name: String): Binding {
             return try {
+                // 直接匹配
                 valueOf(name)
             } catch (e: IllegalArgumentException) {
-                NONE
+                // 尝试常见的别名映射
+                when (name) {
+                    "KEY_ESC" -> KEY_ESC
+                    "KEY_BKSP", "KEY_BACKSPACE" -> KEY_BKSP
+                    "KEY_SHIFT", "KEY_LSHIFT" -> KEY_SHIFT_L
+                    "KEY_RSHIFT" -> KEY_SHIFT_R
+                    "KEY_CTRL", "KEY_LCTRL", "KEY_LCONTROL" -> KEY_CTRL_L
+                    "KEY_RCTRL", "KEY_RCONTROL" -> KEY_CTRL_R
+                    "KEY_ALT", "KEY_LALT" -> KEY_ALT_L
+                    "KEY_RALT" -> KEY_ALT_R
+                    "KEY_DELETE" -> KEY_DEL
+                    "KEY_PAGEUP", "KEY_PG_UP" -> KEY_PGUP
+                    "KEY_PAGEDOWN", "KEY_PG_DOWN" -> KEY_PGDN
+                    "KEY_PRINT" -> KEY_PRTSCN
+                    "KEY_CAPS" -> KEY_CAPITAL
+                    "KEY_NUMLOCK" -> KEY_NUM_LOCK
+                    "KEY_SCROLL" -> KEY_SCROLL_LOCK
+                    "KEY_KP0", "NUMPAD_0" -> NUMPAD_0
+                    "KEY_KP1", "NUMPAD_1" -> NUMPAD_1
+                    "KEY_KP2", "NUMPAD_2" -> NUMPAD_2
+                    "KEY_KP3", "NUMPAD_3" -> NUMPAD_3
+                    "KEY_KP4", "NUMPAD_4" -> NUMPAD_4
+                    "KEY_KP5", "NUMPAD_5" -> NUMPAD_5
+                    "KEY_KP6", "NUMPAD_6" -> NUMPAD_6
+                    "KEY_KP7", "NUMPAD_7" -> NUMPAD_7
+                    "KEY_KP8", "NUMPAD_8" -> NUMPAD_8
+                    "KEY_KP9", "NUMPAD_9" -> NUMPAD_9
+                    "KEY_KP_DIVIDE" -> NUMPAD_DIVIDE
+                    "KEY_KP_MULTIPLY" -> NUMPAD_MULTIPLY
+                    "KEY_KP_SUBTRACT" -> NUMPAD_MINUS
+                    "KEY_KP_ADD" -> NUMPAD_PLUS
+                    "KEY_KP_DECIMAL" -> NUMPAD_DECIMAL
+                    "KEY_KP_ENTER" -> NUMPAD_ENTER
+                    else -> NONE
+                }
             }
         }
 
@@ -179,7 +261,17 @@ enum class Binding(
         fun gamepadBindings(): List<Binding> = entries.filter { it.isGamepad }
 
         fun keyboardBindingLabels(): Array<String> =
-            keyboardBindings().map { it.name.replace("KEY_", "").replace("NUMPAD_", "NP") }.toTypedArray()
+            keyboardBindings().map { binding ->
+                // 简化标签显示
+                binding.name
+                    .replace("KEY_", "")
+                    .replace("NUMPAD_", "NP")
+                    .replace("L", "L ")
+                    .replace("R", "R ")
+                    .replace("CTRL", "CTRL")
+                    .replace("SHIFT", "SHIFT")
+                    .replace("ALT", "ALT")
+            }.toTypedArray()
 
         fun keyboardBindingValues(): Array<Binding> =
             keyboardBindings().toTypedArray()

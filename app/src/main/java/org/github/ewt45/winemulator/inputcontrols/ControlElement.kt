@@ -56,17 +56,62 @@ class ControlElement(
     }
 
     var type: Type = Type.BUTTON
+        set(value) {
+            if (field != value) {
+                field = value
+                reset()
+            }
+        }
     var shape: Shape = Shape.CIRCLE
+        set(value) {
+            if (field != value) {
+                field = value
+                boundingBoxNeedsUpdate = true
+            }
+        }
     private var bindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE, Binding.NONE, Binding.NONE)
     var scale: Float = 1.0f
+        set(value) {
+            if (field != value) {
+                field = value
+                boundingBoxNeedsUpdate = true
+            }
+        }
     var x: Int = 0
+        set(value) {
+            if (field != value) {
+                field = value
+                boundingBoxNeedsUpdate = true
+            }
+        }
     var y: Int = 0
+        set(value) {
+            if (field != value) {
+                field = value
+                boundingBoxNeedsUpdate = true
+            }
+        }
     var isSelected: Boolean = false
     var isToggleSwitch: Boolean = false
     var text: String = ""
+        set(value) {
+            field = value
+        }
     var iconId: Byte = 0
+        set(value) {
+            field = value
+        }
     var range: Range? = null
+        set(value) {
+            field = value
+        }
     var orientation: Byte = 0 // 0 = horizontal, 1 = vertical
+        set(value) {
+            if (field != value) {
+                field = value
+                boundingBoxNeedsUpdate = true
+            }
+        }
 
     private var currentPointerId: Int = -1
     private val boundingBox: Rect = Rect()
@@ -76,8 +121,20 @@ class ControlElement(
     private var touchTime: Long? = null
 
     private fun reset() {
-        setBinding(Binding.NONE)
+        // Note: Don't reset bindings here - they are loaded from JSON separately
+        // The bindings array is preserved during loadElements() and only
+        // gets reset when creating new elements
 
+        text = ""
+        iconId = 0
+        range = null
+        boundingBoxNeedsUpdate = true
+    }
+
+    /**
+     * Called when creating a new element to initialize default bindings
+     */
+    fun initDefaultBindings() {
         when (type) {
             Type.D_PAD, Type.STICK -> {
                 bindings = arrayOf(Binding.KEY_W, Binding.KEY_D, Binding.KEY_S, Binding.KEY_A)
@@ -95,11 +152,6 @@ class ControlElement(
             }
             else -> {}
         }
-
-        text = ""
-        iconId = 0
-        range = null
-        boundingBoxNeedsUpdate = true
     }
 
     fun getBindingCount(): Int = bindings.size

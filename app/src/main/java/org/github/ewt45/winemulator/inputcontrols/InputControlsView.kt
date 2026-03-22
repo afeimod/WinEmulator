@@ -90,6 +90,7 @@ class InputControlsView(
             val element = ControlElement(this)
             element.x = cursor.x
             element.y = cursor.y
+            element.initDefaultBindings()
             profile!!.addElement(element)
             profile!!.save()
             selectElement(element)
@@ -278,20 +279,63 @@ class InputControlsView(
             }
         }
 
-        // Draw text
-        val text = getDisplayText(element)
-        paint.textSize = minOf(
-            calculateTextSizeForWidth(paint, text, box.width() - paint.strokeWidth * 2),
-            snappingSize * 2 * element.scale
-        )
-        paint.textAlign = Paint.Align.CENTER
-        paint.style = Paint.Style.FILL
-        paint.color = primaryColor
-        canvas.drawText(
-            text, cx,
-            cy - (paint.descent() + paint.ascent()) * 0.5f,
-            paint
-        )
+        // Draw icon if iconId > 0
+        if (element.iconId > 0) {
+            drawIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat(), element.iconId.toInt(), element.shape, element.scale)
+        } else {
+            // Draw text
+            val text = getDisplayText(element)
+            paint.textSize = minOf(
+                calculateTextSizeForWidth(paint, text, box.width() - paint.strokeWidth * 2),
+                snappingSize * 2 * element.scale
+            )
+            paint.textAlign = Paint.Align.CENTER
+            paint.style = Paint.Style.FILL
+            paint.color = primaryColor
+            canvas.drawText(
+                text, cx,
+                cy - (paint.descent() + paint.ascent()) * 0.5f,
+                paint
+            )
+        }
+    }
+
+    private fun drawIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float, iconId: Int, shape: Shape, elementScale: Float = 1.0f) {
+        val iconBitmap = getIconBitmap(iconId)
+        if (iconBitmap != null) {
+            val margin = (snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * elementScale).toInt()
+            val halfSize = ((minOf(width, height) - margin) * 0.5f).toInt()
+
+            val srcRect = Rect(0, 0, iconBitmap.width, iconBitmap.height)
+            val dstRect = Rect(
+                (cx - halfSize).toInt(),
+                (cy - halfSize).toInt(),
+                (cx + halfSize).toInt(),
+                (cy + halfSize).toInt()
+            )
+
+            paint.colorFilter = null
+            canvas.drawBitmap(iconBitmap, srcRect, dstRect, paint)
+        }
+    }
+
+    private var iconCache = mutableMapOf<Byte, Bitmap?>()
+
+    private fun getIconBitmap(iconId: Byte): Bitmap? {
+        if (iconCache.containsKey(iconId)) {
+            return iconCache[iconId]
+        }
+
+        try {
+            context.assets.open("inputcontrols/icons/$iconId.png").use { inputStream ->
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                iconCache[iconId] = bitmap
+                return bitmap
+            }
+        } catch (e: Exception) {
+            // Icon not found, return null
+        }
+        return null
     }
 
     private fun drawDPad(canvas: Canvas, element: ControlElement, box: Rect) {
