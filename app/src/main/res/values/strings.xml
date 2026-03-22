@@ -128,7 +128,6 @@
     <string name="open_file">打开文件</string>
     <string name="download_file">下载文件</string>
     <string name="do_you_want_to_download_the_selected_profiles">是否下载选中的配置？</string>
-    <string name="unable_to_load_profile_list">无法加载配置列表</string>
     <string name="copy">复制</string>
     <string name="installed_version">已安装版本</string>
     <string name="unable_to_download_file">无法下载文件</string>
