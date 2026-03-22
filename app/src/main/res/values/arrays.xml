@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="binding_type_entries">
+        <item>Keyboard</item>
+        <item>Mouse</item>
+        <item>Gamepad</item>
+    </string-array>
+</resources>
