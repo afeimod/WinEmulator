@@ -33,8 +33,11 @@ class InputControlsManager(private val context: Context) {
             profilesDir.mkdir()
         }
 
-        if (!profilesDir.isDirectory || profilesDir.listFiles()?.isEmpty() == true) {
-            // Copy default profiles from assets
+        // Check if profiles directory is empty
+        val isEmpty = profilesDir.listFiles()?.isEmpty() != false
+
+        if (isEmpty) {
+            // Copy default profiles from assets (inputcontrols/profiles/)
             copyAssetsToDir(context, "inputcontrols/profiles", profilesDir)
             return
         }
@@ -71,7 +74,12 @@ class InputControlsManager(private val context: Context) {
                 }
 
                 if (targetFile != null) {
-                    copyAssetsToDir(context, assetPath, profilesDir)
+                    // Update existing profiles with new versions from assets
+                    assetManager.open(assetPath).use { input ->
+                        targetFile!!.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -126,7 +134,7 @@ class InputControlsManager(private val context: Context) {
             }
         }
 
-        profiles.sort()
+        profiles.sortWith(compareBy { it.id })
         profilesLoaded = true
     }
 
@@ -239,6 +247,10 @@ class InputControlsManager(private val context: Context) {
             return profilesDir
         }
 
+        fun getProfileFile(context: Context, id: Int): File {
+            return File(getProfilesDir(context), "controls-$id.icp")
+        }
+
         fun loadProfile(context: Context, file: File): ControlsProfile? {
             return try {
                 loadProfile(context, FileInputStream(file))
@@ -255,7 +267,8 @@ class InputControlsManager(private val context: Context) {
 
                     val profileId = jsonObject.getInt("id")
                     val profileName = jsonObject.optString("name", "Unnamed")
-                    val cursorSpeed = jsonObject.optDouble("cursorSpeed", 1.0).toFloat()
+                    val cursorSpeed = if (jsonObject.has("cursorSpeed"))
+                        jsonObject.getDouble("cursorSpeed").toFloat() else 1.0f
 
                     val profile = ControlsProfile(context, profileId)
                     profile.name = profileName

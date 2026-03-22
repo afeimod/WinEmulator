@@ -121,5 +121,9 @@ class ControlsProfile(
         fun getProfileFile(context: Context, id: Int): File {
             return File(InputControlsManager.getProfilesDir(context), "controls-$id.icp")
         }
+
+        fun loadProfile(context: Context, file: File): ControlsProfile? {
+            return InputControlsManager.loadProfile(context, file)
+        }
     }
 }

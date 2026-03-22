@@ -1,3 +1,47 @@
 <resources>
     <string name="app_name">Win模拟器</string>
+
+    <!-- Input Controls -->
+    <string name="input_controls">输入控制</string>
+    <string name="select_profile">选择配置</string>
+    <string name="no_profile_selected">未选择配置</string>
+    <string name="no_control_element_selected">未选择控件元素</string>
+    <string name="profile_name">配置名称</string>
+    <string name="add_profile">添加配置</string>
+    <string name="edit_profile">编辑配置</string>
+    <string name="duplicate_profile">复制配置</string>
+    <string name="remove_profile">删除配置</string>
+    <string name="import_profile">导入配置</string>
+    <string name="export_profile">导出配置</string>
+    <string name="edit_controls">编辑控件</string>
+
+    <!-- Bindings -->
+    <string name="binding">绑定</string>
+    <string name="binding_secondary">次要绑定</string>
+    <string name="binding_up">上</string>
+    <string name="binding_right">右</string>
+    <string name="binding_down">下</string>
+    <string name="binding_left">左</string>
+
+    <!-- Dialogs -->
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
+    <string name="ok">确定</string>
+    <string name="yes">是</string>
+    <string name="no">否</string>
+    <string name="do_you_want_to_duplicate_this_profile">是否复制此配置？</string>
+    <string name="do_you_want_to_remove_this_profile">是否删除此配置？</string>
+
+    <!-- Settings -->
+    <string name="settings">设置</string>
+    <string name="cursor_speed">光标速度</string>
+    <string name="overlay_opacity">覆盖层透明度</string>
+    <string name="show_touchscreen_controls">显示触摸屏控件</string>
+
+    <!-- Profile exported -->
+    <string name="profile_exported_to">配置已导出至</string>
+    <string name="unable_to_import_profile">无法导入配置</string>
+    <string name="unable_to_load_profile_list">无法加载配置列表</string>
+    <string name="downloading_file">正在下载文件…</string>
+    <string name="loading">加载中…</string>
 </resources>

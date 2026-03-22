@@ -49,6 +49,12 @@
             <!-- </intent-filter> -->
         </activity>
 
+        <activity
+            android:name="org.github.ewt45.winemulator.ui.ControlsEditorActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.MainTheme" />
+
         <service
             android:name="org.github.ewt45.winemulator.emu.X11Service"
             android:enabled="true"

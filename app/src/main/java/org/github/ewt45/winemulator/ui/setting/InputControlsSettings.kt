@@ -2,6 +2,8 @@ package org.github.ewt45.winemulator.ui.setting
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.github.ewt45.winemulator.inputcontrols.ControlsProfile
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
+import org.github.ewt45.winemulator.ui.ControlsEditorActivity
 import org.github.ewt45.winemulator.ui.components.ConfirmDialog
 import org.github.ewt45.winemulator.ui.components.rememberConfirmDialogState
 import java.io.File
@@ -178,9 +181,15 @@ fun InputControlsSettings(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Edit controls button
+            // Edit controls button - launches ControlsEditorActivity
             Button(
-                onClick = { showControlsEditor = true },
+                onClick = {
+                    selectedProfile?.let { profile ->
+                        val intent = Intent(context, ControlsEditorActivity::class.java)
+                        intent.putExtra(ControlsEditorActivity.EXTRA_PROFILE_ID, profile.id)
+                        context.startActivity(intent)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Edit, contentDescription = null)

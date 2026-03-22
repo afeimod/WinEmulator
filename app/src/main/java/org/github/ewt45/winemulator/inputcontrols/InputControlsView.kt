@@ -17,15 +17,9 @@ import kotlin.math.*
  */
 @SuppressLint("ViewConstructor")
 class InputControlsView(
-    private val context: Context,
+    context: Context,
     private var editMode: Boolean = false
 ) : View(context) {
-
-    interface InputEventHandler {
-        fun onKeyEvent(keycode: Int, isDown: Boolean)
-        fun onPointerMove(dx: Int, dy: Int)
-        fun onPointerButton(button: Int, isDown: Boolean)
-    }
 
     var inputEventHandler: InputEventHandler? = null
     var profile: ControlsProfile? = null
