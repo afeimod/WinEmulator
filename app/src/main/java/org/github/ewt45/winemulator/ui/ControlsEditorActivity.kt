@@ -228,7 +228,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    private fun loadBindingSpinners(element: ControlElement, container: View) {
+    private fun loadBindingSpinners(element: ControlElement, container: LinearLayout) {
         container.removeAllViews()
 
         when (element.type) {
@@ -246,11 +246,11 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    private fun loadBindingSpinner(element: ControlElement, container: View, index: Int, titleResId: Int) {
-        val view = LayoutInflater.from(this).inflate(R.layout.binding_field, container, false)
-        (view.findViewById<TextView>(R.id.TVTitle)).setText(titleResId)
-        val sBindingType = view.findViewById<Spinner>(R.id.SBindingType)
-        val sBinding = view.findViewById<Spinner>(R.id.SBinding)
+    private fun loadBindingSpinner(element: ControlElement, container: LinearLayout, index: Int, titleResId: Int) {
+        val bindingView = LayoutInflater.from(this).inflate(R.layout.binding_field, container, false)
+        (bindingView.findViewById<TextView>(R.id.TVTitle)).setText(titleResId)
+        val sBindingType = bindingView.findViewById<Spinner>(R.id.SBindingType)
+        val sBinding = bindingView.findViewById<Spinner>(R.id.SBinding)
 
         val update = Runnable {
             val bindingEntries: Array<String>
@@ -301,7 +301,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         }
 
         update.run()
-        container.addView(view)
+        container.addView(bindingView)
     }
 
     private fun setSpinnerSelectionFromValue(spinner: Spinner, value: String) {
