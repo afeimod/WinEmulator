@@ -57,19 +57,16 @@ fun X11Screen(x11Content: (Context) -> View, onNavigateToOthers: (Destination) -
             profile?.let { setProfile(it) }
             inputEventHandler = object : InputEventHandler {
                 override fun onKeyEvent(keycode: Int, isDown: Boolean) {
-                    // 转发键盘事件
                     // TODO: 替换为实际的 X11 输入调用
                     android.util.Log.d("X11Screen", "KeyEvent: $keycode, down=$isDown")
                 }
 
                 override fun onPointerMove(dx: Int, dy: Int) {
-                    // 转发鼠标移动
                     // TODO: 替换为实际的 X11 输入调用
                     android.util.Log.d("X11Screen", "PointerMove: $dx, $dy")
                 }
 
                 override fun onPointerButton(button: Int, isDown: Boolean) {
-                    // 转发鼠标按键
                     // TODO: 替换为实际的 X11 输入调用
                     android.util.Log.d("X11Screen", "MouseButton: $button, down=$isDown")
                 }

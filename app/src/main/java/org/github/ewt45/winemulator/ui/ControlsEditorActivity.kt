@@ -91,7 +91,12 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
             R.id.BTElementSettings -> {
                 val selectedElement = inputControlsView.getSelectedElement()
                 if (selectedElement != null) {
-                    showControlElementSettings(v, selectedElement)
+                    try {
+                        showControlElementSettings(v, selectedElement)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        Toast.makeText(this, "无法打开设置界面: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
                     Toast.makeText(this, R.string.no_control_element_selected, Toast.LENGTH_SHORT).show()
                 }

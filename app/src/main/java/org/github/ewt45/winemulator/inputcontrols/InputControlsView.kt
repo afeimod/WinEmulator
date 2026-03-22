@@ -59,6 +59,10 @@ class InputControlsView(
     private val secondaryColor: Int
         get() = Color.argb((overlayOpacity * 255).toInt(), 2, 119, 189)
 
+    // 用于检测尺寸变化，重新加载元素坐标
+    private var lastMaxWidth = 0
+    private var lastMaxHeight = 0
+
     init {
         setClickable(true)
         setFocusable(true)
@@ -73,6 +77,33 @@ class InputControlsView(
         }
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // 当视图尺寸变化时，重新加载元素以重新计算坐标
+        if (w > 0 && h > 0 && profile != null) {
+            if (maxWidth != lastMaxWidth || maxHeight != lastMaxHeight) {
+                lastMaxWidth = maxWidth
+                lastMaxHeight = maxHeight
+                reloadElements()
+            }
+        }
+    }
+
+    private fun reloadElements() {
+        if (profile != null) {
+            // 保存当前选中的元素（如果有）
+            val selected = selectedElement
+            // 重新加载元素（会更新所有元素的坐标）
+            profile!!.loadElements(this)
+            // 恢复选中状态
+            if (selected != null) {
+                val newSelected = profile!!.getElements().find { it == selected }
+                selectElement(newSelected)
+            }
+        }
+        invalidate()
+    }
+
     fun setEditMode(mode: Boolean) {
         editMode = mode
     }
@@ -80,6 +111,10 @@ class InputControlsView(
     fun setProfile(profile: ControlsProfile?) {
         this.profile = profile
         deselectAllElements()
+        // 立即加载元素，但可能视图尚未测量，所以等到 onSizeChanged 再实际加载
+        if (width > 0 && height > 0) {
+            reloadElements()
+        }
     }
 
     fun getSelectedElement(): ControlElement? = selectedElement
@@ -170,7 +205,7 @@ class InputControlsView(
 
         if (profile != null) {
             if (!profile!!.isElementsLoaded()) {
-                profile!!.loadElements(this)
+                reloadElements()
             }
             if (showTouchscreenControls) {
                 profile!!.getElements().forEach { it ->
@@ -516,8 +551,10 @@ class InputControlsView(
                     }
 
                     if (!handled) {
+                        // 让 touchpadView 处理（如果存在），但不一定消费事件
                         touchpadView?.onTouchEvent(event)
-                        handled = true
+                        // 注意：即使 touchpadView 处理了，我们也不应该返回 true，因为 X11 仍需接收
+                        // 这里 handled 保持 false，以便返回 false 让 X11 处理
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -536,7 +573,7 @@ class InputControlsView(
 
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
-                        handled = true
+                        // 同样，不改变 handled
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
@@ -548,10 +585,11 @@ class InputControlsView(
 
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
-                        handled = true
+                        // 不改变 handled
                     }
                 }
             }
+            // 只有虚拟按键真正处理了触摸，才返回 true，否则返回 false 让 X11 处理
             return handled
         }
         return false

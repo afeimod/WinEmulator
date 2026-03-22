@@ -120,7 +120,6 @@ class InputControlsFragment : Fragment() {
         view.findViewById<Button>(R.id.BTAddProfile).setOnClickListener {
             showInputDialog(R.string.profile_name, null) { name ->
                 currentProfile = manager.createProfile(name)
-                // 保存当前配置 ID
                 preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
@@ -144,7 +143,6 @@ class InputControlsFragment : Fragment() {
         view.findViewById<Button>(R.id.BTDuplicateProfile).setOnClickListener {
             if (currentProfile != null) {
                 currentProfile = manager.duplicateProfile(currentProfile!!)
-                // 保存当前配置 ID
                 preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
@@ -157,7 +155,6 @@ class InputControlsFragment : Fragment() {
         view.findViewById<Button>(R.id.BTRemoveProfile).setOnClickListener {
             if (currentProfile != null) {
                 manager.removeProfile(currentProfile!!)
-                // 删除后清除 ID，并自动选择第一个可用配置
                 preferences.edit().remove(SELECTED_PROFILE_ID).apply()
                 currentProfile = manager.getProfiles().firstOrNull()
                 if (currentProfile != null) {
@@ -178,7 +175,6 @@ class InputControlsFragment : Fragment() {
             }
             importProfileCallback = { profile ->
                 currentProfile = profile
-                // 保存导入的配置 ID
                 preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
@@ -234,7 +230,6 @@ class InputControlsFragment : Fragment() {
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 currentProfile = if (position > 0) profiles[position - 1] else null
-                // 保存选中的配置 ID 到 SharedPreferences
                 val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
                 if (currentProfile != null) {
                     prefs.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
