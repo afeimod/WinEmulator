@@ -8,30 +8,22 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.Spinner
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import a.io.github.ewt45.winemulator.R
-import org.github.ewt45.winemulator.inputcontrols.ControlsProfile as WinEmuControlsProfile
-import org.github.ewt45.winemulator.inputcontrols.InputControlsManager as WinEmuInputControlsManager
+import org.github.ewt45.winemulator.inputcontrols.ControlsProfile
+import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
 import org.json.JSONObject
-import java.io.File
 import java.util.ArrayList
 
 class InputControlsFragment : Fragment() {
-    private lateinit var manager: WinEmuInputControlsManager
-    private var currentProfile: WinEmuControlsProfile? = null
+    private lateinit var manager: InputControlsManager
+    private var currentProfile: ControlsProfile? = null
     private var updateLayout: Runnable? = null
-    private var importProfileCallback: ((WinEmuControlsProfile) -> Unit)? = null
+    private var importProfileCallback: ((ControlsProfile) -> Unit)? = null
 
     companion object {
         const val SELECTED_PROFILE_ID = "selected_profile_id"
@@ -62,7 +54,7 @@ class InputControlsFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        manager = WinEmuInputControlsManager(requireContext())
+        manager = InputControlsManager(requireContext())
     }
 
     override fun onCreateView(
@@ -78,9 +70,9 @@ class InputControlsFragment : Fragment() {
         val context = requireContext()
         val preferences = PreferenceManager.getDefaultSharedPreferences(context)
 
-        // Load profile from arguments or preferences
-        val selectedProfileId = arguments?.getInt(SELECTED_PROFILE_ID, 0) ?: 0
-        currentProfile = if (selectedProfileId > 0) manager.getProfile(selectedProfileId) else null
+        // 从 SharedPreferences 加载上次选中的配置 ID
+        val savedProfileId = preferences.getInt(SELECTED_PROFILE_ID, 0)
+        currentProfile = if (savedProfileId > 0) manager.getProfile(savedProfileId) else null
 
         val sProfile = view.findViewById<Spinner>(R.id.SProfile)
         loadProfileSpinner(sProfile)
@@ -124,15 +116,18 @@ class InputControlsFragment : Fragment() {
         val overlayOpacity = preferences.getFloat("overlay_opacity", 0.4f)
         sbUiOpacity.progress = (overlayOpacity * 100).toInt()
 
-        // Profile management buttons
+        // 新建配置
         view.findViewById<Button>(R.id.BTAddProfile).setOnClickListener {
             showInputDialog(R.string.profile_name, null) { name ->
                 currentProfile = manager.createProfile(name)
+                // 保存当前配置 ID
+                preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
             }
         }
 
+        // 编辑配置名称
         view.findViewById<Button>(R.id.BTEditProfile).setOnClickListener {
             if (currentProfile != null) {
                 showInputDialog(R.string.profile_name, currentProfile!!.name) { name ->
@@ -145,9 +140,12 @@ class InputControlsFragment : Fragment() {
             }
         }
 
+        // 复制配置
         view.findViewById<Button>(R.id.BTDuplicateProfile).setOnClickListener {
             if (currentProfile != null) {
                 currentProfile = manager.duplicateProfile(currentProfile!!)
+                // 保存当前配置 ID
+                preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
             } else {
@@ -155,10 +153,16 @@ class InputControlsFragment : Fragment() {
             }
         }
 
+        // 删除配置
         view.findViewById<Button>(R.id.BTRemoveProfile).setOnClickListener {
             if (currentProfile != null) {
                 manager.removeProfile(currentProfile!!)
-                currentProfile = null
+                // 删除后清除 ID，并自动选择第一个可用配置
+                preferences.edit().remove(SELECTED_PROFILE_ID).apply()
+                currentProfile = manager.getProfiles().firstOrNull()
+                if (currentProfile != null) {
+                    preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
+                }
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
             } else {
@@ -166,6 +170,7 @@ class InputControlsFragment : Fragment() {
             }
         }
 
+        // 导入配置
         view.findViewById<Button>(R.id.BTImportProfile).setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -173,12 +178,15 @@ class InputControlsFragment : Fragment() {
             }
             importProfileCallback = { profile ->
                 currentProfile = profile
+                // 保存导入的配置 ID
+                preferences.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
                 loadProfileSpinner(sProfile)
                 updateLayout!!.run()
             }
             startActivityForResult(intent, 1)
         }
 
+        // 导出配置
         view.findViewById<Button>(R.id.BTExportProfile).setOnClickListener {
             if (currentProfile != null) {
                 val exportedFile = manager.exportProfile(currentProfile!!)
@@ -190,6 +198,7 @@ class InputControlsFragment : Fragment() {
             }
         }
 
+        // 打开编辑器
         view.findViewById<Button>(R.id.BTControlsEditor).setOnClickListener {
             if (currentProfile != null) {
                 val intent = Intent(context, ControlsEditorActivity::class.java)
@@ -225,6 +234,13 @@ class InputControlsFragment : Fragment() {
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 currentProfile = if (position > 0) profiles[position - 1] else null
+                // 保存选中的配置 ID 到 SharedPreferences
+                val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                if (currentProfile != null) {
+                    prefs.edit().putInt(SELECTED_PROFILE_ID, currentProfile!!.id).apply()
+                } else {
+                    prefs.edit().remove(SELECTED_PROFILE_ID).apply()
+                }
                 updateLayout?.run()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}

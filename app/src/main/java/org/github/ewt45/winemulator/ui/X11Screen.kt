@@ -18,55 +18,88 @@ import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.preference.PreferenceManager
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
+import org.github.ewt45.winemulator.inputcontrols.InputEventHandler
+import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
+import org.github.ewt45.winemulator.inputcontrols.InputControlsView
 
 @Composable
 fun X11Screen(x11Content: (Context) -> View, onNavigateToOthers: (Destination) -> Unit) {
-    X11ScreenImpl(x11Content, onNavigateToOthers)
-}
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
-@Composable
-private fun X11ScreenImpl(
-    x11Content: (Context) -> View,
-    onNavigateToOthers: (Destination) -> Unit,
-) {
-    var currOffset by remember { mutableStateOf(Offset(0f, 0f)) }
+    // 加载当前选中的虚拟按键配置 ID
+    val currentProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+    val manager = remember { InputControlsManager(context) }
+    val profile = remember(currentProfileId) {
+        if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
+    }
 
-    Box(Modifier.onGloballyPositioned { }) {
-        AndroidView(x11Content, Modifier.fillMaxSize())
+    // 创建 InputControlsView，并设置配置和事件处理器
+    val inputControlsView = remember {
+        InputControlsView(context, editMode = false).apply {
+            profile?.let { setProfile(it) }
+            inputEventHandler = object : InputEventHandler {
+                override fun onKeyEvent(keycode: Int, isDown: Boolean) {
+                    // 转发键盘事件
+                    // TODO: 替换为实际的 X11 输入调用
+                    android.util.Log.d("X11Screen", "KeyEvent: $keycode, down=$isDown")
+                }
+
+                override fun onPointerMove(dx: Int, dy: Int) {
+                    // 转发鼠标移动
+                    // TODO: 替换为实际的 X11 输入调用
+                    android.util.Log.d("X11Screen", "PointerMove: $dx, $dy")
+                }
+
+                override fun onPointerButton(button: Int, isDown: Boolean) {
+                    // 转发鼠标按键
+                    // TODO: 替换为实际的 X11 输入调用
+                    android.util.Log.d("X11Screen", "MouseButton: $button, down=$isDown")
+                }
+            }
+        }
+    }
+
+    // 监听配置变化，动态更新 InputControlsView
+    LaunchedEffect(currentProfileId) {
+        val newProfile = if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
+        inputControlsView.setProfile(newProfile)
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        // X11 渲染内容
+        AndroidView(
+            factory = x11Content,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 虚拟按键覆盖层
+        AndroidView(
+            factory = { inputControlsView },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 原有的最小化按钮
         MiniButton2(
-            Modifier
-                .size(Consts.Ui.minimizedIconSize.dp)
-                .offset { IntOffset(currOffset.x.toInt(), currOffset.y.toInt()) } // 要先offset再pointerInput...不然可触摸区域不会变
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, dragAmount ->
-                            currOffset += dragAmount
-                        },
-                        onDragEnd = {
-                            // 拖拽结束时可以执行一些操作，例如吸附到边缘等
-                            // 这里我们不做吸附，保持在最后释放的位置
-                        }
-                    )
-                },
-            onExpand = { onNavigateToOthers(Destination.ExceptX11) },
+            Modifier,
+            onExpand = { onNavigateToOthers(Destination.ExceptX11) }
         )
     }
 }
@@ -132,7 +165,7 @@ private fun MiniButton(
                 detectDragGestures(
                     onDragEnd = { view.snapToNearestEdgeHalfway() }
                 ) { change, dragAmount ->
-                    change.consume() //TODO 这个需要吗
+                    change.consume()
                     val lp = view.layoutParams as MarginLayoutParams
                     lp.leftMargin += dragAmount.x.toInt()
                     lp.topMargin += dragAmount.y.toInt()
@@ -153,9 +186,8 @@ private fun MiniButton(
 @Preview(widthDp = 300, heightDp = 500)
 @Composable
 fun X11ScreenPreview() {
-    X11ScreenImpl(
+    X11Screen(
         x11Content = { ctx -> FrameLayout(ctx).apply { setBackgroundColor(android.graphics.Color.GRAY) } },
         {}
     )
 }
-

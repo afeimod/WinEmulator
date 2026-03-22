@@ -7,7 +7,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.MotionEvent
 import android.view.View
-import android.widget.FrameLayout
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
 import kotlin.math.*
@@ -402,26 +401,12 @@ class InputControlsView(
     }
 
     private fun drawRangeButton(canvas: Canvas, element: ControlElement, box: Rect) {
-        val range = element.range ?: ControlElement.Range.FROM_A_TO_Z
         val radius = snappingSize * 0.75f * element.scale
-        val elementSize = snappingSize * 4f
-
-        if (element.orientation == 0.toByte()) {
-            val lineTop = box.top + paint.strokeWidth * 0.5f
-            val lineBottom = box.bottom - paint.strokeWidth * 0.5f
-
-            canvas.drawRoundRect(
-                box.left.toFloat(), box.top.toFloat(),
-                box.right.toFloat(), box.bottom.toFloat(),
-                radius, radius, paint
-            )
-        } else {
-            canvas.drawRoundRect(
-                box.left.toFloat(), box.top.toFloat(),
-                box.right.toFloat(), box.bottom.toFloat(),
-                radius, radius, paint
-            )
-        }
+        canvas.drawRoundRect(
+            box.left.toFloat(), box.top.toFloat(),
+            box.right.toFloat(), box.bottom.toFloat(),
+            radius, radius, paint
+        )
     }
 
     private fun drawTrackpad(canvas: Canvas, element: ControlElement, box: Rect) {
@@ -507,6 +492,7 @@ class InputControlsView(
                     invalidate()
                 }
             }
+            return true
         }
 
         if (!editMode && profile != null) {
@@ -514,12 +500,13 @@ class InputControlsView(
             val pointerId = event.getPointerId(actionIndex)
             val actionMasked = event.actionMasked
 
+            var handled = false
+
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
 
-                    var handled = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
                             vibrator?.vibrate(vibrationEffect)
@@ -530,16 +517,17 @@ class InputControlsView(
 
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
+                        handled = true
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    var handled = false
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
+                        val id = event.getPointerId(i)
 
                         for (element in profile!!.getElements()) {
-                            if (element.handleTouchMove(event.getPointerId(i), x, y)) {
+                            if (element.handleTouchMove(id, x, y)) {
                                 handled = true
                                 break
                             }
@@ -548,10 +536,10 @@ class InputControlsView(
 
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
+                        handled = true
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    var handled = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchUp(pointerId)) {
                             handled = true
@@ -560,12 +548,13 @@ class InputControlsView(
 
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
+                        handled = true
                     }
                 }
             }
+            return handled
         }
-
-        return true
+        return false
     }
 
     private fun intersectElement(x: Float, y: Float): ControlElement? {

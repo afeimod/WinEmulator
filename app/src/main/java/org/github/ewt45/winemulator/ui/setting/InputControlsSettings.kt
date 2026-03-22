@@ -16,35 +16,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.preference.PreferenceManager
 import org.github.ewt45.winemulator.inputcontrols.ControlsProfile
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
 import org.github.ewt45.winemulator.ui.ControlsEditorActivity
 import org.github.ewt45.winemulator.ui.components.ConfirmDialog
 import org.github.ewt45.winemulator.ui.components.rememberConfirmDialogState
-import java.io.File
+import org.github.ewt45.winemulator.ui.InputControlsFragment
 
-/**
- * Input Controls Settings UI for WinEmulator
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InputControlsSettings(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     val dialogState = rememberConfirmDialogState()
 
     var profiles by remember { mutableStateOf<List<ControlsProfile>>(emptyList()) }
     var selectedProfile by remember { mutableStateOf<ControlsProfile?>(null) }
     var showProfileDialog by remember { mutableStateOf(false) }
-    var showControlsEditor by remember { mutableStateOf(false) }
 
     val manager = remember { InputControlsManager(context) }
 
+    // 加载配置列表，并恢复上次选中的配置
     LaunchedEffect(Unit) {
         manager.loadProfiles(ignoreTemplates = false)
         profiles = manager.getProfiles()
-        selectedProfile = profiles.firstOrNull()
+        val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+        selectedProfile = if (savedId != 0) manager.getProfile(savedId) else profiles.firstOrNull()
+        // 确保 SharedPreferences 中保存了正确的 ID
+        if (selectedProfile != null && savedId != selectedProfile!!.id) {
+            prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
+        }
     }
 
     ConfirmDialog(dialogState)
@@ -56,7 +60,7 @@ fun InputControlsSettings(
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
-        // Enable/Disable toggle
+        // 启用/禁用开关
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -77,13 +81,16 @@ fun InputControlsSettings(
                 onCheckedChange = { enabled ->
                     if (!enabled) {
                         selectedProfile = null
+                        prefs.edit().remove(InputControlsFragment.SELECTED_PROFILE_ID).apply()
                     } else if (profiles.isEmpty()) {
-                        // Create default profile
+                        // 创建默认配置
                         val newProfile = manager.createProfile("默认配置")
                         profiles = manager.getProfiles()
                         selectedProfile = newProfile
+                        prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, newProfile.id).apply()
                     } else {
                         selectedProfile = profiles.first()
+                        prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
                     }
                 }
             )
@@ -92,7 +99,7 @@ fun InputControlsSettings(
         if (selectedProfile != null) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Profile selector
+            // 配置选择器
             Text(
                 text = "当前配置",
                 style = MaterialTheme.typography.titleMedium,
@@ -124,6 +131,7 @@ fun InputControlsSettings(
                             text = { Text(profile.name) },
                             onClick = {
                                 selectedProfile = profile
+                                prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, profile.id).apply()
                                 expanded = false
                             }
                         )
@@ -131,7 +139,7 @@ fun InputControlsSettings(
                 }
             }
 
-            // Profile actions
+            // 配置操作按钮
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -154,6 +162,11 @@ fun InputControlsSettings(
                                 manager.removeProfile(profile)
                                 profiles = manager.getProfiles()
                                 selectedProfile = profiles.firstOrNull()
+                                if (selectedProfile != null) {
+                                    prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
+                                } else {
+                                    prefs.edit().remove(InputControlsFragment.SELECTED_PROFILE_ID).apply()
+                                }
                             }
                         },
                         modifier = Modifier.weight(1f)
@@ -170,6 +183,7 @@ fun InputControlsSettings(
                     selectedProfile?.let { profile ->
                         selectedProfile = manager.duplicateProfile(profile)
                         profiles = manager.getProfiles()
+                        prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -181,7 +195,7 @@ fun InputControlsSettings(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Edit controls button - launches ControlsEditorActivity
+            // 编辑布局按钮
             Button(
                 onClick = {
                     selectedProfile?.let { profile ->
@@ -197,7 +211,7 @@ fun InputControlsSettings(
                 Text("编辑虚拟按键布局")
             }
 
-            // Quick presets
+            // 快捷预设（演示用）
             Text(
                 text = "快捷预设",
                 style = MaterialTheme.typography.titleMedium,
@@ -220,14 +234,14 @@ fun InputControlsSettings(
                         },
                         modifier = Modifier.clickable {
                             dialogState.showConfirm("加载预设 '$presetName'？这将替换当前配置的按键布局。") {
-                                // Apply preset logic would go here
+                                // 应用预设的逻辑（需根据项目实现）
                             }
                         }
                     )
                 }
             }
 
-            // Export/Import
+            // 导出/导入
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             Row(
@@ -254,7 +268,7 @@ fun InputControlsSettings(
 
                 OutlinedButton(
                     onClick = {
-                        // Import logic would go here
+                        // 导入逻辑需使用文件选择器，此处仅作演示
                         dialogState.showConfirm("请选择要导入的.icp文件")
                     },
                     modifier = Modifier.weight(1f)
@@ -267,7 +281,7 @@ fun InputControlsSettings(
         }
     }
 
-    // Profile creation dialog
+    // 新建配置对话框
     if (showProfileDialog) {
         var newProfileName by remember { mutableStateOf("") }
 
@@ -289,6 +303,7 @@ fun InputControlsSettings(
                             val newProfile = manager.createProfile(newProfileName)
                             profiles = manager.getProfiles()
                             selectedProfile = newProfile
+                            prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, newProfile.id).apply()
                             showProfileDialog = false
                         }
                     }
@@ -302,21 +317,6 @@ fun InputControlsSettings(
                 }
             }
         )
-    }
-
-    // Controls editor
-    if (showControlsEditor) {
-        selectedProfile?.let { profile ->
-            ControlsEditorDialog(
-                profile = profile,
-                dialogState = dialogState,
-                onDismiss = { showControlsEditor = false },
-                onSave = {
-                    profile.save()
-                    showControlsEditor = false
-                }
-            )
-        }
     }
 }
 
@@ -401,6 +401,7 @@ fun ControlsEditorDialog(
                     FilterChip(
                         selected = false,
                         onClick = {
+                            // 此处应调用实际的添加逻辑，但需根据项目实现
                             dialogState.showConfirm("请在游戏界面中长按屏幕来添加新的虚拟按键")
                         },
                         label = { Text("按钮") },
@@ -410,7 +411,7 @@ fun ControlsEditorDialog(
                     FilterChip(
                         selected = false,
                         onClick = {
-                            // Add D-Pad
+                            // 添加方向键
                         },
                         label = { Text("方向键") },
                         leadingIcon = { Icon(Icons.Default.ArrowForward, contentDescription = null) }
@@ -419,7 +420,7 @@ fun ControlsEditorDialog(
                     FilterChip(
                         selected = false,
                         onClick = {
-                            // Add Stick
+                            // 添加摇杆
                         },
                         label = { Text("摇杆") },
                         leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
@@ -543,7 +544,7 @@ fun ElementSettingsDialog(
                             headlineContent = { Text("绑定 ${i + 1}") },
                             supportingContent = { Text(binding.name) },
                             modifier = Modifier.clickable {
-                                // Show binding picker
+                                // 弹出绑定选择器，因项目未提供，仅作演示
                             }
                         )
                     }
