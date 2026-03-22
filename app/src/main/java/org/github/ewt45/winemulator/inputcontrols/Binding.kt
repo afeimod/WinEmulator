@@ -209,8 +209,5 @@ enum class Binding(
             gamepadBindings().toTypedArray()
     }
 
-    fun isKeyboard(): Boolean = isKeyboard
-    fun isMouse(): Boolean = isMouse
-    fun isGamepad(): Boolean = isGamepad
     fun isMouseMove(): Boolean = this in listOf(MOUSE_MOVE_UP, MOUSE_MOVE_DOWN, MOUSE_MOVE_LEFT, MOUSE_MOVE_RIGHT)
 }

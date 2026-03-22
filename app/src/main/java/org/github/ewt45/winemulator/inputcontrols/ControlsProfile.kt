@@ -21,12 +21,6 @@ class ControlsProfile(
     var isVirtualGamepad = false
         private set
 
-    fun getName(): String = name
-    fun setName(name: String) { this.name = name }
-
-    fun getCursorSpeed(): Float = cursorSpeed
-    fun setCursorSpeed(speed: Float) { this.cursorSpeed = speed }
-
     fun getElements(): List<ControlElement> = immutableElements
 
     fun addElement(element: ControlElement) {
@@ -85,7 +79,7 @@ class ControlsProfile(
                 val elementJson = elementsArray.getJSONObject(i)
                 val element = ControlElement(inputControlsView)
 
-                element.setType(ControlElement.Type.valueOf(elementJson.getString("type")))
+                element.type = ControlElement.Type.valueOf(elementJson.getString("type"))
                 element.shape = ControlElement.Shape.valueOf(elementJson.getString("shape"))
                 element.isToggleSwitch = elementJson.getBoolean("toggleSwitch")
                 element.x = (elementJson.getDouble("x") * inputControlsView.maxWidth).toInt()

@@ -102,11 +102,6 @@ class ControlElement(
         boundingBoxNeedsUpdate = true
     }
 
-    fun setType(type: Type) {
-        this.type = type
-        reset()
-    }
-
     fun getBindingCount(): Int = bindings.size
 
     fun setBindingCount(count: Int) {
