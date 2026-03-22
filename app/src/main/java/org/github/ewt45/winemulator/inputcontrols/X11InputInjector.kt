@@ -15,6 +15,11 @@ class X11InputInjector {
         private const val TAG = "X11InputInjector"
         private const val DISPLAY = ":13"
 
+        // Mouse button constants for X11
+        const val BUTTON_LEFT = 1
+        const val BUTTON_RIGHT = 3
+        const val BUTTON_MIDDLE = 2
+
         // X11 KeySyms for common keys
         const val XK_Escape = 0xFF1B
         const val XK_Return = 0xFF0D
@@ -184,8 +189,8 @@ class X11InputInjector {
                 android.view.KeyEvent.KEYCODE_SHIFT_RIGHT -> KEY_SHIFT_R
                 android.view.KeyEvent.KEYCODE_ALT_LEFT -> KEY_ALT_L
                 android.view.KeyEvent.KEYCODE_ALT_RIGHT -> KEY_ALT_L
-                android.view.KeyEvent.KEYCODE_CONTROL_LEFT -> KEY_CTRL_L
-                android.view.KeyEvent.KEYCODE_CONTROL_RIGHT -> KEY_CTRL_L
+                android.view.KeyEvent.KEYCODE_CTRL_LEFT -> KEY_CTRL_L
+                android.view.KeyEvent.KEYCODE_CTRL_RIGHT -> KEY_CTRL_L
                 android.view.KeyEvent.KEYCODE_CAPS_LOCK -> KEY_CAPS_LOCK
                 android.view.KeyEvent.KEYCODE_SCROLL_LOCK -> KEY_SCROLL_LOCK
                 android.view.KeyEvent.KEYCODE_NUM_LOCK -> KEY_NUM_LOCK
@@ -346,9 +351,9 @@ class X11InputInjector {
             data[1] = opcode.toByte()  // XTEST opcode
             data[2] = 2  // FakeKey
             data[3] = 0  // Padding
-            writeInt32(data, 4, if (isPress) 1 else 0)  // isPress
+            writeInt32(data, 4, if (isPress) 1L else 0L)  // isPress
             writeInt32(data, 8, keycode.toLong().and(0xFF))  // keycode
-            writeInt32(data, 12, delay)  // delay
+            writeInt32(data, 12, delay.toLong())  // delay
 
             output?.write(data)
             output?.flush()
@@ -364,9 +369,9 @@ class X11InputInjector {
             data[1] = 37.toByte()  // XTEST opcode
             data[2] = 4  // FakeButton
             data[3] = 0  // Padding
-            writeInt32(data, 4, if (isPress) 1 else 0)  // isPress
+            writeInt32(data, 4, if (isPress) 1L else 0L)  // isPress
             writeInt32(data, 8, button.toLong().and(0xFF))  // button
-            writeInt32(data, 12, 0)  // delay
+            writeInt32(data, 12, 0L)  // delay
 
             output?.write(data)
             output?.flush()
@@ -382,7 +387,7 @@ class X11InputInjector {
             data[1] = 37.toByte()  // XTEST opcode
             data[2] = 3  // FakeMotion
             data[3] = 0  // Padding
-            writeInt32(data, 4, -1)  // root window (screen)
+            writeInt32(data, 4, -1L)  // root window (screen)
             writeInt32(data, 8, dx.toLong())  // x
             writeInt32(data, 12, dy.toLong())  // y
 
