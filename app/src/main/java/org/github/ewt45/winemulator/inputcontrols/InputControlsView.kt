@@ -8,7 +8,6 @@ import android.os.Vibrator
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
-import org.github.ewt45.winemulator.R
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
 import kotlin.math.*

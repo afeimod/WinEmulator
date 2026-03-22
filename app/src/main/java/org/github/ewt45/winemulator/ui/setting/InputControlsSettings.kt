@@ -171,7 +171,7 @@ fun InputControlsSettings(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Copy, contentDescription = null)
+                Icon(Icons.Default.Star, contentDescription = null)
                 Spacer(Modifier.width(4.dp))
                 Text("复制当前配置")
             }
@@ -207,7 +207,7 @@ fun InputControlsSettings(
                     ListItem(
                         headlineContent = { Text(presetName) },
                         leadingContent = {
-                            Icon(Icons.Default.Sports, contentDescription = null)
+                            Icon(Icons.Default.Star, contentDescription = null)
                         },
                         modifier = Modifier.clickable {
                             dialogState.showConfirm("加载预设 '$presetName'？这将替换当前配置的按键布局。") {
@@ -250,7 +250,7 @@ fun InputControlsSettings(
                     },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.Folder, contentDescription = null)
+                    Icon(Icons.Default.Home, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
                     Text("导入")
                 }
@@ -350,11 +350,11 @@ fun ControlsEditorDialog(
                             leadingContent = {
                                 Icon(
                                     imageVector = when (element.type) {
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.BUTTON -> Icons.Default.RadioButtonChecked
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.D_PAD -> Icons.Default.Navigation
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.STICK -> Icons.Default.TouchApp
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.RANGE_BUTTON -> Icons.Default.LinearScale
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.TRACKPAD -> Icons.Default.PanTool
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.BUTTON -> Icons.Default.Star
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.D_PAD -> Icons.Default.ArrowForward
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.STICK -> Icons.Default.Info
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.RANGE_BUTTON -> Icons.Default.List
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.TRACKPAD -> Icons.Default.Menu
                                     },
                                     contentDescription = null
                                 )
@@ -401,7 +401,7 @@ fun ControlsEditorDialog(
                             profile.save()
                         },
                         label = { Text("按钮") },
-                        leadingIcon = { Icon(Icons.Default.RadioButtonChecked, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) }
                     )
 
                     FilterChip(
@@ -410,7 +410,7 @@ fun ControlsEditorDialog(
                             // Add D-Pad
                         },
                         label = { Text("方向键") },
-                        leadingIcon = { Icon(Icons.Default.Navigation, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.Default.ArrowForward, contentDescription = null) }
                     )
 
                     FilterChip(
@@ -419,7 +419,7 @@ fun ControlsEditorDialog(
                             // Add Stick
                         },
                         label = { Text("摇杆") },
-                        leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
                     )
                 }
             }
