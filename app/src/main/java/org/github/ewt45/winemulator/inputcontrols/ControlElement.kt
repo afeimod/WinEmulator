@@ -271,7 +271,7 @@ class ControlElement(
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
 
-                        if (binding.isGamepad()) {
+                        if (binding.isGamepad) {
                             val adjustedValue = clamp(
                                 maxOf(0f, kotlin.math.abs(value) - 0.01f) * kotlin.math.sign(value) * STICK_SENSITIVITY,
                                 -1f, 1f
@@ -300,7 +300,7 @@ class ControlElement(
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
 
-                        if (binding.isGamepad()) {
+                        if (binding.isGamepad) {
                             if (kotlin.math.abs(value) > TRACKPAD_ACCELERATION_THRESHOLD) {
                                 inputControlsView.handleInputEvent(binding, true, value * STICK_SENSITIVITY)
                             }

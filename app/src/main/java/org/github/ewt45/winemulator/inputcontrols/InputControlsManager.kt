@@ -132,7 +132,7 @@ class InputControlsManager(private val context: Context) {
 
     fun createProfile(name: String): ControlsProfile {
         val profile = ControlsProfile(context, ++maxProfileId)
-        profile.setName(name)
+        profile.name = name
         profile.save()
         profiles.add(profile)
         return profile
@@ -142,10 +142,10 @@ class InputControlsManager(private val context: Context) {
         var newName: String
         var i = 1
         while (true) {
-            newName = "${source.getName()} ($i)"
+            newName = "${source.name} ($i)"
             var found = false
             for (profile in profiles) {
-                if (profile.getName() == newName) {
+                if (profile.name == newName) {
                     found = true
                     break
                 }
@@ -196,7 +196,7 @@ class InputControlsManager(private val context: Context) {
 
             var foundIndex = -1
             for (i in profiles.indices) {
-                if (profiles[i].getName() == newProfile.getName()) {
+                if (profiles[i].name == newProfile.name) {
                     foundIndex = i
                     break
                 }
@@ -215,7 +215,7 @@ class InputControlsManager(private val context: Context) {
 
     fun exportProfile(profile: ControlsProfile): File? {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val destination = File(downloadsDir, "WinEmulator/profiles/${profile.getName()}.icp")
+        val destination = File(downloadsDir, "WinEmulator/profiles/${profile.name}.icp")
         destination.parentFile?.mkdirs()
 
         val sourceFile = ControlsProfile.getProfileFile(context, profile.id)
@@ -258,8 +258,8 @@ class InputControlsManager(private val context: Context) {
                     val cursorSpeed = jsonObject.optDouble("cursorSpeed", 1.0).toFloat()
 
                     val profile = ControlsProfile(context, profileId)
-                    profile.setName(profileName)
-                    profile.setCursorSpeed(cursorSpeed)
+                    profile.name = profileName
+                    profile.cursorSpeed = cursorSpeed
                     return profile
                 }
             } catch (e: Exception) {

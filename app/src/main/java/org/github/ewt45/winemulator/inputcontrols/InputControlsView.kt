@@ -133,10 +133,10 @@ class InputControlsView(
 
     fun handleInputEvent(binding: Binding, isDown: Boolean, value: Float = 0f) {
         when {
-            binding.isGamepad() -> {
+            binding.isGamepad -> {
                 // Gamepad events handled separately
             }
-            binding.isMouse() -> {
+            binding.isMouse -> {
                 when (binding) {
                     Binding.MOUSE_LEFT_BUTTON -> inputEventHandler?.onPointerButton(0, isDown)
                     Binding.MOUSE_RIGHT_BUTTON -> inputEventHandler?.onPointerButton(1, isDown)
@@ -148,7 +148,7 @@ class InputControlsView(
                     else -> {}
                 }
             }
-            binding.isKeyboard() -> {
+            binding.isKeyboard -> {
                 inputEventHandler?.onKeyEvent(binding.keycode, isDown)
             }
         }

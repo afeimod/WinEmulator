@@ -100,7 +100,7 @@ class ControlsProfile(
                 for (j in 0 until bindingsArray.length()) {
                     val binding = Binding.fromString(bindingsArray.getString(j))
                     element.setBindingAt(j, binding)
-                    if (!binding.isGamepad()) hasGamepadBinding = false
+                    if (!binding.isGamepad) hasGamepadBinding = false
                 }
 
                 if (!isVirtualGamepad && hasGamepadBinding) isVirtualGamepad = true
