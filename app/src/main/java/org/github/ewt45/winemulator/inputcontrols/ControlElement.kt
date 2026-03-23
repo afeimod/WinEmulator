@@ -4,6 +4,7 @@ import android.graphics.*
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
+import kotlin.math.*
 
 /**
  * Represents a single control element (button, d-pad, stick, etc.)
@@ -169,10 +170,14 @@ class ControlElement(
     fun setBindingAt(index: Int, binding: Binding) {
         if (index >= bindings.size) {
             val oldLength = bindings.size
-            bindings = bindings.copyOf(index + 1)
-            for (i in oldLength until bindings.size) {
-                bindings[i] = Binding.NONE
+            val newBindings = arrayOfNulls<Binding>(index + 1) as Array<Binding>
+            for (i in bindings.indices) {
+                newBindings[i] = bindings[i]
             }
+            for (i in oldLength until newBindings.size) {
+                newBindings[i] = Binding.NONE
+            }
+            bindings = newBindings
             states.fill(false)
             boundingBoxNeedsUpdate = true
         }
@@ -245,10 +250,10 @@ class ControlElement(
      */
     fun draw(canvas: Canvas) {
         val snappingSize = inputControlsView.snappingSize
-        val paint = inputControlsView.paint
-        val primaryColor = inputControlsView.primaryColor
+        val paint = inputControlsView.getPaint()
+        val primaryColor = inputControlsView.getPrimaryColor()
 
-        paint.color = if (isSelected) inputControlsView.secondaryColor else primaryColor
+        paint.color = if (isSelected) inputControlsView.getSecondaryColor() else primaryColor
         paint.style = Paint.Style.STROKE
         val strokeWidth = snappingSize * 0.25f
         paint.strokeWidth = strokeWidth
@@ -283,6 +288,7 @@ class ControlElement(
                 )
             }
             Shape.SQUARE -> {
+                val snappingSize = inputControlsView.snappingSize
                 val radius = snappingSize * 0.75f * scale
                 canvas.drawRoundRect(
                     box.left.toFloat(), box.top.toFloat(),
@@ -300,7 +306,7 @@ class ControlElement(
             val displayText = getDisplayText()
             paint.textSize = minOf(
                 getTextSizeForWidth(paint, displayText, box.width() - strokeWidth * 2),
-                snappingSize * 2 * scale
+                inputControlsView.snappingSize * 2 * scale
             )
             paint.textAlign = Paint.Align.CENTER
             paint.style = Paint.Style.FILL
@@ -314,10 +320,10 @@ class ControlElement(
     }
 
     private fun drawIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
-        val paint = inputControlsView.paint
+        val paint = inputControlsView.getPaint()
         val icon = inputControlsView.getIcon(iconId) ?: return
 
-        paint.colorFilter = inputControlsView.colorFilter
+        paint.colorFilter = inputControlsView.getColorFilter()
         val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
         val halfSize = ((minOf(width, height) - margin) * 0.5f).toInt()
 
@@ -336,11 +342,12 @@ class ControlElement(
     private fun drawDPad(canvas: Canvas, paint: Paint, box: Rect) {
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
+        val snappingSize = inputControlsView.snappingSize
         val offsetX = snappingSize * 2 * scale
         val offsetY = snappingSize * 3 * scale
         val start = snappingSize * scale
 
-        val path = inputControlsView.path
+        val path = inputControlsView.getPath()
         path.reset()
 
         // Up
@@ -389,6 +396,7 @@ class ControlElement(
     }
 
     private fun drawRangeButton(canvas: Canvas, paint: Paint, box: Rect, strokeWidth: Float) {
+        val snappingSize = inputControlsView.snappingSize
         val radius = snappingSize * 0.75f * scale
 
         if (orientation == 0.toByte()) {
@@ -404,7 +412,7 @@ class ControlElement(
             )
 
             canvas.save()
-            val clipPath = inputControlsView.path
+            val clipPath = inputControlsView.getPath()
             clipPath.reset()
             clipPath.addRoundRect(
                 box.left.toFloat(), box.top.toFloat(),
@@ -415,8 +423,8 @@ class ControlElement(
 
             val elementSize = snappingSize * 4 * scale
             val currentRange = range ?: Range.FROM_A_TO_Z
-            val scrollOffset = scroller?.scrollOffset ?: 0f
-            val rangeIndex = scroller?.rangeIndex ?: intArrayOf(0, currentRange.max.toInt())
+            val scrollOffset = scroller?.getScrollOffset() ?: 0f
+            val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
             startX -= scrollOffset % elementSize
 
@@ -432,7 +440,7 @@ class ControlElement(
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startX < box.right && startX + elementSize > box.left) {
                     paint.style = Paint.Style.FILL
-                    paint.color = inputControlsView.primaryColor
+                    paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, elementSize - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -462,7 +470,7 @@ class ControlElement(
             )
 
             canvas.save()
-            val clipPath = inputControlsView.path
+            val clipPath = inputControlsView.getPath()
             clipPath.reset()
             clipPath.addRoundRect(
                 box.left.toFloat(), box.top.toFloat(),
@@ -473,8 +481,8 @@ class ControlElement(
 
             val elementSize = snappingSize * 4 * scale
             val currentRange = range ?: Range.FROM_A_TO_Z
-            val scrollOffset = scroller?.scrollOffset ?: 0f
-            val rangeIndex = scroller?.rangeIndex ?: intArrayOf(0, currentRange.max.toInt())
+            val scrollOffset = scroller?.getScrollOffset() ?: 0f
+            val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
             startY -= scrollOffset % elementSize
 
@@ -489,7 +497,7 @@ class ControlElement(
                 val text = getRangeTextForIndex(currentRange, i)
                 if (startY < box.bottom && startY + elementSize > box.top) {
                     paint.style = Paint.Style.FILL
-                    paint.color = inputControlsView.primaryColor
+                    paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, box.width() - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -512,6 +520,7 @@ class ControlElement(
     private fun drawStick(canvas: Canvas, paint: Paint, box: Rect, primaryColor: Int, strokeWidth: Float) {
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
+        val snappingSize = inputControlsView.snappingSize
         val oldColor = paint.color
 
         // Draw outer circle
@@ -649,7 +658,7 @@ class ControlElement(
                     var offsetX = localX - radius
                     var offsetY = localY - radius
 
-                    val distance = sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
+                    val distance = kotlin.math.sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
                     if (distance > radius) {
                         val angle = atan2(offsetY, offsetX)
                         offsetX = (cos(angle) * radius).toFloat()
