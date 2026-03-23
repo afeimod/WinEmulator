@@ -24,7 +24,7 @@ class InputControlsView(
     var inputEventHandler: InputEventHandler? = null
     var profile: ControlsProfile? = null
         private set
-    var showTouchscreenControls = false
+    var showTouchscreenControls = true
     var overlayOpacity = 0.4f
 
     var touchpadView: TouchpadView? = null
