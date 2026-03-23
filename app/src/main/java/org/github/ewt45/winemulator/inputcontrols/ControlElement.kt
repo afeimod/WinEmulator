@@ -604,8 +604,8 @@ class ControlElement(
 
     private fun getRangeTextForIndex(range: Range, index: Int): String {
         return when (range) {
-            Range.FROM_A_TO_Z -> String.valueOf(('A'.code + index).toChar())
-            Range.DIGITS -> String.valueOf((index + 1) % 10)
+            Range.FROM_A_TO_Z -> ('A'.code + index).toChar().toString()
+            Range.DIGITS -> ((index + 1) % 10).toString()
             Range.FUNCTION_KEYS -> "F${index + 1}"
             Range.NUMPAD_DIGITS -> "NP${(index + 1) % 10}"
         }
