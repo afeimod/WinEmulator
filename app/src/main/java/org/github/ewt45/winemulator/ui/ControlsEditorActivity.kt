@@ -296,7 +296,6 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         when (element.type) {
             ControlElement.Type.BUTTON -> {
                 loadBindingSpinner(element, container, 0, R.string.binding)
-                loadBindingSpinner(element, container, 1, R.string.binding_secondary)
             }
             ControlElement.Type.D_PAD, ControlElement.Type.STICK, ControlElement.Type.TRACKPAD -> {
                 loadBindingSpinner(element, container, 0, R.string.binding_up)
