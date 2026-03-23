@@ -206,6 +206,7 @@ class X11InputSender {
             70 -> KeyEvent.KEYCODE_SCROLL_LOCK
             
             // Navigation cluster
+            72 -> KeyEvent.KEYCODE_DPAD_UP  // Up arrow
             73 -> KeyEvent.KEYCODE_PAGE_UP
             74 -> KeyEvent.KEYCODE_PAGE_DOWN
             75 -> KeyEvent.KEYCODE_NUMPAD_4  // Keypad 4 (also used as Left on some keyboards)
@@ -213,7 +214,7 @@ class X11InputSender {
             77 -> KeyEvent.KEYCODE_NUMPAD_6  // Keypad 6 (also used as Right on some keyboards)
             78 -> KeyEvent.KEYCODE_NUMPAD_1  // Keypad 1 (also used as End on some keyboards)
             79 -> KeyEvent.KEYCODE_NUMPAD_7  // Keypad 7 (also used as Home on some keyboards)
-            80 -> KeyEvent.KEYCODE_NUMPAD_2  // Keypad 2 (also used as Down on some keyboards)
+            80 -> KeyEvent.KEYCODE_DPAD_DOWN  // Down arrow
             81 -> KeyEvent.KEYCODE_NUMPAD_0  // Keypad 0 (also used as Insert on some keyboards)
             82 -> KeyEvent.KEYCODE_NUMPAD_SUBTRACT
             83 -> KeyEvent.KEYCODE_NUMPAD_DOT  // Keypad Delete/Decimal

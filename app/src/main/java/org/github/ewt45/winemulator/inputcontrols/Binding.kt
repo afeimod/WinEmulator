@@ -110,8 +110,8 @@ enum class Binding(
     KEY_RWIN(127, true),
 
     // Navigation keys
-    KEY_UP(73, true),   // Page Up keycode (correct evdev)
-    KEY_DOWN(74, true),  // Page Down keycode (correct evdev)
+    KEY_UP(72, true),   // Up arrow keycode (correct evdev)
+    KEY_DOWN(80, true),  // Down arrow keycode (correct evdev)
     KEY_LEFT(105, true),
     KEY_RIGHT(106, true),
     KEY_INSERT(110, true),
