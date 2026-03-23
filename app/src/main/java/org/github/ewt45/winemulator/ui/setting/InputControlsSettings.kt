@@ -36,6 +36,7 @@ fun InputControlsSettings(
     var profiles by remember { mutableStateOf<List<ControlsProfile>>(emptyList()) }
     var selectedProfile by remember { mutableStateOf<ControlsProfile?>(null) }
     var showProfileDialog by remember { mutableStateOf(false) }
+    var showControls by remember { mutableStateOf(false) }
 
     val manager = remember { InputControlsManager(context) }
 
@@ -48,6 +49,17 @@ fun InputControlsSettings(
         // 确保 SharedPreferences 中保存了正确的 ID
         if (selectedProfile != null && savedId != selectedProfile!!.id) {
             prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
+        }
+        // 恢复虚拟按键显示状态
+        showControls = prefs.getBoolean("show_touchscreen_controls", false)
+    }
+
+    // 监听SharedPreferences的变化
+    LaunchedEffect(prefs) {
+        prefs.registerOnSharedPreferenceChangeListener { _, key ->
+            if (key == "show_touchscreen_controls") {
+                showControls = prefs.getBoolean("show_touchscreen_controls", false)
+            }
         }
     }
 
@@ -122,8 +134,9 @@ fun InputControlsSettings(
                     modifier = Modifier.weight(1f)
                 )
                 Switch(
-                    checked = prefs.getBoolean("show_touchscreen_controls", false),
+                    checked = showControls,
                     onCheckedChange = { show ->
+                        showControls = show
                         prefs.edit().putBoolean("show_touchscreen_controls", show).apply()
                     }
                 )
