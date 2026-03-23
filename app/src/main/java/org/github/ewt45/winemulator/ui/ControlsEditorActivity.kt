@@ -313,6 +313,10 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         val sBindingType = bindingView.findViewById<Spinner>(R.id.SBindingType)
         val sBinding = bindingView.findViewById<Spinner>(R.id.SBinding)
 
+        // 设置SBindingType的适配器（keyboard、mouse、gamepad选项）
+        sBindingType.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, 
+            resources.getStringArray(R.array.binding_type_entries))
+
         val update = Runnable {
             val bindingEntries: Array<String>
             when (sBindingType.selectedItemPosition) {
