@@ -104,6 +104,32 @@ fun InputControlsSettings(
             )
         }
 
+        // 显示/隐藏虚拟按键开关（仅在启用虚拟按键时显示）
+        if (selectedProfile != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Visibility,
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(
+                    text = "显示虚拟按键",
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = prefs.getBoolean("show_touchscreen_controls", false),
+                    onCheckedChange = { show ->
+                        prefs.edit().putBoolean("show_touchscreen_controls", show).apply()
+                    }
+                )
+            }
+        }
+
         if (selectedProfile != null) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
