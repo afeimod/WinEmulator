@@ -61,11 +61,7 @@ class ControlElement(
                     "FROM_0_TO_9", "0-9", "DIGITS" -> DIGITS
                     "FROM_F1_TO_F12", "F1-F12", "FUNCTION_KEYS" -> FUNCTION_KEYS
                     "FROM_NP0_TO_NP9", "NP0-NP9", "NUMPAD_DIGITS" -> NUMPAD_DIGITS
-                    else -> try {
-                        valueOf(name)
-                    } catch (e: Exception) {
-                        null
-                    }
+                    else -> null
                 }
             }
         }
