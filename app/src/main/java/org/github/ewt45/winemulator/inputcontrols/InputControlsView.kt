@@ -283,7 +283,7 @@ class InputControlsView(
     fun getPath(): Path = path
 
     fun getColorFilter(): ColorFilter {
-        return PorterDuffColorFilter(0xFFFFFFFF, PorterDuff.Mode.SRC_IN)
+        return PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
     }
 
     fun getPrimaryColor(): Int = primaryColor

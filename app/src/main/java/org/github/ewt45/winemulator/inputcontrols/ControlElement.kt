@@ -47,12 +47,27 @@ class ControlElement(
 
     enum class Range(val max: Byte) {
         FROM_A_TO_Z(26),
-        FROM_0_TO_9(10),
-        FROM_F1_TO_F12(12),
-        FROM_NP0_TO_NP9(10);
+        DIGITS(10),
+        FUNCTION_KEYS(12),
+        NUMPAD_DIGITS(10);
 
         companion object {
             fun names(): Array<String> = entries.map { it.name.replace("_", " ") }.toTypedArray()
+            
+            // 处理配置文件中的旧名称映射
+            fun fromString(name: String): Range? {
+                return when (name) {
+                    "FROM_A_TO_Z", "A-Z" -> FROM_A_TO_Z
+                    "FROM_0_TO_9", "0-9", "DIGITS" -> DIGITS
+                    "FROM_F1_TO_F12", "F1-F12", "FUNCTION_KEYS" -> FUNCTION_KEYS
+                    "FROM_NP0_TO_NP9", "NP0-NP9", "NUMPAD_DIGITS" -> NUMPAD_DIGITS
+                    else -> try {
+                        valueOf(name)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
         }
     }
 
@@ -594,9 +609,9 @@ class ControlElement(
     private fun getRangeTextForIndex(range: Range, index: Int): String {
         return when (range) {
             Range.FROM_A_TO_Z -> String.valueOf(('A'.code + index).toChar())
-            Range.FROM_0_TO_9 -> String.valueOf((index + 1) % 10)
-            Range.FROM_F1_TO_F12 -> "F${index + 1}"
-            Range.FROM_NP0_TO_NP9 -> "NP${(index + 1) % 10}"
+            Range.DIGITS -> String.valueOf((index + 1) % 10)
+            Range.FUNCTION_KEYS -> "F${index + 1}"
+            Range.NUMPAD_DIGITS -> "NP${(index + 1) % 10}"
         }
     }
 

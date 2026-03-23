@@ -89,7 +89,7 @@ class ControlsProfile(
                 element.iconId = elementJson.optInt("iconId", 0).toByte()
 
                 if (elementJson.has("range")) {
-                    element.range = ControlElement.Range.valueOf(elementJson.getString("range"))
+                    element.range = ControlElement.Range.fromString(elementJson.getString("range"))
                 }
                 if (elementJson.has("orientation")) {
                     element.orientation = elementJson.getInt("orientation").toByte()
