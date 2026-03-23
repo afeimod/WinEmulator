@@ -101,7 +101,14 @@ fun X11Screen(
         InputControlsView(context, editMode = false).apply {
             profile?.let { setProfile(it) }
             this.inputEventHandler = inputEventHandler
+            // 根据设置决定是否显示虚拟按键，默认关闭
+            showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
         }
+    }
+
+    // 监听显示设置的改变
+    LaunchedEffect(prefs.getBoolean("show_touchscreen_controls", false)) {
+        inputControlsView.showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
     }
 
     // Listen for profile changes
