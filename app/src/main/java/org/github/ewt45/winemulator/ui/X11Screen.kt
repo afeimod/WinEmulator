@@ -10,7 +10,6 @@ import android.widget.FrameLayout
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -188,11 +187,9 @@ private fun findLorieView(view: View): com.termux.x11.LorieView? {
 
 /** 
  * 悬浮球实现：
- * - 正常点击（短按）：触发导航
- * - 拖动：移动悬浮球位置
- * - 拖动结束后自动吸附到屏幕边缘
- * 
- * 注意：点击和拖动是互斥的，如果检测到拖动就不触发点击
+ * - 使用 IconButton 处理点击（onClick）
+ * - 使用 pointerInput 处理拖动
+ * 两者互不干扰
  */
 @Composable
 private fun MiniButton2(
@@ -205,7 +202,7 @@ private fun MiniButton2(
     val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
     
     // 拖动阈值：超过这个距离才认为是拖动
-    val dragThreshold = with(density) { 10.dp.toPx() }
+    val dragThreshold = with(density) { 15.dp.toPx() }
     
     // 初始位置（距离左上角 48dp，垂直方向 100dp）
     val initialX = with(density) { 48.dp.toPx() }
@@ -232,12 +229,20 @@ private fun MiniButton2(
         }
     }
     
-    Box(
-        modifier = modifier
+    // 使用 IconButton 处理点击，它的 onClick 不会和 pointerInput 冲突
+    IconButton(
+        onClick = {
+            // 点击事件会在这里触发
+            // 只有在没有拖动的情况下才触发
+            if (!hasDragged) {
+                onExpand()
+            }
+        },
+        modifier = Modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
-                // 处理手势：区分点击和拖动
+                // 处理拖动手势
                 detectDragGestures(
                     onDragStart = { offset ->
                         pressStartX = offset.x
@@ -254,13 +259,13 @@ private fun MiniButton2(
                             offsetX = newX
                             offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
                         }
+                        // 重置拖动状态
+                        hasDragged = false
                     },
                     onDragCancel = {
                         hasDragged = false
                     },
                     onDrag = { change, dragAmount ->
-                        change.consume()
-                        
                         // 计算总拖动距离
                         val totalDragX = change.position.x - pressStartX
                         val totalDragY = change.position.y - pressStartY
@@ -273,6 +278,8 @@ private fun MiniButton2(
                         
                         // 如果在拖动模式中，更新位置
                         if (hasDragged) {
+                            change.consume()
+                            
                             val deltaX = change.position.x - lastTouchX
                             val deltaY = change.position.y - lastTouchY
                             
@@ -287,18 +294,6 @@ private fun MiniButton2(
                     }
                 )
             }
-            .pointerInput(Unit) {
-                // 处理点击
-                detectTapGestures(
-                    onTap = {
-                        // 只有在没有拖动的情况下才触发点击
-                        if (!hasDragged) {
-                            onExpand()
-                        }
-                    }
-                )
-            },
-        contentAlignment = Alignment.Center
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_fullscreen),
