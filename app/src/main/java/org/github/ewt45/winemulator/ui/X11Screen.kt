@@ -8,10 +8,13 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import android.widget.FrameLayout
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +35,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.preference.PreferenceManager
 import com.termux.x11.input.InputStub
 import com.termux.x11.input.RenderData
+import kotlin.math.roundToInt
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
@@ -53,7 +57,6 @@ fun X11Screen(
     onLorieViewReady: ((InputStub) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val activity = LocalActivity.current
     val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     // X11 Input Sender - 用于通过InputEventSender发送按键事件
     val x11InputSender = remember { X11InputSender() }
@@ -143,11 +146,16 @@ fun X11Screen(
             factory = { inputControlsView },
             modifier = Modifier.fillMaxSize()
         )
-        // Original minimize button - 使用参考源码的简单实现
-        MiniButton2(
-            Modifier,
-            onExpand = { onNavigateToOthers(Destination.ExceptX11) }
-        )
+        // 悬浮球：使用 BoxWithConstraints 获取父布局尺寸
+        BoxWithConstraints(
+            Modifier.fillMaxSize()
+        ) {
+            MiniButton2(
+                parentWidth = constraints.maxWidth.toFloat(),
+                parentHeight = constraints.maxHeight.toFloat(),
+                onExpand = { onNavigateToOthers(Destination.ExceptX11) }
+            )
+        }
     }
     // Cleanup on dispose
     DisposableEffect(Unit) {
@@ -178,20 +186,72 @@ private fun findLorieView(view: View): com.termux.x11.LorieView? {
 
 /** 
  * 用于在显示x11的视图时，点击展开其他视图 
+ * 可拖动: 完全由 Compose 管理位置和拖动。
  * 
- * 使用参考源码的简单实现：直接使用 IconButton 的 onClick 处理，
- * 不再使用复杂的 detectDragGestures 逻辑来区分点击和拖动
+ * 使用简单的 hasDragged 标志来区分点击和拖动
  */
 @Composable
-private fun MiniButton2(modifier: Modifier = Modifier, onExpand: () -> Unit) {
-    val colorSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val colorContent = MaterialTheme.colorScheme.onSurface
-    IconButton(
-        onExpand,
-        modifier,
-        colors = IconButtonColors(colorSurface, colorContent, colorSurface, colorContent),
+private fun MiniButton2(
+    modifier: Modifier = Modifier,
+    parentWidth: Float,
+    parentHeight: Float,
+    onExpand: () -> Unit
+) {
+    val density = LocalDensity.current
+    val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
+    // 初始位置（距离左上角 48dp，垂直方向 100dp）
+    val initialX = with(density) { 48.dp.toPx() }
+    val initialY = with(density) { 100.dp.toPx() }
+    var offsetX by remember { mutableStateOf(initialX.coerceIn(0f, parentWidth - buttonSizePx)) }
+    var offsetY by remember { mutableStateOf(initialY.coerceIn(0f, parentHeight - buttonSizePx)) }
+    // 当父容器尺寸变化时，确保悬浮球仍在边界内
+    LaunchedEffect(parentWidth, parentHeight) {
+        offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
+        offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
+    }
+    Box(
+        modifier = modifier
+            .size(Consts.Ui.minimizedIconSize.dp)
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            .pointerInput(Unit) {
+                var hasDragged = false
+                detectDragGestures(
+                    onDragStart = { hasDragged = false },
+                    onDragEnd = {
+                        if (!hasDragged) {
+                            // 点击事件
+                            onExpand()
+                        } else {
+                            // 拖动结束，吸附到最近边缘（仅水平吸附）
+                            val halfWidth = buttonSizePx / 2
+                            val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
+                            offsetX = newX
+                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
+                        }
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    hasDragged = true
+                    val newX = offsetX + dragAmount.x
+                    val newY = offsetY + dragAmount.y
+                    offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
+                    offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                }
+            },
+        contentAlignment = Alignment.Center
     ) {
-        Icon(painterResource(R.drawable.ic_fullscreen), null)
+        Icon(
+            painter = painterResource(R.drawable.ic_fullscreen),
+            contentDescription = "展开",
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = MaterialTheme.shapes.small
+                )
+                .padding(8.dp),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -201,7 +261,6 @@ private fun MiniButton(
     minimize: Boolean,
     onClick: () -> Unit,
 ) {
-    val TAG = "MinimizeButton"
     val activity = LocalActivity.current
     val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
     //最小化时颜色稍微变化一下吧，否则不容易看到
