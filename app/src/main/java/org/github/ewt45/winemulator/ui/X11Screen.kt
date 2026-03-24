@@ -216,28 +216,38 @@ private fun MiniButton2(modifier: Modifier = Modifier, onExpand: () -> Unit) {
     // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
     val margin = remember { mutableListOf(0, 100) }
 
+    // 用于区分点击和拖动
+    var isDragging by remember { mutableStateOf(false) }
+
     IconButton(
         onClick = {
-            val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
-            view.apply {
-                val lp = layoutParams as MarginLayoutParams
-                lp.height = miniIconPx
-                lp.width = miniIconPx
-                lp.leftMargin = margin[0]
-                lp.topMargin = margin[1]
-                lp.rightMargin = 0
-                lp.bottomMargin = 0
-                requestLayout()
-                view.post { view.snapToNearestEdgeHalfway() }
+            if (!isDragging) {
+                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
+                view.apply {
+                    val lp = layoutParams as MarginLayoutParams
+                    lp.height = miniIconPx
+                    lp.width = miniIconPx
+                    lp.leftMargin = margin[0]
+                    lp.topMargin = margin[1]
+                    lp.rightMargin = 0
+                    lp.bottomMargin = 0
+                    requestLayout()
+                    view.post { view.snapToNearestEdgeHalfway() }
+                }
+                onExpand()
             }
-            onExpand()
         },
         modifier = modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .pointerInput(Unit) {
                 val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
                 detectDragGestures(
-                    onDragEnd = { view.snapToNearestEdgeHalfway() }
+                    onDragStart = { isDragging = true },
+                    onDragEnd = {
+                        isDragging = false
+                        view.snapToNearestEdgeHalfway()
+                    },
+                    onDragCancel = { isDragging = false }
                 ) { change, dragAmount ->
                     change.consume()
                     val lp = view.layoutParams as MarginLayoutParams
