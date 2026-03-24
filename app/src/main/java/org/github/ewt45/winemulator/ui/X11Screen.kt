@@ -201,8 +201,8 @@ private fun MiniButton2(
     val density = LocalDensity.current
     val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
     
-    // 拖动阈值：超过这个距离才认为是拖动
-    val dragThreshold = with(density) { 15.dp.toPx() }
+    // 拖动阈值：超过这个距离才认为是拖动（增大到30dp，避免轻微移动就触发）
+    val dragThreshold = with(density) { 30.dp.toPx() }
     
     // 初始位置（距离左上角 48dp，垂直方向 100dp）
     val initialX = with(density) { 48.dp.toPx() }
@@ -253,7 +253,11 @@ private fun MiniButton2(
                     },
                     onDragEnd = {
                         if (hasDragged) {
-                            // 拖动结束，吸附到最近边缘
+                            // 先将位置限制在边界内
+                            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
+                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
+                            
+                            // 吸附到最近边缘
                             val halfWidth = buttonSizePx / 2
                             val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
                             offsetX = newX
@@ -283,10 +287,11 @@ private fun MiniButton2(
                             val deltaX = change.position.x - lastTouchX
                             val deltaY = change.position.y - lastTouchY
                             
+                            // 拖动过程中允许超出边界，只在释放时才吸附
                             val newX = offsetX + deltaX
                             val newY = offsetY + deltaY
-                            offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
-                            offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                            offsetX = newX
+                            offsetY = newY
                             
                             lastTouchX = change.position.x
                             lastTouchY = change.position.y
