@@ -24,7 +24,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.position
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -233,11 +238,13 @@ private fun MiniButton2(
                 
                 // 辅助函数：计算两点之间的距离
                 fun distance(p1: Offset, p2: Offset): Float {
-                    return sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y))
+                    val dx = p2.x - p1.x
+                    val dy = p2.y - p1.y
+                    return kotlin.math.sqrt(dx * dx + dy * dy)
                 }
                 
                 // 等待按下
-                val down = awaitFirstDown()
+                val down = awaitFirstDown(pass = PointerEventPass.Initial)
                 isDragging = false
                 hasMoved = false
                 lastPosition = down.position
@@ -247,7 +254,7 @@ private fun MiniButton2(
                 // 使用循环处理持续的手指移动
                 var shouldContinue = true
                 while (shouldContinue) {
-                    val event = awaitPointerEvent()
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
                     val changes = event.changes
                     
                     if (changes.isEmpty()) {
@@ -271,7 +278,7 @@ private fun MiniButton2(
                     
                     // 如果在拖动模式中，更新位置
                     if (isDragging) {
-                        // 计算相对于初始按下的偏移量
+                        // 计算相对于上次位置的偏移量
                         val deltaX = currentPos.x - lastPosition.x
                         val deltaY = currentPos.y - lastPosition.y
                         
