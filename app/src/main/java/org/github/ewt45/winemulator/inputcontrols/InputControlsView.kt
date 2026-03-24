@@ -82,7 +82,8 @@ class InputControlsView(
     /**
      * 设置是否显示虚拟按键，同时调整视图的点击和聚焦状态
      */
-    fun setShowTouchscreenControls(show: Boolean) {
+    @JvmName("setControlsVisible")
+    fun setControlsVisible(show: Boolean) {
         showTouchscreenControls = show
         isClickable = show
         isFocusable = show
