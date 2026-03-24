@@ -217,50 +217,57 @@ private fun MiniButton2(modifier: Modifier = Modifier, onExpand: () -> Unit) {
     val margin = remember { mutableListOf(0, 100) }
 
     // 用于区分点击和拖动
-    var isDragging by remember { mutableStateOf(false) }
+    var wasDragged by remember { mutableStateOf(false) }
 
-    IconButton(
-        onClick = {
-            if (!isDragging) {
-                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
-                view.apply {
-                    val lp = layoutParams as MarginLayoutParams
-                    lp.height = miniIconPx
-                    lp.width = miniIconPx
-                    lp.leftMargin = margin[0]
-                    lp.topMargin = margin[1]
-                    lp.rightMargin = 0
-                    lp.bottomMargin = 0
-                    requestLayout()
-                    view.post { view.snapToNearestEdgeHalfway() }
-                }
-                onExpand()
-            }
-        },
+    Box(
         modifier = modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .pointerInput(Unit) {
-                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
+                val view = activity?.findViewById<View>(R.id.compose_view)
                 detectDragGestures(
-                    onDragStart = { isDragging = true },
+                    onDragStart = { wasDragged = false },
                     onDragEnd = {
-                        isDragging = false
-                        view.snapToNearestEdgeHalfway()
+                        if (!wasDragged) {
+                            // 点击事件
+                            view?.apply {
+                                val lp = layoutParams as MarginLayoutParams
+                                lp.height = miniIconPx
+                                lp.width = miniIconPx
+                                lp.leftMargin = margin[0]
+                                lp.topMargin = margin[1]
+                                lp.rightMargin = 0
+                                lp.bottomMargin = 0
+                                requestLayout()
+                                post { snapToNearestEdgeHalfway() }
+                            }
+                            onExpand()
+                        } else {
+                            // 拖动结束，吸附到边缘
+                            view?.snapToNearestEdgeHalfway()
+                        }
+                        wasDragged = false
                     },
-                    onDragCancel = { isDragging = false }
+                    onDragCancel = { wasDragged = false }
                 ) { change, dragAmount ->
                     change.consume()
-                    val lp = view.layoutParams as MarginLayoutParams
-                    lp.leftMargin += dragAmount.x.toInt()
-                    lp.topMargin += dragAmount.y.toInt()
-                    margin[0] = lp.leftMargin
-                    margin[1] = lp.topMargin
-                    view.requestLayout()
+                    wasDragged = true
+                    view?.let {
+                        val lp = it.layoutParams as MarginLayoutParams
+                        lp.leftMargin += dragAmount.x.toInt()
+                        lp.topMargin += dragAmount.y.toInt()
+                        margin[0] = lp.leftMargin
+                        margin[1] = lp.topMargin
+                        it.requestLayout()
+                    }
                 }
             },
-        colors = IconButtonColors(colorSurface, colorContent, colorSurface, colorContent),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(painterResource(R.drawable.ic_fullscreen), null)
+        Icon(
+            painter = painterResource(R.drawable.ic_fullscreen),
+            contentDescription = "展开",
+            tint = colorContent
+        )
     }
 }
 
