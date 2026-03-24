@@ -188,7 +188,7 @@ private fun findLorieView(view: View): com.termux.x11.LorieView? {
  * 用于在显示x11的视图时，点击展开其他视图 
  * 可拖动: 完全由 Compose 管理位置和拖动。
  * 
- * 使用简单的 hasDragged 标志来区分点击和拖动
+ * 使用 hasDragged 标志和阈值来区分点击和拖动
  */
 @Composable
 private fun MiniButton2(
@@ -199,6 +199,8 @@ private fun MiniButton2(
 ) {
     val density = LocalDensity.current
     val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
+    // 拖动阈值：超过这个距离才认为是拖动，否则当作点击
+    val dragThreshold = with(density) { 10.dp.toPx() }
     // 初始位置（距离左上角 48dp，垂直方向 100dp）
     val initialX = with(density) { 48.dp.toPx() }
     val initialY = with(density) { 100.dp.toPx() }
@@ -214,12 +216,16 @@ private fun MiniButton2(
             .size(Consts.Ui.minimizedIconSize.dp)
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
+                var totalDragDistance = 0f
                 var hasDragged = false
                 detectDragGestures(
-                    onDragStart = { hasDragged = false },
+                    onDragStart = { 
+                        totalDragDistance = 0f
+                        hasDragged = false 
+                    },
                     onDragEnd = {
                         if (!hasDragged) {
-                            // 点击事件
+                            // 点击事件 - 触发导航
                             onExpand()
                         } else {
                             // 拖动结束，吸附到最近边缘（仅水平吸附）
@@ -231,11 +237,18 @@ private fun MiniButton2(
                     }
                 ) { change, dragAmount ->
                     change.consume()
-                    hasDragged = true
-                    val newX = offsetX + dragAmount.x
-                    val newY = offsetY + dragAmount.y
-                    offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
-                    offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                    // 累加拖动距离，只有超过阈值才认为是拖动
+                    totalDragDistance += kotlin.math.abs(dragAmount.x) + kotlin.math.abs(dragAmount.y)
+                    if (totalDragDistance > dragThreshold) {
+                        hasDragged = true
+                    }
+                    // 只有确认是拖动后才更新位置
+                    if (hasDragged) {
+                        val newX = offsetX + dragAmount.x
+                        val newY = offsetY + dragAmount.y
+                        offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
+                        offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                    }
                 }
             },
         contentAlignment = Alignment.Center
