@@ -9,6 +9,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -224,6 +225,7 @@ private fun MyTopAppBar(
 
 /** 按钮。点击可将compose部分的视图展开或折叠。
  * 可拖动: 由于x11的acitivity是View视图，所以拖动还是要用view的layoutParam实现。
+ * 长按后进入拖动模式，手指抬起后结束拖动并吸附到边缘（如果是最小化状态）。
  */
 @Composable
 private fun MinimizeButton(
@@ -244,45 +246,63 @@ private fun MinimizeButton(
     // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
     val margin = remember { mutableListOf(0, 100) }
 
+    // 拖动模式状态
+    var isDragging by remember { androidx.compose.runtime.mutableStateOf(false) }
+
     IconButton(
         onClick = {
-            val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
-            val nextValue = !minimize
-            view.apply {
-                val lp = layoutParams as MarginLayoutParams
-                lp.height = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.width = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.leftMargin = if (nextValue) margin[0] else 0
-                lp.topMargin = if (nextValue) margin[1] else 0
-                lp.rightMargin = 0
-                lp.bottomMargin = 0
-                requestLayout()
-                if (nextValue)
-                    view.post { view.snapToNearestEdgeHalfway() }
+            // 只有在非拖动状态下才处理点击
+            if (!isDragging) {
+                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
+                val nextValue = !minimize
+                view.apply {
+                    val lp = layoutParams as MarginLayoutParams
+                    lp.height = if (nextValue) miniIconPx else MATCH_PARENT
+                    lp.width = if (nextValue) miniIconPx else MATCH_PARENT
+                    lp.leftMargin = if (nextValue) margin[0] else 0
+                    lp.topMargin = if (nextValue) margin[1] else 0
+                    lp.rightMargin = 0
+                    lp.bottomMargin = 0
+                    requestLayout()
+                    if (nextValue)
+                        view.post { view.snapToNearestEdgeHalfway() }
+                }
+                onClick()
             }
-            onClick()
         },
         modifier = Modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .pointerInput(minimize) {
-                // 修改：始终允许拖动，不再限制为只有最小化状态才能拖动
                 val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
-                detectDragGestures(
-                    onDragEnd = { 
-                        // 如果当前是最小化状态，则吸附到边缘
-                        if (minimize) {
-                            view.snapToNearestEdgeHalfway()
+
+                // 检测长按
+                detectTapGestures(
+                    onLongPress = { offset ->
+                        // 长按后进入拖动模式
+                        isDragging = true
+                        // 开始拖动检测
+                        detectDragGestures(
+                            onDragEnd = {
+                                isDragging = false
+                                // 如果当前是最小化状态，则吸附到边缘
+                                if (minimize) {
+                                    view.snapToNearestEdgeHalfway()
+                                }
+                            },
+                            onDragCancel = {
+                                isDragging = false
+                            }
+                        ) { change, dragAmount ->
+                            change.consume()
+                            val lp = view.layoutParams as MarginLayoutParams
+                            lp.leftMargin += dragAmount.x.toInt()
+                            lp.topMargin += dragAmount.y.toInt()
+                            margin[0] = lp.leftMargin
+                            margin[1] = lp.topMargin
+                            view.requestLayout()
                         }
                     }
-                ) { change, dragAmount ->
-                    change.consume()
-                    val lp = view.layoutParams as MarginLayoutParams
-                    lp.leftMargin += dragAmount.x.toInt()
-                    lp.topMargin += dragAmount.y.toInt()
-                    margin[0] = lp.leftMargin
-                    margin[1] = lp.topMargin
-                    view.requestLayout()
-                }
+                )
             },
         colors = colors
     ) {
