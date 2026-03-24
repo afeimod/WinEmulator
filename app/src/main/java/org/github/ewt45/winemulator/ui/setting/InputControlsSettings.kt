@@ -92,14 +92,19 @@ fun InputControlsSettings(
                 checked = selectedProfile != null,
                 onCheckedChange = { enabled ->
                     if (!enabled) {
+                        // 关闭虚拟按键时，同时隐藏虚拟按键
                         selectedProfile = null
+                        showControls = false
                         prefs.edit().remove(InputControlsFragment.SELECTED_PROFILE_ID).apply()
+                        prefs.edit().putBoolean("show_touchscreen_controls", false).apply()
                     } else if (profiles.isEmpty()) {
                         // 创建默认配置
                         val newProfile = manager.createProfile("默认配置")
                         profiles = manager.getProfiles()
                         selectedProfile = newProfile
+                        showControls = true
                         prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, newProfile.id).apply()
+                        prefs.edit().putBoolean("show_touchscreen_controls", true).apply()
                     } else {
                         // 尝试恢复之前保存的配置，而不是强制选择第一个
                         val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
@@ -111,6 +116,9 @@ fun InputControlsSettings(
                             selectedProfile = profiles.first()
                             prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
                         }
+                        // 开启虚拟按键时，同时显示虚拟按键
+                        showControls = true
+                        prefs.edit().putBoolean("show_touchscreen_controls", true).apply()
                     }
                 }
             )
