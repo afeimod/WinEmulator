@@ -47,23 +47,40 @@ fun InputControlsSettings(
         manager.loadProfiles(ignoreTemplates = false)
         profiles = manager.getProfiles()
         val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
-        selectedProfile = if (savedId != 0) manager.getProfile(savedId) else profiles.firstOrNull()
+        // 只有当savedId不为0时才尝试恢复配置，否则保持null状态
+        selectedProfile = if (savedId != 0) manager.getProfile(savedId) else null
         // 确保 SharedPreferences 中保存了正确的 ID
         if (selectedProfile != null && savedId != selectedProfile!!.id) {
             prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, selectedProfile!!.id).apply()
         }
         // 恢复虚拟按键显示状态
         showControls = prefs.getBoolean("show_touchscreen_controls", false)
-        // 恢复启用状态
-        isControlsEnabled = selectedProfile != null
+        // 恢复启用状态 - 只有当有保存的配置时才启用
+        isControlsEnabled = savedId != 0 && selectedProfile != null
     }
 
     // 监听SharedPreferences的变化
     LaunchedEffect(prefs) {
         prefs.registerOnSharedPreferenceChangeListener { _, key ->
-            if (key == "show_touchscreen_controls") {
-                showControls = prefs.getBoolean("show_touchscreen_controls", false)
+            when (key) {
+                "show_touchscreen_controls" -> {
+                    showControls = prefs.getBoolean("show_touchscreen_controls", false)
+                }
+                InputControlsFragment.SELECTED_PROFILE_ID -> {
+                    val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+                    isControlsEnabled = savedId != 0
+                    selectedProfile = if (savedId != 0) manager.getProfile(savedId) else null
+                }
             }
+        }
+    }
+
+    // 监听profiles列表的变化，确保配置被删除时能更新UI
+    LaunchedEffect(profiles) {
+        val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+        if (savedId != 0 && selectedProfile == null) {
+            // 配置被删除了，禁用虚拟按键
+            isControlsEnabled = false
         }
     }
 
