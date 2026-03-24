@@ -96,18 +96,20 @@ fun X11Screen(
     }
 
     // Create InputControlsView with the event handler
+    val showControls = prefs.getBoolean("show_touchscreen_controls", false)
     val inputControlsView = remember {
         InputControlsView(context, editMode = false).apply {
             profile?.let { setProfile(it) }
             this.inputEventHandler = inputEventHandler
             // 根据设置决定是否显示虚拟按键，默认关闭
-            showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+            // 使用 setShowTouchscreenControls 方法同时设置显示状态和交互状态
+            setShowTouchscreenControls(showControls)
         }
     }
 
     // 监听显示设置的改变
-    LaunchedEffect(prefs.getBoolean("show_touchscreen_controls", false)) {
-        inputControlsView.showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+    LaunchedEffect(showControls) {
+        inputControlsView.setShowTouchscreenControls(showControls)
     }
 
     // Listen for profile changes
@@ -237,16 +239,18 @@ private fun MiniButton2(
             .size(Consts.Ui.minimizedIconSize.dp)
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
-                var hasDragged = false
                 var totalDragAmount = 0f
+                var isDragging = false
+                
                 detectDragGestures(
                     onDragStart = {
-                        hasDragged = false
                         totalDragAmount = 0f
+                        isDragging = false
                     },
                     onDragEnd = {
-                        // 只有当拖动距离超过阈值时才认为是拖动，否则当作点击处理
-                        if (totalDragAmount < 10f) {
+                        // 只有当拖动距离超过阈值（24dp）时才认为是拖动，否则当作点击处理
+                        val dragThreshold = with(density) { 24.dp.toPx() }
+                        if (totalDragAmount < dragThreshold) {
                             // 点击事件 - 触发导航
                             onExpand()
                         } else {
@@ -258,12 +262,12 @@ private fun MiniButton2(
                         }
                     },
                     onDragCancel = {
-                        hasDragged = false
                         totalDragAmount = 0f
+                        isDragging = false
                     }
                 ) { change, dragAmount ->
                     // 不要在这里消费事件，让 Compose 能够正确区分点击和拖动
-                    hasDragged = true
+                    isDragging = true
                     totalDragAmount += kotlin.math.abs(dragAmount.x) + kotlin.math.abs(dragAmount.y)
                     val newX = offsetX + dragAmount.x
                     val newY = offsetY + dragAmount.y
