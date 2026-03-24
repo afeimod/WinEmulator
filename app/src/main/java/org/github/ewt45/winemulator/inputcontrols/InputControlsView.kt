@@ -64,6 +64,7 @@ class InputControlsView(
     private var lastMaxHeight = 0
 
     init {
+        // 默认可点击可聚焦，但会根据 showTouchscreenControls 动态调整
         setClickable(true)
         setFocusable(true)
         isFocusableInTouchMode = true
@@ -76,6 +77,17 @@ class InputControlsView(
         } catch (e: Exception) {
             vibrator = null
         }
+    }
+
+    /**
+     * 设置是否显示虚拟按键，同时调整视图的点击和聚焦状态
+     */
+    fun setShowTouchscreenControls(show: Boolean) {
+        showTouchscreenControls = show
+        isClickable = show
+        isFocusable = show
+        // 刷新视图以更新绘制
+        invalidate()
     }
 
 
@@ -360,7 +372,8 @@ class InputControlsView(
             return true
         }
 
-        if (!editMode && profile != null) {
+        // 非编辑模式下，只有当 showTouchscreenControls 为 true 时才处理触摸事件
+        if (!editMode && profile != null && showTouchscreenControls) {
             val actionIndex = event.actionIndex
             val pointerId = event.getPointerId(actionIndex)
             val actionMasked = event.actionMasked
@@ -417,6 +430,7 @@ class InputControlsView(
             }
             return handled
         }
+        // 当 showTouchscreenControls 为 false 或 profile 为 null 时，不处理触摸事件，让事件传递给下层
         return false
     }
 
