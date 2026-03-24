@@ -85,8 +85,10 @@ class InputControlsView(
     @JvmName("setControlsVisible")
     fun setControlsVisible(show: Boolean) {
         showTouchscreenControls = show
-        isClickable = show
-        isFocusable = show
+        // 当不显示虚拟按键时，禁用所有交互，确保不拦截触摸事件
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
         // 刷新视图以更新绘制
         invalidate()
     }
