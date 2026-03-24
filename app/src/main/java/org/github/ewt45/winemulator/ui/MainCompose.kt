@@ -224,7 +224,6 @@ private fun MyTopAppBar(
 
 /** 按钮。点击可将compose部分的视图展开或折叠。
  * 可拖动: 由于x11的acitivity是View视图，所以拖动还是要用view的layoutParam实现。
- * 长按后进入拖动模式，手指抬起后结束拖动并吸附到边缘（如果是最小化状态）。
  */
 @Composable
 private fun MinimizeButton(
@@ -266,27 +265,13 @@ private fun MinimizeButton(
         modifier = Modifier
             .size(Consts.Ui.minimizedIconSize.dp)
             .pointerInput(minimize) {
+                if (!minimize)
+                    return@pointerInput
                 val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
-
-                var didLongPress = false
-
                 detectDragGestures(
-                    onDragStart = { },
-                    onDragEnd = {
-                        if (didLongPress && minimize) {
-                            view.snapToNearestEdgeHalfway()
-                        }
-                        didLongPress = false
-                    },
-                    onDragCancel = {
-                        didLongPress = false
-                    }
+                    onDragEnd = { view.snapToNearestEdgeHalfway() }
                 ) { change, dragAmount ->
                     change.consume()
-                    // 首次拖动时标记为长按触发
-                    if (!didLongPress) {
-                        didLongPress = true
-                    }
                     val lp = view.layoutParams as MarginLayoutParams
                     lp.leftMargin += dragAmount.x.toInt()
                     lp.topMargin += dragAmount.y.toInt()
