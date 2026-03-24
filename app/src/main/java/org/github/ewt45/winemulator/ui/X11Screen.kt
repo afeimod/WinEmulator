@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -239,18 +240,19 @@ private fun MiniButton2(
             .size(Consts.Ui.minimizedIconSize.dp)
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(Unit) {
+                // 拖动阈值
+                val dragThreshold = with(density) { 10.dp.toPx() }
                 var totalDragAmount = 0f
-                var isDragging = false
+                var hasMovedPastThreshold = false
                 
                 detectDragGestures(
                     onDragStart = {
                         totalDragAmount = 0f
-                        isDragging = false
+                        hasMovedPastThreshold = false
                     },
                     onDragEnd = {
-                        // 只有当拖动距离超过阈值（24dp）时才认为是拖动，否则当作点击处理
-                        val dragThreshold = with(density) { 24.dp.toPx() }
-                        if (totalDragAmount < dragThreshold) {
+                        // 只有当拖动距离超过阈值时才认为是拖动，否则当作点击处理
+                        if (!hasMovedPastThreshold) {
                             // 点击事件 - 触发导航
                             onExpand()
                         } else {
@@ -263,16 +265,24 @@ private fun MiniButton2(
                     },
                     onDragCancel = {
                         totalDragAmount = 0f
-                        isDragging = false
+                        hasMovedPastThreshold = false
                     }
                 ) { change, dragAmount ->
-                    // 不要在这里消费事件，让 Compose 能够正确区分点击和拖动
-                    isDragging = true
+                    // 计算总拖动距离
                     totalDragAmount += kotlin.math.abs(dragAmount.x) + kotlin.math.abs(dragAmount.y)
-                    val newX = offsetX + dragAmount.x
-                    val newY = offsetY + dragAmount.y
-                    offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
-                    offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                    
+                    // 只有超过阈值后才认为是在拖动
+                    if (totalDragAmount > dragThreshold) {
+                        hasMovedPastThreshold = true
+                    }
+                    
+                    if (hasMovedPastThreshold) {
+                        // 拖动模式下更新位置
+                        val newX = offsetX + dragAmount.x
+                        val newY = offsetY + dragAmount.y
+                        offsetX = newX.coerceIn(0f, parentWidth - buttonSizePx)
+                        offsetY = newY.coerceIn(0f, parentHeight - buttonSizePx)
+                    }
                 }
             },
         contentAlignment = Alignment.Center
