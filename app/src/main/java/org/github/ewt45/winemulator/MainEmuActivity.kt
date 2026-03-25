@@ -40,6 +40,7 @@ import org.github.ewt45.winemulator.terminal.SessionClientAImpl
 import org.github.ewt45.winemulator.terminal.ViewClientImpl
 import org.github.ewt45.winemulator.ui.Destination
 import org.github.ewt45.winemulator.ui.MainScreen
+import org.github.ewt45.winemulator.ui.MainScreenWithX11AsMain
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareViewModel
@@ -111,9 +112,10 @@ class MainEmuActivity : MainActivity() {
             val isDarkTheme = themeMode != 0 // 0 = 跟随系统
             
             MainTheme(darkTheme = isDarkTheme) {
-                MainScreen(
+                // 使用X11作为主界面的布局
+                MainScreenWithX11AsMain(
                     tx11Content = { frm.also { (frm.parent as? ViewGroup)?.removeView(frm) } },
-                    Destination.Prepare, mainViewModel, terminalViewModel, settingViewModel, prepareViewModel
+                    mainViewModel, terminalViewModel, settingViewModel, prepareViewModel
                 )
             }
         }
