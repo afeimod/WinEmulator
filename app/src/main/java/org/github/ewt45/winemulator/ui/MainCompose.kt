@@ -357,16 +357,22 @@ fun MainScreenWithX11AsMain(
         )
 
         // 快速访问按钮（始终显示在右上角）
-        QuickAccessButtons(
-            terminalMinimized = terminalMinimized,
-            settingsMinimized = settingsMinimized,
-            onTerminalClick = {
-                terminalMinimized = !terminalMinimized
-            },
-            onSettingsClick = {
-                settingsMinimized = !settingsMinimized
-            }
-        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxSize()
+        ) {
+            QuickAccessButtons(
+                terminalMinimized = terminalMinimized,
+                settingsMinimized = settingsMinimized,
+                onTerminalClick = {
+                    terminalMinimized = !terminalMinimized
+                },
+                onSettingsClick = {
+                    settingsMinimized = !settingsMinimized
+                }
+            )
+        }
 
         // 终端面板
         TerminalFloatingPanel(
@@ -401,7 +407,6 @@ private fun QuickAccessButtons(
 ) {
     Column(
         modifier = Modifier
-            .align(Alignment.TopEnd)
             .padding(16.dp),
         horizontalAlignment = Alignment.End
     ) {
@@ -458,24 +463,29 @@ private fun TerminalFloatingPanel(
         enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
         exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
     ) {
-        Card(
+        Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 72.dp, start = 16.dp)
-                .fillMaxWidth(0.4f)
-                .fillMaxHeight(0.5f),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // 标题栏
-                FloatingPanelHeader(
-                    title = "终端",
-                    onMinimize = onMinimize,
-                    onClose = onMinimize
-                )
-                // 内容区
-                Box(modifier = Modifier.fillMaxSize()) {
-                    ProotTerminalScreen(viewModel)
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 72.dp, start = 16.dp)
+                    .fillMaxWidth(0.4f)
+                    .fillMaxHeight(0.5f),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 标题栏
+                    FloatingPanelHeader(
+                        title = "终端",
+                        onMinimize = onMinimize,
+                        onClose = onMinimize
+                    )
+                    // 内容区
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        ProotTerminalScreen(viewModel)
+                    }
                 }
             }
         }
@@ -498,24 +508,29 @@ private fun SettingsFloatingPanel(
         enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
         exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
     ) {
-        Card(
+        Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 120.dp, start = 16.dp)
-                .fillMaxWidth(0.4f)
-                .fillMaxHeight(0.5f),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .fillMaxSize()
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // 标题栏
-                FloatingPanelHeader(
-                    title = "设置",
-                    onMinimize = onMinimize,
-                    onClose = onMinimize
-                )
-                // 内容区
-                Box(modifier = Modifier.fillMaxSize()) {
-                    SettingScreen(settingVm, terminalVm, prepareVm) { }
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 120.dp, start = 16.dp)
+                    .fillMaxWidth(0.4f)
+                    .fillMaxHeight(0.5f),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 标题栏
+                    FloatingPanelHeader(
+                        title = "设置",
+                        onMinimize = onMinimize,
+                        onClose = onMinimize
+                    )
+                    // 内容区
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        SettingScreen(settingVm, terminalVm, prepareVm) { }
+                    }
                 }
             }
         }
