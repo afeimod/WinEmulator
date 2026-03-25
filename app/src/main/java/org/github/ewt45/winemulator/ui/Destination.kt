@@ -42,5 +42,18 @@ enum class Destination(
     )
 }
 
+/** X11界面作为主界面的特殊目的地 */
+@Serializable
+data object RouteX11Main
+
+enum class X11MainDestination(
+    val title: String,
+    val route: Any,
+) {
+    X11("x11", RouteX11Main),
+    Terminal("终端", RouteTerminal),
+    Settings("设置", RouteSettings)
+}
+
 /** 显示在appbar中的tab */
 val appbarDestList = listOf(Destination.Terminal, Destination.Settings)
