@@ -6,11 +6,8 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -458,34 +456,29 @@ private fun TerminalFloatingPanel(
     onMinimize: () -> Unit,
     viewModel: TerminalViewModel
 ) {
-    AnimatedVisibility(
-        visible = !minimized,
-        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer(alpha = if (minimized) 0f else 1f)
     ) {
-        Box(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
+                .align(Alignment.TopStart)
+                .padding(top = 72.dp, start = 16.dp)
+                .fillMaxWidth(0.4f)
+                .fillMaxHeight(0.5f),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 72.dp, start = 16.dp)
-                    .fillMaxWidth(0.4f)
-                    .fillMaxHeight(0.5f),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏
-                    FloatingPanelHeader(
-                        title = "终端",
-                        onMinimize = onMinimize,
-                        onClose = onMinimize
-                    )
-                    // 内容区
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        ProotTerminalScreen(viewModel)
-                    }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 标题栏
+                FloatingPanelHeader(
+                    title = "终端",
+                    onMinimize = onMinimize,
+                    onClose = onMinimize
+                )
+                // 内容区 - 始终渲染，保持进程运行
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ProotTerminalScreen(viewModel)
                 }
             }
         }
@@ -503,34 +496,29 @@ private fun SettingsFloatingPanel(
     terminalVm: TerminalViewModel,
     prepareVm: PrepareViewModel
 ) {
-    AnimatedVisibility(
-        visible = !minimized,
-        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer(alpha = if (minimized) 0f else 1f)
     ) {
-        Box(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
+                .align(Alignment.TopStart)
+                .padding(top = 120.dp, start = 16.dp)
+                .fillMaxWidth(0.4f)
+                .fillMaxHeight(0.5f),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 120.dp, start = 16.dp)
-                    .fillMaxWidth(0.4f)
-                    .fillMaxHeight(0.5f),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏
-                    FloatingPanelHeader(
-                        title = "设置",
-                        onMinimize = onMinimize,
-                        onClose = onMinimize
-                    )
-                    // 内容区
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        SettingScreen(settingVm, terminalVm, prepareVm) { }
-                    }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 标题栏
+                FloatingPanelHeader(
+                    title = "设置",
+                    onMinimize = onMinimize,
+                    onClose = onMinimize
+                )
+                // 内容区 - 始终渲染
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SettingScreen(settingVm, terminalVm, prepareVm) { }
                 }
             }
         }
