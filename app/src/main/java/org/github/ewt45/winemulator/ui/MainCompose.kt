@@ -6,8 +6,8 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +53,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.alpha
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
+import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -449,6 +451,7 @@ private fun QuickAccessButton(
 
 /**
  * 终端浮动面板
+ * 使用透明度控制显隐，避免组件被销毁导致终端进程终止
  */
 @Composable
 private fun TerminalFloatingPanel(
@@ -456,10 +459,27 @@ private fun TerminalFloatingPanel(
     onMinimize: () -> Unit,
     viewModel: TerminalViewModel
 ) {
+    val isVisible = !minimized
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "terminalPanelAlpha"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer(alpha = if (minimized) 0f else 1f)
+            .alpha(alpha)
+            .pointerInput(alpha) {
+                if (alpha == 0f) {
+                    // 完全透明时拦截所有触摸，避免穿透到底层
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent().consumeAllChanges()
+                        }
+                    }
+                }
+            }
     ) {
         Card(
             modifier = Modifier
@@ -470,13 +490,11 @@ private fun TerminalFloatingPanel(
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 标题栏
                 FloatingPanelHeader(
                     title = "终端",
                     onMinimize = onMinimize,
                     onClose = onMinimize
                 )
-                // 内容区 - 始终渲染，保持进程运行
                 Box(modifier = Modifier.fillMaxSize()) {
                     ProotTerminalScreen(viewModel)
                 }
@@ -487,6 +505,7 @@ private fun TerminalFloatingPanel(
 
 /**
  * 设置浮动面板
+ * 使用透明度控制显隐，避免组件被销毁导致内部状态丢失
  */
 @Composable
 private fun SettingsFloatingPanel(
@@ -496,10 +515,26 @@ private fun SettingsFloatingPanel(
     terminalVm: TerminalViewModel,
     prepareVm: PrepareViewModel
 ) {
+    val isVisible = !minimized
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "settingsPanelAlpha"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer(alpha = if (minimized) 0f else 1f)
+            .alpha(alpha)
+            .pointerInput(alpha) {
+                if (alpha == 0f) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent().consumeAllChanges()
+                        }
+                    }
+                }
+            }
     ) {
         Card(
             modifier = Modifier
@@ -510,13 +545,11 @@ private fun SettingsFloatingPanel(
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 标题栏
                 FloatingPanelHeader(
                     title = "设置",
                     onMinimize = onMinimize,
                     onClose = onMinimize
                 )
-                // 内容区 - 始终渲染
                 Box(modifier = Modifier.fillMaxSize()) {
                     SettingScreen(settingVm, terminalVm, prepareVm) { }
                 }
