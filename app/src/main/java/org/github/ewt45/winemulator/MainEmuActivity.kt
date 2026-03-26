@@ -94,8 +94,10 @@ class MainEmuActivity : MainActivity() {
         prefs.displayResolutionMode.put("custom")
         runBlocking { prefs.displayResolutionCustom.put(Consts.Pref.general_resolution.get()) }
         prefs.showAdditionalKbd.put(false) // 不显示底部按键
-//        prefs.fullscreen.put(true) // 全屏 // FIXME 这个变更会导致重建activity. 所以如果修改的话先不做其他操作了
-        prefs.hideCutout.put(false) // 挖孔屏等，先不在该区域显示吧。
+        // 全屏设置
+        runBlocking { prefs.fullscreen.put(Consts.Pref.x11_fullscreen.get()) }
+        // 刘海屏设置 - 使用刘海屏区域
+        prefs.hideCutout.put(false)
 
 
 //        //将composeView添加到原视图布局中
