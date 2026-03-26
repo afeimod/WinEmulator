@@ -6,33 +6,29 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -45,15 +41,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -104,6 +95,13 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         mainVm.navigateToEvent.collect { dest -> navigateTo(dest) }
     }
+    // 启动时自动跳转到X11界面（如果设置了自动启动）
+    LaunchedEffect(prepareUiState.isPrepareFinished) {
+        if (prepareUiState.isPrepareFinished && startDest == Destination.X11) {
+            // 如果准备已完成且目标是X11，自动导航到X11
+            navigateTo(Destination.X11)
+        }
+    }
     // 开头或中途 需要进入准备屏幕时
     LaunchedEffect(prepareUiState.isPrepareFinished) {
         if (!prepareUiState.isPrepareFinished && currDestination != Destination.Prepare)
@@ -128,16 +126,17 @@ fun MainScreen(
 //            Column(Modifier.fillMaxHeight().widthIn(max = 600.dp)) { }
             NavHost(
                 navController, startDest.route,
-                enterTransition = { androidx.compose.animation.scaleIn() },
-                exitTransition = { androidx.compose.animation.scaleOut() },
+                enterTransition = { scaleIn() },
+                exitTransition = { scaleOut() },
             ) {
                 composable<RoutePrepare> {
                     PrepareScreen(prepareVm, settingVm) {
                         MainEmuActivity.instance.startEmu()
-                        navController.navigate(Destination.ExceptX11.route) { popUpTo(Destination.Prepare.route) { inclusive = true } }
+                        // 准备完成后直接跳转到X11界面
+                        navController.navigate(Destination.X11.route) { popUpTo(Destination.Prepare.route) { inclusive = true } }
                     }
                 }
-                composable<RouteX11> { X11Screen(tx11Content, { }) }
+                composable<RouteX11> { X11Screen(tx11Content, navigateTo) }
                 navigation<RouteExceptX11>(startDestination = RouteTerminal) {
                     composable<RouteTerminal> { ProotTerminalScreen(terminalVm) }
 //                        composable<NavDest.Terminal> { TerminalScreen() }
@@ -165,7 +164,7 @@ private fun MainDialog(uiState: MainUiState, onClose: (Boolean) -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth() // 让 Column 填充对话框宽度
-                        .padding(vertical = 8.dp),
+                        .wrapContentHeight(), // 根据内容调整高度
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     SelectionContainer {
@@ -248,7 +247,7 @@ private fun MinimizeButton(
     val colorContent = MaterialTheme.colorScheme.onSurface
     val colors =
         if (!minimize) IconButtonDefaults.iconButtonColors()
-        else androidx.compose.material3.IconButtonDefaults.iconButtonColors(containerColor = colorSurface, contentColor = colorContent)
+        else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
 
     // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
     val margin = remember { mutableListOf(0, 100) }
@@ -315,323 +314,12 @@ fun SettingButton(show: Boolean, onClick: () -> Unit) {
     }
 }
 
-/**
- * X11作为主界面的主屏幕
- * 
- * 设计说明：
- * - X11界面全屏显示，终端和设置界面以浮动窗口形式叠加在X11界面上
- * - 终端和设置面板默认处于最小化状态
- * - 面板内容（包括ProotTerminalScreen）始终保持在Compose组合树中
- * - 这样可以确保TerminalViewModel不会被清除，终端进程继续在后台运行
- * - 最小化时使用alpha=0f隐藏可见性，点击事件会自然穿透到下层的X11界面
- */
-@Composable
-fun MainScreenWithX11AsMain(
-    tx11Content: (Context) -> View,
-    mainVm: MainViewModel,
-    terminalVm: TerminalViewModel,
-    settingVm: SettingViewModel,
-    prepareVm: PrepareViewModel,
-) {
-    val TAG = "MainScreenWithX11AsMain"
-
-    val uiState by mainVm.uiState.collectAsState()
-    val prepareUiState by prepareVm.uiState.collectAsStateWithLifecycle()
-
-    // 跟踪各个面板的最小化状态 - 默认为true（最小化）
-    var terminalMinimized by remember { mutableStateOf(true) }
-    var settingsMinimized by remember { mutableStateOf(true) }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // X11界面作为底层（全屏显示）
-        X11Screen(
-            x11Content = tx11Content,
-            onNavigateToOthers = { dest: Destination ->
-                when (dest) {
-                    Destination.Terminal -> {
-                        terminalMinimized = false
-                    }
-                    Destination.Settings -> {
-                        settingsMinimized = false
-                    }
-                    else -> {}
-                }
-            }
-        )
-
-        // 快速访问按钮（始终显示在右上角）
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxSize()
-        ) {
-            QuickAccessButtons(
-                terminalMinimized = terminalMinimized,
-                settingsMinimized = settingsMinimized,
-                onTerminalClick = {
-                    terminalMinimized = !terminalMinimized
-                },
-                onSettingsClick = {
-                    settingsMinimized = !settingsMinimized
-                }
-            )
-        }
-
-        // 终端面板 - 始终保持在组合树中以保持终端进程运行
-        TerminalFloatingPanel(
-            minimized = terminalMinimized,
-            onMinimize = { terminalMinimized = true },
-            viewModel = terminalVm
-        )
-
-        // 设置面板 - 始终保持在组合树中
-        SettingsFloatingPanel(
-            minimized = settingsMinimized,
-            onMinimize = { settingsMinimized = true },
-            settingVm = settingVm,
-            terminalVm = terminalVm,
-            prepareVm = prepareVm
-        )
-
-        // 对话框
-        MainDialog(uiState) { mainVm.closeConfirmDialog(it) }
-    }
-}
-
-/**
- * 快速访问按钮组件
- */
-@Composable
-private fun QuickAccessButtons(
-    terminalMinimized: Boolean,
-    settingsMinimized: Boolean,
-    onTerminalClick: () -> Unit,
-    onSettingsClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .padding(16.dp),
-        horizontalAlignment = Alignment.End
-    ) {
-        QuickAccessButton(
-            text = if (terminalMinimized) "终端" else "终端▲",
-            highlighted = !terminalMinimized,
-            onClick = onTerminalClick
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        QuickAccessButton(
-            text = if (settingsMinimized) "设置" else "设置▲",
-            highlighted = !settingsMinimized,
-            onClick = onSettingsClick
-        )
-    }
-}
-
-/**
- * 快速访问按钮
- */
-@Composable
-private fun QuickAccessButton(
-    text: String,
-    highlighted: Boolean,
-    onClick: () -> Unit
-) {
-    val buttonColor = if (highlighted) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-
-    TextButton(
-        onClick = onClick,
-        colors = ButtonDefaults.textButtonColors(containerColor = buttonColor)
-    ) {
-        Text(text = text)
-    }
-}
-
-/**
- * 终端浮动面板
- * 
- * 核心设计：
- * 1. ProotTerminalScreen始终保持在Compose组合树中
- * 2. 这样TerminalViewModel不会被清除，终端进程继续运行
- * 3. 最小化状态使用alpha=0f隐藏可见性
- * 4. 不使用任何阻塞操作，点击事件会自然穿透到下层的X11界面
- */
-@Composable
-private fun TerminalFloatingPanel(
-    minimized: Boolean,
-    onMinimize: () -> Unit,
-    viewModel: TerminalViewModel
-) {
-    // 获取屏幕尺寸用于计算面板大小
-    val configuration = LocalConfiguration.current
-    val panelWidth = (configuration.screenWidthDp * 0.4f).dp
-    val panelHeight = (configuration.screenHeightDp * 0.5f).dp
-    
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopStart
-    ) {
-        // 面板容器 - 始终存在于组合树中
-        // 使用alpha控制可见性，alpha=0f时组件不可见且不可交互
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 72.dp, start = 16.dp)
-                // 始终使用完整尺寸，因为Compose的alpha=0f已经处理了可见性和交互性问题
-                .fillMaxWidth(0.4f)
-                .fillMaxHeight(0.5f)
-                .graphicsLayer {
-                    // 关键：用alpha控制可见性
-                    // alpha=0f时组件不可见且不可交互，点击会穿透到下层
-                    alpha = if (minimized) 0f else 1f
-                },
-            contentAlignment = Alignment.TopStart
-        ) {
-            Card(
-                modifier = Modifier.fillMaxSize(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏 - 仅在非最小化时显示
-                    if (!minimized) {
-                        FloatingPanelHeader(
-                            title = "终端",
-                            onMinimize = onMinimize,
-                            onClose = onMinimize
-                        )
-                    }
-                    
-                    // 内容区 - 始终渲染！这是保持终端进程运行的关键
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        ProotTerminalScreen(viewModel)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 设置浮动面板
- * 
- * 采用与TerminalFloatingPanel相同的设计策略
- */
-@Composable
-private fun SettingsFloatingPanel(
-    minimized: Boolean,
-    onMinimize: () -> Unit,
-    settingVm: SettingViewModel,
-    terminalVm: TerminalViewModel,
-    prepareVm: PrepareViewModel
-) {
-    // 获取屏幕尺寸用于计算面板大小
-    val configuration = LocalConfiguration.current
-    val panelWidth = (configuration.screenWidthDp * 0.4f).dp
-    val panelHeight = (configuration.screenHeightDp * 0.5f).dp
-    
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopStart
-    ) {
-        // 面板容器 - 始终存在于组合树中
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 130.dp, start = 16.dp)
-                .fillMaxWidth(0.4f)
-                .fillMaxHeight(0.5f)
-                .graphicsLayer {
-                    alpha = if (minimized) 0f else 1f
-                },
-            contentAlignment = Alignment.TopStart
-        ) {
-            Card(
-                modifier = Modifier.fillMaxSize(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏 - 仅在非最小化时显示
-                    if (!minimized) {
-                        FloatingPanelHeader(
-                            title = "设置",
-                            onMinimize = onMinimize,
-                            onClose = onMinimize
-                        )
-                    }
-                    
-                    // 内容区 - 始终渲染
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        SettingScreen(settingVm, terminalVm, prepareVm) { }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 浮动面板标题栏
- */
-@Composable
-private fun FloatingPanelHeader(
-    title: String,
-    onMinimize: () -> Unit,
-    onClose: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.weight(1f)
-        )
-        
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onMinimize,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_hide),
-                    contentDescription = "最小化",
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_check_small),
-                    contentDescription = "关闭",
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
 private fun MainScreenPreview() {
-    val startDest = Destination.ExceptX11
+    val startDest = Destination.X11
     val navController = rememberNavController()
     val navBackEntry by navController.currentBackStackEntryAsState()
     val currDestination = appbarDestList.find { navBackEntry?.destination?.hasRoute(it.route::class) == true }
@@ -650,8 +338,8 @@ private fun MainScreenPreview() {
             ) {
                 NavHost(
                     navController, startDest.route,
-                    enterTransition = { androidx.compose.animation.scaleIn() },
-                    exitTransition = { androidx.compose.animation.scaleOut() },
+                    enterTransition = { scaleIn() },
+                    exitTransition = { scaleOut() },
                 ) {
                     composable<RoutePrepare> { PrepareScreenPreview() }
                     composable<RouteX11> { X11ScreenPreview() }
