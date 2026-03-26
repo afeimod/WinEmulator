@@ -340,22 +340,31 @@ class SettingViewModel : ViewModel() {
     // Theme设置相关
     fun onChangeThemeMode(mode: Int) = editDateStoreAsync(general_theme_mode.key, mode)
 
-    // X11设置相关
+    // X11设置相关 - 直接写入SharedPreferences确保立即生效
     fun onChangeX11TouchMode(mode: Int) {
+        // 直接写入SharedPreferences，确保立即生效
+        sharedPrefs?.edit()?.putString("touchMode", (mode + 1).toString())?.apply()
+        // 同时保存到DataStore
         editDateStoreAsync(x11_touch_mode.key, mode)
-        syncX11SettingsToSharedPrefs()
     }
     fun onChangeX11ScreenOrientation(orientation: Int) {
+        // 直接写入SharedPreferences，确保立即生效
+        val orientationMap = mapOf(10 to "auto", 11 to "landscape", 12 to "portrait", 13 to "reverseLandscape", 14 to "reversePortrait")
+        sharedPrefs?.edit()?.putString("forceOrientation", orientationMap[orientation] ?: "auto")?.apply()
+        // 同时保存到DataStore
         editDateStoreAsync(x11_screen_orientation.key, orientation)
-        syncX11SettingsToSharedPrefs()
     }
     fun onChangeX11DisplayScale(scale: Int) {
+        // 直接写入SharedPreferences，确保立即生效
+        sharedPrefs?.edit()?.putInt("displayScale", scale)?.apply()
+        // 同时保存到DataStore
         editDateStoreAsync(x11_display_scale.key, scale)
-        syncX11SettingsToSharedPrefs()
     }
     fun onChangeX11KeepScreenOn(enabled: Boolean) {
+        // 直接写入SharedPreferences，确保立即生效
+        sharedPrefs?.edit()?.putBoolean("keepScreenOn", enabled)?.apply()
+        // 同时保存到DataStore
         editDateStoreAsync(x11_keep_screen_on.key, enabled)
-        syncX11SettingsToSharedPrefs()
     }
 
 }
