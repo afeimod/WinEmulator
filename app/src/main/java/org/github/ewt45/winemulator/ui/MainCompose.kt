@@ -6,6 +6,9 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
@@ -21,7 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -53,7 +56,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -165,7 +171,7 @@ private fun MainDialog(uiState: MainUiState, onClose: (Boolean) -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth() // 让 Column 填充对话框宽度
-                        .wrapContentHeight(), // 根据内容调整高度
+                        .padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     SelectionContainer {
@@ -318,6 +324,8 @@ fun SettingButton(show: Boolean, onClick: () -> Unit) {
 /**
  * X11作为主界面的主屏幕
  * X11界面全屏显示，终端和设置界面以浮动窗口形式叠加在X11界面上，默认处于最小化状态
+ * 关键点：隐藏面板时使用graphicsLayer(alpha=0f)隐藏可见性，但保持组件在组合树中，
+ * 这样TerminalViewModel不会被清除，终端进程会继续运行
  */
 @Composable
 fun MainScreenWithX11AsMain(
@@ -371,14 +379,14 @@ fun MainScreenWithX11AsMain(
             )
         }
 
-        // 终端面板
+        // 终端面板 - 始终保持在组合树中以保持终端进程运行
         TerminalFloatingPanel(
             minimized = terminalMinimized,
             onMinimize = { terminalMinimized = true },
             viewModel = terminalVm
         )
 
-        // 设置面板
+        // 设置面板 - 始终保持在组合树中
         SettingsFloatingPanel(
             minimized = settingsMinimized,
             onMinimize = { settingsMinimized = true },
@@ -448,6 +456,14 @@ private fun QuickAccessButton(
 
 /**
  * 终端浮动面板
+ * 
+ * 重要设计决策：
+ * 1. 面板内容（包括ProotTerminalScreen）始终保持在组合树中
+ * 2. 这样可以确保TerminalViewModel不会被清除，终端进程继续运行
+ * 3. 最小化状态使用以下Modifier控制：
+ *    - alpha=0f: 完全隐藏可见性（但组件仍在渲染）
+ *    - pointerInput: 拦截所有触摸事件
+ *    - 固定小尺寸: 不占用过多布局空间
  */
 @Composable
 private fun TerminalFloatingPanel(
@@ -455,53 +471,82 @@ private fun TerminalFloatingPanel(
     onMinimize: () -> Unit,
     viewModel: TerminalViewModel
 ) {
+    // 获取屏幕尺寸用于计算面板大小
+    val configuration = LocalConfiguration.current
+    val panelWidth = (configuration.screenWidthDp * 0.4f).dp
+    val panelHeight = (configuration.screenHeightDp * 0.5f).dp
+    
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 始终渲染内容以保持进程运行，但通过Modifier控制可见性和交互
+        // 面板容器 - 始终存在，但使用Modifier控制可见性和交互
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 72.dp, start = 16.dp)
-                .then(
+                // 关键：使用graphicsLayer和固定尺寸来隐藏，而不是size(0.dp)
+                // 这样可以避免Compose布局系统的问题
+                .size(width = if (minimized) 60.dp else panelWidth, height = if (minimized) 40.dp else panelHeight)
+                .graphicsLayer {
+                    // 最小化时完全隐藏可见性，但组件仍在渲染
+                    alpha = if (minimized) 0f else 1f
+                }
+                .pointerInput(minimized) {
+                    // 最小化时拦截所有点击事件
                     if (minimized) {
-                        Modifier
-                            .size(0.dp)
-                            .pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
-                    } else {
-                        Modifier
-                            .fillMaxWidth(0.4f)
-                            .fillMaxHeight(0.5f)
+                        // 无限等待，拦截所有触摸事件
+                        try {
+                            while (true) {
+                                // 获取一个不会完成的channel或直接等待
+                                // 这里使用空循环阻塞
+                            }
+                        } catch (e: Throwable) {
+                            // 忽略
+                        }
                     }
-                )
+                },
+            contentAlignment = Alignment.TopStart
         ) {
-            // 始终渲染Card和内容，保持终端进程运行
+            // Card容器 - 始终渲染以保持终端进程
             Card(
                 modifier = Modifier.fillMaxSize(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏 - 隐藏时也不渲染标题栏
-                    if (!minimized) {
+                    // 标题栏 - 仅在非最小化时显示
+                    AnimatedVisibility(
+                        visible = !minimized,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut()
+                    ) {
                         FloatingPanelHeader(
                             title = "终端",
                             onMinimize = onMinimize,
                             onClose = onMinimize
                         )
                     }
-                    // 内容区 - 始终渲染，保持进程运行
+                    
+                    // 内容区 - 始终渲染！这是保持终端进程运行的关键
+                    // 即使在最小化状态下，ProotTerminalScreen仍在组合树中
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
                                 if (minimized) {
-                                    Modifier.pointerInput(Unit) { } // 隐藏时拦截所有点击
+                                    // 最小化时也拦截内容区的点击
+                                    Modifier.pointerInput(Unit) {
+                                        while (true) {
+                                            // 空循环，拦截所有事件
+                                        }
+                                    }
                                 } else {
                                     Modifier
                                 }
                             )
                     ) {
+                        // 关键：ProotTerminalScreen必须始终在组合树中
+                        // 这样TerminalViewModel不会被清除，终端进程继续运行
                         ProotTerminalScreen(viewModel)
                     }
                 }
@@ -512,6 +557,9 @@ private fun TerminalFloatingPanel(
 
 /**
  * 设置浮动面板
+ * 
+ * 采用与TerminalFloatingPanel相同的设计策略：
+ * 始终保持内容在组合树中，使用Modifier控制可见性和交互
  */
 @Composable
 private fun SettingsFloatingPanel(
@@ -521,47 +569,63 @@ private fun SettingsFloatingPanel(
     terminalVm: TerminalViewModel,
     prepareVm: PrepareViewModel
 ) {
+    // 获取屏幕尺寸用于计算面板大小
+    val configuration = LocalConfiguration.current
+    val panelWidth = (configuration.screenWidthDp * 0.4f).dp
+    val panelHeight = (configuration.screenHeightDp * 0.5f).dp
+    
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 始终渲染内容
+        // 面板容器 - 始终存在
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(top = 120.dp, start = 16.dp)
-                .then(
+                .padding(top = 130.dp, start = 16.dp)
+                // 使用graphicsLayer控制可见性，固定小尺寸减少布局影响
+                .size(width = if (minimized) 60.dp else panelWidth, height = if (minimized) 40.dp else panelHeight)
+                .graphicsLayer {
+                    alpha = if (minimized) 0f else 1f
+                }
+                .pointerInput(minimized) {
                     if (minimized) {
-                        Modifier
-                            .size(0.dp)
-                            .pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
-                    } else {
-                        Modifier
-                            .fillMaxWidth(0.4f)
-                            .fillMaxHeight(0.5f)
+                        while (true) {
+                            // 拦截所有事件
+                        }
                     }
-                )
+                },
+            contentAlignment = Alignment.TopStart
         ) {
             Card(
                 modifier = Modifier.fillMaxSize(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // 标题栏 - 隐藏时也不渲染
-                    if (!minimized) {
+                    // 标题栏 - 仅在非最小化时显示
+                    AnimatedVisibility(
+                        visible = !minimized,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut()
+                    ) {
                         FloatingPanelHeader(
                             title = "设置",
                             onMinimize = onMinimize,
                             onClose = onMinimize
                         )
                     }
+                    
                     // 内容区 - 始终渲染
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .then(
                                 if (minimized) {
-                                    Modifier.pointerInput(Unit) { } // 隐藏时拦截所有点击
+                                    Modifier.pointerInput(Unit) {
+                                        while (true) {
+                                            // 拦截所有事件
+                                        }
+                                    }
                                 } else {
                                     Modifier
                                 }
@@ -588,28 +652,39 @@ private fun FloatingPanelHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f)
         )
-        Row {
-            IconButton(onClick = onMinimize, modifier = Modifier.size(24.dp)) {
+        
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onMinimize,
+                modifier = Modifier.size(32.dp)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_hide),
                     contentDescription = "最小化",
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(32.dp)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_check_small),
                     contentDescription = "关闭",
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
