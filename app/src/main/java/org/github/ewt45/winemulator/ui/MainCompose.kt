@@ -6,11 +6,6 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -323,9 +317,13 @@ fun SettingButton(show: Boolean, onClick: () -> Unit) {
 
 /**
  * X11作为主界面的主屏幕
- * X11界面全屏显示，终端和设置界面以浮动窗口形式叠加在X11界面上，默认处于最小化状态
- * 关键点：隐藏面板时使用graphicsLayer(alpha=0f)隐藏可见性，但保持组件在组合树中，
- * 这样TerminalViewModel不会被清除，终端进程会继续运行
+ * 
+ * 设计说明：
+ * - X11界面全屏显示，终端和设置界面以浮动窗口形式叠加在X11界面上
+ * - 终端和设置面板默认处于最小化状态
+ * - 面板内容（包括ProotTerminalScreen）始终保持在Compose组合树中
+ * - 这样可以确保TerminalViewModel不会被清除，终端进程继续在后台运行
+ * - 最小化时使用alpha=0f隐藏可见性，点击事件会自然穿透到下层的X11界面
  */
 @Composable
 fun MainScreenWithX11AsMain(
@@ -457,13 +455,11 @@ private fun QuickAccessButton(
 /**
  * 终端浮动面板
  * 
- * 重要设计决策：
- * 1. 面板内容（包括ProotTerminalScreen）始终保持在组合树中
- * 2. 这样可以确保TerminalViewModel不会被清除，终端进程继续运行
- * 3. 最小化状态使用以下Modifier控制：
- *    - alpha=0f: 完全隐藏可见性（但组件仍在渲染）
- *    - pointerInput: 拦截所有触摸事件
- *    - 固定小尺寸: 不占用过多布局空间
+ * 核心设计：
+ * 1. ProotTerminalScreen始终保持在Compose组合树中
+ * 2. 这样TerminalViewModel不会被清除，终端进程继续运行
+ * 3. 最小化状态使用alpha=0f隐藏可见性
+ * 4. 不使用任何阻塞操作，点击事件会自然穿透到下层的X11界面
  */
 @Composable
 private fun TerminalFloatingPanel(
@@ -480,46 +476,29 @@ private fun TerminalFloatingPanel(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 面板容器 - 始终存在，但使用Modifier控制可见性和交互
+        // 面板容器 - 始终存在于组合树中
+        // 使用alpha控制可见性，alpha=0f时组件不可见且不可交互
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 72.dp, start = 16.dp)
-                // 关键：使用graphicsLayer和固定尺寸来隐藏，而不是size(0.dp)
-                // 这样可以避免Compose布局系统的问题
-                .size(width = if (minimized) 60.dp else panelWidth, height = if (minimized) 40.dp else panelHeight)
+                // 始终使用完整尺寸，因为Compose的alpha=0f已经处理了可见性和交互性问题
+                .fillMaxWidth(0.4f)
+                .fillMaxHeight(0.5f)
                 .graphicsLayer {
-                    // 最小化时完全隐藏可见性，但组件仍在渲染
+                    // 关键：用alpha控制可见性
+                    // alpha=0f时组件不可见且不可交互，点击会穿透到下层
                     alpha = if (minimized) 0f else 1f
-                }
-                .pointerInput(minimized) {
-                    // 最小化时拦截所有点击事件
-                    if (minimized) {
-                        // 无限等待，拦截所有触摸事件
-                        try {
-                            while (true) {
-                                // 获取一个不会完成的channel或直接等待
-                                // 这里使用空循环阻塞
-                            }
-                        } catch (e: Throwable) {
-                            // 忽略
-                        }
-                    }
                 },
             contentAlignment = Alignment.TopStart
         ) {
-            // Card容器 - 始终渲染以保持终端进程
             Card(
                 modifier = Modifier.fillMaxSize(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // 标题栏 - 仅在非最小化时显示
-                    AnimatedVisibility(
-                        visible = !minimized,
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut()
-                    ) {
+                    if (!minimized) {
                         FloatingPanelHeader(
                             title = "终端",
                             onMinimize = onMinimize,
@@ -528,25 +507,7 @@ private fun TerminalFloatingPanel(
                     }
                     
                     // 内容区 - 始终渲染！这是保持终端进程运行的关键
-                    // 即使在最小化状态下，ProotTerminalScreen仍在组合树中
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(
-                                if (minimized) {
-                                    // 最小化时也拦截内容区的点击
-                                    Modifier.pointerInput(Unit) {
-                                        while (true) {
-                                            // 空循环，拦截所有事件
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                            )
-                    ) {
-                        // 关键：ProotTerminalScreen必须始终在组合树中
-                        // 这样TerminalViewModel不会被清除，终端进程继续运行
+                    Box(modifier = Modifier.fillMaxSize()) {
                         ProotTerminalScreen(viewModel)
                     }
                 }
@@ -558,8 +519,7 @@ private fun TerminalFloatingPanel(
 /**
  * 设置浮动面板
  * 
- * 采用与TerminalFloatingPanel相同的设计策略：
- * 始终保持内容在组合树中，使用Modifier控制可见性和交互
+ * 采用与TerminalFloatingPanel相同的设计策略
  */
 @Composable
 private fun SettingsFloatingPanel(
@@ -578,22 +538,15 @@ private fun SettingsFloatingPanel(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 面板容器 - 始终存在
+        // 面板容器 - 始终存在于组合树中
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 130.dp, start = 16.dp)
-                // 使用graphicsLayer控制可见性，固定小尺寸减少布局影响
-                .size(width = if (minimized) 60.dp else panelWidth, height = if (minimized) 40.dp else panelHeight)
+                .fillMaxWidth(0.4f)
+                .fillMaxHeight(0.5f)
                 .graphicsLayer {
                     alpha = if (minimized) 0f else 1f
-                }
-                .pointerInput(minimized) {
-                    if (minimized) {
-                        while (true) {
-                            // 拦截所有事件
-                        }
-                    }
                 },
             contentAlignment = Alignment.TopStart
         ) {
@@ -603,11 +556,7 @@ private fun SettingsFloatingPanel(
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // 标题栏 - 仅在非最小化时显示
-                    AnimatedVisibility(
-                        visible = !minimized,
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut()
-                    ) {
+                    if (!minimized) {
                         FloatingPanelHeader(
                             title = "设置",
                             onMinimize = onMinimize,
@@ -616,21 +565,7 @@ private fun SettingsFloatingPanel(
                     }
                     
                     // 内容区 - 始终渲染
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(
-                                if (minimized) {
-                                    Modifier.pointerInput(Unit) {
-                                        while (true) {
-                                            // 拦截所有事件
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                            )
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         SettingScreen(settingVm, terminalVm, prepareVm) { }
                     }
                 }
