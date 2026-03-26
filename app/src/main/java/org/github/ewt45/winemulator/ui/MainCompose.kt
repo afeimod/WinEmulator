@@ -459,14 +459,16 @@ private fun TerminalFloatingPanel(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 隐藏时不占有空间且不可点击，但内容仍然渲染保持进程运行
+        // 始终渲染内容以保持进程运行，但通过Modifier控制可见性和交互
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 72.dp, start = 16.dp)
                 .then(
                     if (minimized) {
-                        Modifier.size(0.dp).pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
+                        Modifier
+                            .size(0.dp)
+                            .pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
                     } else {
                         Modifier
                             .fillMaxWidth(0.4f)
@@ -474,22 +476,33 @@ private fun TerminalFloatingPanel(
                     }
                 )
         ) {
-            if (!minimized) {
-                Card(
-                    modifier = Modifier.fillMaxSize(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // 标题栏
+            // 始终渲染Card和内容，保持终端进程运行
+            Card(
+                modifier = Modifier.fillMaxSize(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 标题栏 - 隐藏时也不渲染标题栏
+                    if (!minimized) {
                         FloatingPanelHeader(
                             title = "终端",
                             onMinimize = onMinimize,
                             onClose = onMinimize
                         )
-                        // 内容区 - 始终渲染，保持进程运行
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            ProotTerminalScreen(viewModel)
-                        }
+                    }
+                    // 内容区 - 始终渲染，保持进程运行
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (minimized) {
+                                    Modifier.pointerInput(Unit) { } // 隐藏时拦截所有点击
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    ) {
+                        ProotTerminalScreen(viewModel)
                     }
                 }
             }
@@ -512,14 +525,16 @@ private fun SettingsFloatingPanel(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart
     ) {
-        // 隐藏时不占有空间且不可点击
+        // 始终渲染内容
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(top = 120.dp, start = 16.dp)
                 .then(
                     if (minimized) {
-                        Modifier.size(0.dp).pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
+                        Modifier
+                            .size(0.dp)
+                            .pointerInput(Unit) { } // 隐藏时占0空间且拦截点击
                     } else {
                         Modifier
                             .fillMaxWidth(0.4f)
@@ -527,22 +542,32 @@ private fun SettingsFloatingPanel(
                     }
                 )
         ) {
-            if (!minimized) {
-                Card(
-                    modifier = Modifier.fillMaxSize(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // 标题栏
+            Card(
+                modifier = Modifier.fillMaxSize(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 标题栏 - 隐藏时也不渲染
+                    if (!minimized) {
                         FloatingPanelHeader(
                             title = "设置",
                             onMinimize = onMinimize,
                             onClose = onMinimize
                         )
-                        // 内容区 - 始终渲染
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            SettingScreen(settingVm, terminalVm, prepareVm) { }
-                        }
+                    }
+                    // 内容区 - 始终渲染
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (minimized) {
+                                    Modifier.pointerInput(Unit) { } // 隐藏时拦截所有点击
+                                } else {
+                                    Modifier
+                                }
+                            )
+                    ) {
+                        SettingScreen(settingVm, terminalVm, prepareVm) { }
                     }
                 }
             }
