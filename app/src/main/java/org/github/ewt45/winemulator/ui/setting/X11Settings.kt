@@ -19,7 +19,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 /**
  * X11分辨率设置
  * 支持预设分辨率和自定义分辨率输入
- * 使用general_resolution保持与原有逻辑一致
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +90,7 @@ fun X11Resolution(
 
 /**
  * X11设置面板
- * 包含分辨率、触摸方式、屏幕方向、显示缩放、保持屏幕常亮等选项
+ * 包含分辨率（与一般设置合并）、触摸方式、屏幕方向等选项
  */
 @Composable
 fun X11Settings(
@@ -101,10 +100,10 @@ fun X11Settings(
     val context = LocalContext.current
 
     CollapsePanel("X11显示设置", vPadding = 32.dp) {
-        // 分辨率设置 - 使用原有general_resolution
+        // 分辨率设置
         X11Resolution(
-            text = settingVm.resolutionText,
-            onDone = settingVm::onChangeResolutionText
+            text = x11State.resolution,
+            onDone = settingVm::onChangeX11Resolution
         )
 
         // 触摸方式设置
@@ -129,6 +128,24 @@ fun X11Settings(
         X11KeepScreenOn(
             enabled = x11State.keepScreenOn,
             onEnabledChange = settingVm::onChangeX11KeepScreenOn
+        )
+
+        // 全屏模式
+        X11Fullscreen(
+            enabled = x11State.fullscreen,
+            onEnabledChange = settingVm::onChangeX11Fullscreen
+        )
+
+        // 隐藏刘海屏区域
+        X11HideCutout(
+            enabled = x11State.hideCutout,
+            onEnabledChange = settingVm::onChangeX11HideCutout
+        )
+
+        // PIP模式
+        X11PIPMode(
+            enabled = x11State.pipMode,
+            onEnabledChange = settingVm::onChangeX11PipMode
         )
     }
 }
@@ -254,6 +271,81 @@ fun X11KeepScreenOn(
 }
 
 /**
+ * 全屏模式
+ */
+@Composable
+fun X11Fullscreen(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    TitleAndContent(
+        title = "全屏模式",
+        subTitle = "启用后，X11以全屏模式运行。"
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("全屏")
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
+        }
+    }
+}
+
+/**
+ * 隐藏刘海屏区域
+ */
+@Composable
+fun X11HideCutout(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    TitleAndContent(
+        title = "隐藏刘海屏",
+        subTitle = "启用后，X11显示区域将避开屏幕刘海/挖孔区域。"
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("隐藏刘海屏")
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
+        }
+    }
+}
+
+/**
+ * PIP画中画模式
+ */
+@Composable
+fun X11PIPMode(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    TitleAndContent(
+        title = "画中画模式",
+        subTitle = "启用后，X11可以进入画中画模式显示。"
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("画中画模式")
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
+        }
+    }
+}
+
+/**
  * X11设置预览
  */
 @Composable
@@ -263,6 +355,9 @@ fun X11SettingsPreview() {
     var screenOrientation by remember { mutableIntStateOf(10) }
     var displayScale by remember { mutableIntStateOf(100) }
     var keepScreenOn by remember { mutableStateOf(true) }
+    var fullscreen by remember { mutableStateOf(false) }
+    var hideCutout by remember { mutableStateOf(false) }
+    var pipMode by remember { mutableStateOf(false) }
 
     CollapsePanel("X11设置预览") {
         X11Resolution(resolution) { newValue, _ -> resolution = newValue }
@@ -270,5 +365,8 @@ fun X11SettingsPreview() {
         X11ScreenOrientation(screenOrientation, { screenOrientation = it })
         X11DisplayScale(displayScale, { displayScale = it })
         X11KeepScreenOn(keepScreenOn, { keepScreenOn = it })
+        X11Fullscreen(fullscreen, { fullscreen = it })
+        X11HideCutout(hideCutout, { hideCutout = it })
+        X11PIPMode(pipMode, { pipMode = it })
     }
 }

@@ -73,7 +73,7 @@ class SettingViewModel : ViewModel() {
     }
 
     /** 将当前X11设置同步到SharedPreferences - 使用DataStore直接获取值避免闪退 */
-    private fun syncX11SettingsToSharedPrefs() {
+    fun syncX11SettingsToSharedPrefs() {
         val prefs = sharedPrefs ?: return
         viewModelScope.launch {
             try {
