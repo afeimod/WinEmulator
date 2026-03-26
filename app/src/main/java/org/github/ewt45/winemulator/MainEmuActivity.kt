@@ -40,7 +40,6 @@ import org.github.ewt45.winemulator.terminal.SessionClientAImpl
 import org.github.ewt45.winemulator.terminal.ViewClientImpl
 import org.github.ewt45.winemulator.ui.Destination
 import org.github.ewt45.winemulator.ui.MainScreen
-import org.github.ewt45.winemulator.ui.MainScreenWithX11AsMain
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.MainViewModel
 import org.github.ewt45.winemulator.viewmodel.PrepareViewModel
@@ -110,13 +109,25 @@ class MainEmuActivity : MainActivity() {
             // 获取主题设置并应用
             val themeMode by settingViewModel.themeState.collectAsState()
             val isDarkTheme = themeMode != 0 // 0 = 跟随系统
-            
+
             MainTheme(darkTheme = isDarkTheme) {
-                // 使用X11作为主界面的布局
-                MainScreenWithX11AsMain(
+                MainScreen(
                     tx11Content = { frm.also { (frm.parent as? ViewGroup)?.removeView(frm) } },
-                    mainViewModel, terminalViewModel, settingViewModel, prepareViewModel
+                    Destination.X11, mainViewModel, terminalViewModel, settingViewModel, prepareViewModel
                 )
+            }
+        }
+
+        // 在准备完成时自动启动模拟器
+        lifecycleScope.launch {
+            // 监听准备状态变化
+            prepareViewModel.uiState.collect { state ->
+                if (state.isPrepareFinished && !emuStarted) {
+                    // 准备完成且模拟器未启动，自动启动
+                    lifecycleScope.launch {
+                        startEmu()
+                    }
+                }
             }
         }
 
