@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.viewmodel
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.system.Os
 import android.util.Log
@@ -9,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.datastore.preferences.core.edit
+import androidx.preference.PreferenceManager
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
@@ -61,6 +63,45 @@ private val TAG = "SettingViewModel"
  * 添加一个属性时，记得修改对应flow的map中的新建实例的传参
  */
 class SettingViewModel : ViewModel() {
+
+    // SharedPreferences，用于同步X11设置到termux-x11可读的格式
+    private var sharedPrefs: SharedPreferences? = null
+
+    /** 初始化SharedPreferences，需要在Activity中调用 */
+    fun initSharedPreferences(context: Context) {
+        sharedPrefs = PreferenceManager.getDefaultSharedPreferences(context)
+        // 初始化时同步一次当前X11设置
+        syncX11SettingsToSharedPrefs()
+    }
+
+    /** 将当前X11设置同步到SharedPreferences */
+    private fun syncX11SettingsToSharedPrefs() {
+        val prefs = sharedPrefs ?: return
+        prefs.edit().apply {
+            // 触摸模式: 0=虚拟触控板(1), 1=模拟触摸(2), 2=触摸屏(3) - termux-x11使用1,2,3
+            putString("touchMode", (x11State.value.touchMode + 1).toString())
+            // 屏幕方向: 10=auto, 11=landscape, 12=portrait, 13=reverseLandscape, 14=reversePortrait
+            val orientationMap = mapOf(10 to "auto", 11 to "landscape", 12 to "portrait", 13 to "reverseLandscape", 14 to "reversePortrait")
+            putString("forceOrientation", orientationMap[x11State.value.screenOrientation] ?: "auto")
+            // 显示缩放
+            putInt("displayScale", x11State.value.displayScale)
+            // 保持屏幕常亮
+            putBoolean("keepScreenOn", x11State.value.keepScreenOn)
+            // 全屏
+            putBoolean("fullscreen", x11State.value.fullscreen)
+            // 隐藏刘海屏
+            putBoolean("hideCutout", x11State.value.hideCutout)
+            // 画中画
+            putBoolean("PIP", x11State.value.pipMode)
+            // 分辨率模式: 使用exact模式，分辨率使用custom
+            val resolution = x11State.value.resolution
+            if (resolution.contains("x")) {
+                putString("displayResolutionMode", "custom")
+                putString("displayResolutionCustom", resolution)
+            }
+            apply()
+        }
+    }
 
     // 一般设置
     var resolutionText by mutableStateOf("")
@@ -297,13 +338,34 @@ class SettingViewModel : ViewModel() {
     fun onChangeThemeMode(mode: Int) = editDateStoreAsync(general_theme_mode.key, mode)
 
     // X11设置相关
-    fun onChangeX11TouchMode(mode: Int) = editDateStoreAsync(x11_touch_mode.key, mode)
-    fun onChangeX11ScreenOrientation(orientation: Int) = editDateStoreAsync(x11_screen_orientation.key, orientation)
-    fun onChangeX11DisplayScale(scale: Int) = editDateStoreAsync(x11_display_scale.key, scale)
-    fun onChangeX11KeepScreenOn(enabled: Boolean) = editDateStoreAsync(x11_keep_screen_on.key, enabled)
-    fun onChangeX11Fullscreen(enabled: Boolean) = editDateStoreAsync(x11_fullscreen.key, enabled)
-    fun onChangeX11HideCutout(enabled: Boolean) = editDateStoreAsync(x11_hide_cutout.key, enabled)
-    fun onChangeX11PipMode(enabled: Boolean) = editDateStoreAsync(x11_pip_mode.key, enabled)
+    fun onChangeX11TouchMode(mode: Int) {
+        editDateStoreAsync(x11_touch_mode.key, mode)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11ScreenOrientation(orientation: Int) {
+        editDateStoreAsync(x11_screen_orientation.key, orientation)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11DisplayScale(scale: Int) {
+        editDateStoreAsync(x11_display_scale.key, scale)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11KeepScreenOn(enabled: Boolean) {
+        editDateStoreAsync(x11_keep_screen_on.key, enabled)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11Fullscreen(enabled: Boolean) {
+        editDateStoreAsync(x11_fullscreen.key, enabled)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11HideCutout(enabled: Boolean) {
+        editDateStoreAsync(x11_hide_cutout.key, enabled)
+        syncX11SettingsToSharedPrefs()
+    }
+    fun onChangeX11PipMode(enabled: Boolean) {
+        editDateStoreAsync(x11_pip_mode.key, enabled)
+        syncX11SettingsToSharedPrefs()
+    }
 
     /** X11分辨率变更处理，支持预设分辨率和自定义分辨率 */
     fun onChangeX11Resolution(text: String, forceFormat: Boolean) {
@@ -313,6 +375,7 @@ class SettingViewModel : ViewModel() {
         }
         if (formatted != null) {
             editDateStoreAsync(x11_resolution.key, formatted)
+            syncX11SettingsToSharedPrefs()
         }
     }
 

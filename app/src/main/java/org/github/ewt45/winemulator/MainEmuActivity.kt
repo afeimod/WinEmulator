@@ -84,6 +84,9 @@ class MainEmuActivity : MainActivity() {
         startX11Intent = createStartX11Intent()
         super.onCreate(savedInstanceState)
 
+        // 初始化X11设置SharedPreferences同步
+        settingViewModel.initSharedPreferences(this)
+
         //偏好设置
         prefs.displayResolutionMode.put("custom")
         runBlocking { prefs.displayResolutionCustom.put(Consts.Pref.general_resolution.get()) }
