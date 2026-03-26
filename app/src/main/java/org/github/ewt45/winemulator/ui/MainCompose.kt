@@ -52,9 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.alpha
-import androidx.compose.ui.input.pointer.awaitPointerEventScope
-import androidx.compose.ui.input.pointer.consumeAllChanges
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -402,13 +400,13 @@ private fun TerminalFloatingPanel(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .alpha(alpha)
-            .pointerInput(alpha) {
-                if (alpha == 0f) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            awaitPointerEvent().consumeAllChanges()
-                        }
+            .graphicsLayer { this.alpha = alpha }
+            .pointerInput(minimized) {
+                // 当面板最小化时，消费所有触摸事件，防止穿透
+                if (minimized) {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
                     }
                 }
             }
@@ -453,13 +451,12 @@ private fun SettingsFloatingPanel(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .alpha(alpha)
-            .pointerInput(alpha) {
-                if (alpha == 0f) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            awaitPointerEvent().consumeAllChanges()
-                        }
+            .graphicsLayer { this.alpha = alpha }
+            .pointerInput(minimized) {
+                if (minimized) {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
                     }
                 }
             }
