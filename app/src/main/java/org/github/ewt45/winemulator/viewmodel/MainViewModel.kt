@@ -51,6 +51,15 @@ class MainViewModel : ViewModel() {
     }
 
     /**
+     * 导航到指定界面
+     */
+    fun navigateTo(destination: Destination) {
+        viewModelScope.launch {
+            _navigateToEvent.emit(destination)
+        }
+    }
+
+    /**
      * 显示阻塞对话框. 该对话框无法关闭，用于执行一些操作，等操作完成后自动关闭
      * @param action 要执行的操作。在viewModelScope中运行
      * @return 返回一个Result success代表操作执行成功，failure代表失败
