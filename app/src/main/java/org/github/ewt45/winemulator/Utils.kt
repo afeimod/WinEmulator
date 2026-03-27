@@ -62,6 +62,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
+import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 import org.apache.commons.compress.utils.InputStreamStatistics
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.IOUtils
@@ -305,6 +306,12 @@ object Utils {
         /** 判断该文件是否为xz压缩包 */
         fun File.isXz(): Boolean = checkHeaderMagic(org.tukaani.xz.XZ.HEADER_MAGIC)
 
+        /** 判断该文件是否为zstd压缩包 */
+        fun File.isZstd(): Boolean = checkHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
+
+        /** 判断输入流是否为zstd压缩包 */
+        fun InputStream.isZstd(): Boolean = checkHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
+
         /** 检查文件头是否为给定标识 */
         private fun File.checkHeaderMagic(header: ByteArray): Boolean {
             try {
@@ -343,10 +350,10 @@ object Utils {
         }
 
         /**
-         * 解压一个压缩包(目前支持.tar.xz 和 .tar.gz) ，其内含一个rootfs, 将其解压到outDir.
+         * 解压一个压缩包(目前支持.tar.xz、.tar.gz 和 .tar.zst) ，其内含一个rootfs, 将其解压到outDir.
          * 解压后，outDir为 [Consts.rootfsAllDir] 中的一个目录，其内部为 bin etc 这种的目录
          * 解压后会做一些处理操作，参考 [postExtractRootfs]
-         * uri不是.tar.xz时会抛出异常
+         * uri不是.tar.xz/.tar.gz/.tar.zst时会抛出异常
          * @param reporter 调用[TaskReporter.progressValue] 时传入的是某文件压缩后大小. 本函数会将[TaskReporter.totalValue] 设置为压缩文件总大小
          */
         suspend fun installRootfsArchive(ctx: Context, uri: Uri, reporter: TaskReporter): File = withContext(IO) {
@@ -360,10 +367,11 @@ object Utils {
             reporter.progress(0F)
             reporter.totalValue = compSize
 
-            //先检测是不是gz或xz. 然后复制文件到内部目录
+            //先检测是不是gz或xz或zst. 然后复制文件到内部目录
             val compType = if (ctx.openInput(uri)?.use { it.isXz() } == true) CompressedType.XZ
             else if (ctx.openInput(uri)?.use { it.isGzip() } == true) CompressedType.GZ
-            else throw RuntimeException("该文件不是 xz 或 gz 压缩包。")
+            else if (ctx.openInput(uri)?.use { it.isZstd() } == true) CompressedType.TZST
+            else throw RuntimeException("该文件不是 xz、gz 或 zst 压缩包。")
 
             reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
             reporter.totalValue = compSize
@@ -400,6 +408,88 @@ object Utils {
             reporter.msg(null, "解压结束。正在做一些处理...")
             postExtractRootfs(targetOutDir)
 
+            return@withContext targetOutDir
+        }
+
+        /**
+         * 从assets目录自动提取rootfs压缩包
+         * 支持的格式：rootfs.tar.xz, rootfs.tar.gz, rootfs.tar.zst
+         * @param reporter 进度报告器
+         * @return 提取后的rootfs目录，如果未找到则返回null
+         */
+        suspend fun installRootfsFromAssets(ctx: Context, reporter: TaskReporter): File? = withContext(IO) {
+            // 查找assets中的rootfs压缩包
+            val rootfsFileNames = listOf("rootfs.tar.xz", "rootfs.tar.gz", "rootfs.tar.zst")
+            var foundFileName: String? = null
+            
+            for (fileName in rootfsFileNames) {
+                try {
+                    val inputStream = ctx.assets.open(fileName)
+                    inputStream.close()
+                    foundFileName = fileName
+                    break
+                } catch (e: Exception) {
+                    // 文件不存在，继续尝试下一个
+                }
+            }
+            
+            if (foundFileName == null) {
+                reporter.msg("未在assets中找到rootfs压缩包")
+                return@withContext null
+            }
+            
+            reporter.msg("找到assets中的rootfs: $foundFileName")
+            
+            val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
+                FileUtils.deleteDirectory(it)
+                it.mkdirs()
+            }
+            
+            // 根据文件名确定压缩类型
+            val compType = when {
+                foundFileName.endsWith(".xz") -> CompressedType.XZ
+                foundFileName.endsWith(".gz") -> CompressedType.GZ
+                foundFileName.endsWith(".zst") -> CompressedType.TZST
+                else -> throw RuntimeException("不支持的压缩格式: $foundFileName")
+            }
+            
+            reporter.progress(0F)
+            reporter.totalValue = 100L
+            
+            reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
+            val compressedTarInput = Archive.getCompressedInput(compType, ctx.assets.open(foundFileName))
+            Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
+            
+            reporter.msg(null, "(2/3) 正在移动到目标文件夹...")
+            reporter.progress(0F)
+            
+            // 寻找rootfs根目录
+            val confirmRootfsSubDirs = listOf("etc", "usr")
+            val searchDirs = mutableListOf(tmpOutDir)
+            var foundRootfsDir: File? = null
+            while (searchDirs.size > 0 && foundRootfsDir == null) {
+                val nowDir = searchDirs.removeAt(0)
+                foundRootfsDir = nowDir.takeIf { it.list()?.toList()?.containsAll(confirmRootfsSubDirs) == true }
+                nowDir.listFiles()?.let { searchDirs.addAll(it) }
+            }
+            if (foundRootfsDir == null)
+                throw RuntimeException("无法在解压内容中找到rootfs根目录（包含 etc usr 的文件夹）")
+            
+            // 确保目标目录没有同名文件夹. 序号优先使用原文件夹名已包含的序号
+            var (baseName, num) = "^(.+)-(\\d+)$".toRegex().matchEntire(foundRootfsDir.name)?.destructured
+                ?.run { Pair(component1(), component2().toInt()) } ?: Pair(foundRootfsDir.name, 1)
+            rootfsAllDir.list()?.let { while (it.contains("$baseName-$num")) num++ }
+            val targetOutDir = File(rootfsAllDir, "$baseName-$num")
+            reporter.msg("移动rootfs: $foundRootfsDir -> $targetOutDir")
+            
+            FileUtils.moveDirectory(foundRootfsDir, targetOutDir)
+            
+            FileUtils.deleteDirectory(tmpOutDir)
+            
+            // 解压后做一些处理操作
+            reporter.msg(null, "解压结束。正在做一些处理...")
+            postExtractRootfs(targetOutDir)
+            
             return@withContext targetOutDir
         }
 
@@ -540,12 +630,14 @@ object Utils {
         fun getCompressedInput(type: CompressedType, rawInput: InputStream?): CompressorInputStream = when (type) {
             CompressedType.XZ -> XZCompressorInputStream(rawInput)
             CompressedType.GZ -> GzipCompressorInputStream(rawInput)
+            CompressedType.TZST -> ZstdCompressorInputStream(rawInput)
         }
 
         /** 将一个普通输出流转换为对应的压缩器输出流 如 [XZCompressorInputStream] [GzipCompressorOutputStream] */
         fun getCompressedOutput(type: CompressedType, rawOutput: OutputStream?): CompressorOutputStream<out OutputStream> = when (type) {
             CompressedType.XZ -> XZCompressorOutputStream(rawOutput)
             CompressedType.GZ -> GzipCompressorOutputStream(rawOutput)
+            CompressedType.TZST -> throw RuntimeException("Zstd压缩输出暂不支持")
         }
 
         /**
@@ -995,7 +1087,7 @@ class RateLimiter(val delayMs: Long = 1000L) {
 }
 
 enum class CompressedType {
-    XZ, GZ,
+    XZ, GZ, TZST,
 }
 
 enum class FuncOnChangeAction {
