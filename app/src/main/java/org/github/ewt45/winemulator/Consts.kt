@@ -88,7 +88,7 @@ object Consts {
         val allItems by lazy { getAllPrefItems() }
 
         val general_resolution by item("general_resolution", "1280x720")
-        val general_rootfs_lang by item("general_rootfs_lang", "en_US.utf8")
+        val general_rootfs_lang by item("general_rootfs_lang", "zh_CN")
         val general_shared_ext_path by item("shared_ext_path", setOf("/storage/emulated/0/Download"))
         val proot_bool_options by item("proot_bool_options", setOf( "-L", "--link2symlink", "--sysvipc", "--kill-on-exit", /*"--root-id",*/))
         val proot_startup_cmd by item("proot_startup_cmd", "")
@@ -112,9 +112,9 @@ object Consts {
         // X11 Settings - 保持屏幕常亮
         val x11_keep_screen_on by item("x11_keep_screen_on", true)
         // X11 Settings - 全屏模式
-        val x11_fullscreen by item("x11_fullscreen", false)
-        // X11 Settings - 隐藏刘海屏
-        val x11_hide_cutout by item("x11_hide_cutout", false)
+        val x11_fullscreen by item("x11_fullscreen", true)
+        // X11 Settings - 使用刘海屏区域
+        val x11_hide_cutout by item("x11_hide_cutout", true)
         // X11 Settings - PIP画中画模式
         val x11_pip_mode by item("x11_pip_mode", false)
         // X11 Settings - 分辨率: 格式为"宽x高"，如"1280x720"

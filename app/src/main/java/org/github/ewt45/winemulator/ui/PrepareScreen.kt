@@ -112,14 +112,12 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         reporter.msg("已设置启动命令为: linbox")
                     }
                     
-                    // 自动设置当前rootfs
+                    // 自动设置当前rootfs（直接设置符号链接，不调用onChangeRootfsSelect避免触发finish）
                     scope.launch {
                         delay(500) // 等待命令设置完成
-                        if (state.forceNoRootfs) {
-                            prepareVm.onRootfsExtracted(extractedRootfs.name)
-                        } else {
-                            settingVm.onChangeRootfsSelect(extractedRootfs.name)
-                        }
+                        Utils.Rootfs.makeCurrent(extractedRootfs)
+                        // 更新状态，让UI可以继续
+                        prepareVm.onRootfsExtracted(extractedRootfs.name)
                     }
                 } else {
                     // 未找到assets中的rootfs，回退到手动选择
