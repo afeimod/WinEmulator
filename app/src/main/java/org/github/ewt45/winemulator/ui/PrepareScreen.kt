@@ -52,6 +52,7 @@ import org.github.ewt45.winemulator.ui.components.ConfirmDialog
 import org.github.ewt45.winemulator.ui.components.ProgressDisplay
 import org.github.ewt45.winemulator.ui.components.ProgressStage
 import org.github.ewt45.winemulator.ui.components.TaskReporter
+import org.github.ewt45.winemulator.ui.components.SimpleTaskReporter
 import org.github.ewt45.winemulator.ui.components.rememberConfirmDialogState
 import org.github.ewt45.winemulator.ui.components.rememberTaskReporter
 import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_LoginUserSelect
@@ -245,7 +246,7 @@ private fun RootfsSelect(
     onRootfsNameChange: suspend (String, String, FuncOnChangeAction) -> Unit,
     initStage: ProgressStage = ProgressStage.NOT_STARTED,
     initRootfsName: String = "",
-    initReporter: TaskReporter? = null,
+    initReporter: SimpleTaskReporter? = null,
     onAutoExtractStart: (() -> Unit)? = null,
 ) {
     val TAG = "RootfsSelectScreen"
@@ -354,7 +355,7 @@ private fun RootfsSelect(
  * 自动提取Rootfs时的进度显示组件
  */
 @Composable
-private fun RootfsAutoExtractProgress(reporter: TaskReporter) {
+private fun RootfsAutoExtractProgress(reporter: SimpleTaskReporter) {
     Column(
         Modifier
             .fillMaxSize()

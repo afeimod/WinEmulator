@@ -201,6 +201,40 @@ object Utils {
 
     fun File.notExists(): Boolean = !this.exists()
 
+    /** 判断输入流是否为zstd压缩包 */
+    fun InputStream.isZstd(): Boolean = checkStreamHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
+
+    /** 判断该文件是否为zstd压缩包 */
+    fun File.isZstd(): Boolean = checkFileHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
+
+    /** 检查输入流头是否为给定标识 */
+    private fun InputStream.checkStreamHeaderMagic(header: ByteArray): Boolean {
+        try {
+            val len = header.size.toLong()
+            val fileHeader = source().use { source -> Buffer().also { source.read(it, len) }.readByteArray(len) }
+            for (i in 0 until len.toInt())
+                if (header[i] != fileHeader[i])
+                    return false
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /** 检查文件头是否为给定标识 */
+    private fun File.checkFileHeaderMagic(header: ByteArray): Boolean {
+        try {
+            val len = header.size.toLong()
+            val fileHeader = source().use { source -> Buffer().also { source.read(it, len) }.readByteArray(len) }
+            for (i in 0 until len.toInt())
+                if (header[i] != fileHeader[i])
+                    return false
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
 
     fun printStackTraceToString(e: Throwable): String = e.stackTraceToString()
 
@@ -305,12 +339,6 @@ object Utils {
 
         /** 判断该文件是否为xz压缩包 */
         fun File.isXz(): Boolean = checkHeaderMagic(org.tukaani.xz.XZ.HEADER_MAGIC)
-
-        /** 判断该文件是否为zstd压缩包 */
-        fun File.isZstd(): Boolean = checkHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
-
-        /** 判断输入流是否为zstd压缩包 */
-        fun InputStream.isZstd(): Boolean = checkHeaderMagic(byteArrayOf(0x28.toByte(), 0xB5.toByte(), 0x2F.toByte(), 0xFD.toByte()))
 
         /** 检查文件头是否为给定标识 */
         private fun File.checkHeaderMagic(header: ByteArray): Boolean {
