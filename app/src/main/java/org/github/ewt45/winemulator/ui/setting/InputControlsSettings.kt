@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -198,7 +200,7 @@ fun InputControlsSettings(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                 )
 
                 ExposedDropdownMenu(
@@ -441,9 +443,9 @@ fun ControlsEditorDialog(
                                 Icon(
                                     imageVector = when (element.type) {
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.BUTTON -> Icons.Default.Star
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.D_PAD -> Icons.Default.ArrowForward
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.D_PAD -> Icons.AutoMirrored.Filled.ArrowForward
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.STICK -> Icons.Default.Info
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.RANGE_BUTTON -> Icons.Default.List
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.RANGE_BUTTON -> Icons.AutoMirrored.Filled.List
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.TRACKPAD -> Icons.Default.Menu
                                     },
                                     contentDescription = null
@@ -493,7 +495,7 @@ fun ControlsEditorDialog(
                             // 添加方向键
                         },
                         label = { Text("方向键") },
-                        leadingIcon = { Icon(Icons.Default.ArrowForward, contentDescription = null) }
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null) }
                     )
 
                     FilterChip(
