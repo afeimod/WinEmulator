@@ -71,6 +71,7 @@ class InputControlsView(
         setBackgroundColor(Color.TRANSPARENT)
         layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
 
+        @Suppress("DEPRECATION")
         try {
             vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             vibrationEffect = VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE)
