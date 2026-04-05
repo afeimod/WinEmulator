@@ -1,9 +1,6 @@
 name: Android CI/CD
 
 on:
-  push:
-    branches:
-      - '**'
   workflow_dispatch:
     inputs:
       build_type:
@@ -21,8 +18,6 @@ env:
   ANDROID_COMPILE_SDK: '35'
   ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
   ANDROID_SDK_VERSION: '28'
-  # push 时默认为 release，workflow_dispatch 时使用输入值
-  BUILD_TYPE: ${{ github.event_name == 'push' && 'release' || github.event.inputs.build_type }}
 
 jobs:
   # ============================================
@@ -31,7 +26,7 @@ jobs:
   debug-build:
     name: Debug Build - API ${{ matrix.api_level }}
     runs-on: ubuntu-latest
-    if: ${{ env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both' }}
+    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
     
     strategy:
       fail-fast: false
@@ -117,7 +112,7 @@ jobs:
   release-build:
     name: Release Build
     runs-on: ubuntu-latest
-    if: ${{ env.BUILD_TYPE == 'release' || env.BUILD_TYPE == 'both' }}
+    if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' }}
     
     steps:
       - name: Checkout code
@@ -220,7 +215,7 @@ jobs:
   lint:
     name: Code Lint
     runs-on: ubuntu-latest
-    if: ${{ env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both' }}
+    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
     
     steps:
       - name: Checkout code
@@ -271,7 +266,7 @@ jobs:
   unit-test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    if: ${{ env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both' }}
+    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
     
     steps:
       - name: Checkout code
@@ -366,7 +361,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**触发事件:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**分支:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "**构建类型:** ${{ env.BUILD_TYPE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**构建类型:** ${{ github.event.inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "**注意:** 构建的APK文件未经过正式签名，发布前请用MT管理器签名。" >> $GITHUB_STEP_SUMMARY
