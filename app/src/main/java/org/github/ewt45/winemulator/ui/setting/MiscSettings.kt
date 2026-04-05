@@ -97,7 +97,7 @@ private fun BackupRootfs() {
 
 /**
  * 备份当前 rootfs 到 Download 文件夹
- * 使用 tar 命令打包
+ * 使用 tar 命令打包（不压缩），排除容器特定文件夹(.l2s, .emuconf)
  */
 private suspend fun backupRootfsToDownload(): String = withContext(Dispatchers.IO) {
     val rootfsDir = Consts.rootfsCurrDir
@@ -113,7 +113,7 @@ private suspend fun backupRootfsToDownload(): String = withContext(Dispatchers.I
     
     // 生成带时间戳的文件名
     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val backupFileName = "${rootfsName}_backup_$timestamp.tar.gz"
+    val backupFileName = "${rootfsName}_backup_$timestamp.tar"
     
     // Download 文件夹路径
     val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
@@ -124,13 +124,15 @@ private suspend fun backupRootfsToDownload(): String = withContext(Dispatchers.I
     
     Log.d(TAG, "开始备份: $realRootfsDir -> $backupFile")
     
-    // 使用 tar 命令打包
+    // 使用 tar 命令打包（不压缩），排除容器特定文件夹
     // 注意：需要在 rootfs 父目录执行，以便打包时使用相对路径
     val parentDir = realRootfsDir.parentFile
     val tarCmd = listOf(
         "tar",
-        "-czf",
+        "-cf",
         backupFile.absolutePath,
+        "--exclude=.l2s",
+        "--exclude=.emuconf",
         "-C", parentDir.absolutePath,
         rootfsName
     )
