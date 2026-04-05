@@ -180,7 +180,8 @@ class MainEmuActivity : MainActivity() {
         }
         val LANG = general_rootfs_lang.get()
         // 检查目标 locale 是否已生成，未生成则执行 locale-gen
-        terminalViewModel.runCommand("""if ! locale -a | grep -qi "${LANG%%.*}"; then locale-gen $LANG; fi; export LANG=$LANG""")
+        val langBase = LANG.substringBefore('.')  // "zh_CN.utf8" -> "zh_CN"
+        terminalViewModel.runCommand("""if ! locale -a | grep -qi "$langBase"; then locale-gen $LANG; fi; export LANG=$LANG""")
         //这里还不能用state因为state第一次获取的是默认值而非datastore来的值
         proot_startup_cmd.get().takeIf { it.isNotBlank() }?.let {
             terminalViewModel.runCommand("$it &")
