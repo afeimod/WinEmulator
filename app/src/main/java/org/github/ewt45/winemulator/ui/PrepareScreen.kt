@@ -107,18 +107,13 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     reporter.stage = ProgressStage.DONE_SUCCESS
                     
                     // 自动设置启动命令为linbox
-                    scope.launch {
-                        settingVm.onChangeProotStartupCmd("linbox")
-                        reporter.msg("已设置启动命令为: linbox")
-                    }
+                    settingVm.onChangeProotStartupCmd("linbox")
+                    reporter.msg("已设置启动命令为: linbox")
                     
                     // 自动设置当前rootfs（直接设置符号链接，不调用onChangeRootfsSelect避免触发finish）
-                    scope.launch {
-                        delay(500) // 等待命令设置完成
-                        Utils.Rootfs.makeCurrent(extractedRootfs)
-                        // 更新状态，让UI可以继续
-                        prepareVm.onRootfsExtracted(extractedRootfs.name)
-                    }
+                    Utils.Rootfs.makeCurrent(extractedRootfs)
+                    // 更新状态，让UI可以继续
+                    prepareVm.onRootfsExtracted(extractedRootfs.name)
                 } else {
                     // 未找到assets中的rootfs，回退到手动选择
                     reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
