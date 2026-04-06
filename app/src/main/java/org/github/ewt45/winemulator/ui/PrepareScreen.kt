@@ -144,6 +144,34 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             reporter.progress = 100
         }
     }
+    
+    // 新建容器时，用户点击"从App内置提取"按钮后执行提取逻辑
+    LaunchedEffect(autoExtractStarted, state.forceNoRootfs) {
+        if (autoExtractStarted && state.forceNoRootfs && reporter.stage == ProgressStage.NOT_STARTED) {
+            reporter.msgTitle = "正在提取Rootfs..."
+            reporter.stage = ProgressStage.PROCESSING
+            reporter.progress = 0
+            reporter.msg = "日志："
+            
+            try {
+                val extractedRootfs = Utils.Rootfs.installRootfsFromAssets(ctx, reporter)
+                if (extractedRootfs != null) {
+                    reporter.msg("提取rootfs成功：${extractedRootfs.name}", "提取成功！\n（日志可点击展开查看）")
+                    reporter.stage = ProgressStage.DONE_SUCCESS
+                } else {
+                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
+                    reporter.stage = ProgressStage.DONE_FAILURE
+                    autoExtractStarted = false
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                reporter.msg("提取rootfs过程中出现错误：${e.stackTraceToString()}", "提取失败，请手动选择rootfs压缩包。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+                autoExtractStarted = false
+            }
+            reporter.progress = 100
+        }
+    }
 
     // 准备完成 启动模拟器
     if (state.isPrepareFinished) {
