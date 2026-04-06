@@ -66,6 +66,7 @@ dependencies {
 
     implementation(libs.org.apache.commons.compress)
     implementation(libs.org.tukaani.xz)
+    implementation(libs.com.github.luben.zstd.jni)
     implementation(libs.org.jetbrains.kotlinx.serialization.json)
 
 
