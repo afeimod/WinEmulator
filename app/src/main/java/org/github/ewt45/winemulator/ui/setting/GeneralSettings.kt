@@ -272,7 +272,7 @@ fun GeneralRootfsSelect_ExportRootfs(modifier: Modifier = Modifier, rootfsName: 
 
     fun getMimeType(extension: String) = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
     if (showDialog) {
-        var currCompType by remember { mutableStateOf(CompressedType.GZ) }
+        var currCompType by remember { mutableStateOf(CompressedType.TZST) }
         val compSuffix = mapOf(
             CompressedType.GZ to ".tar.gz", 
             CompressedType.XZ to ".tar.xz",
