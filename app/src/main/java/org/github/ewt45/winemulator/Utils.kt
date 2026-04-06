@@ -399,7 +399,7 @@ object Utils {
             val compType = if (ctx.openInput(uri)?.use { it.isXz() } == true) CompressedType.XZ
             else if (ctx.openInput(uri)?.use { it.isGzip() } == true) CompressedType.GZ
             else if (ctx.openInput(uri)?.use { it.isZstd() } == true) CompressedType.TZST
-            else throw RuntimeException("该文件不是 xz、gz 或 zst 压缩包。请确保选择的是 .tar.xz、.tar.gz 或 .tar.zst 格式的压缩包。")
+            else throw RuntimeException("该文件不是 xz、gz 或 zst 压缩包。")
 
             reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
             reporter.totalValue = compSize
@@ -485,13 +485,13 @@ object Utils {
             }
             
             reporter.progress(0F)
+            // 获取 assets 文件大小
+            val compSize = ctx.assets.open(foundFileName).use { it.available().toLong() }
+            reporter.totalValue = compSize
             
-            // 直接打开输入流进行解压，不要重复打开assets文件
             reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
-            ctx.assets.open(foundFileName).use { inputStream ->
-                val compressedTarInput = Archive.getCompressedInput(compType, inputStream)
-                Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
-            }
+            val compressedTarInput = Archive.getCompressedInput(compType, ctx.assets.open(foundFileName))
+            Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
             
             reporter.msg(null, "(2/3) 正在移动到目标文件夹...")
             reporter.progress(0F)

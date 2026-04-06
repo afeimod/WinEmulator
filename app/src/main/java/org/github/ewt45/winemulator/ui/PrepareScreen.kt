@@ -90,10 +90,11 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
 
     }
     
-    // 权限授予后，自动尝试从assets提取rootfs
+    // 首次启动时（noRootfs），自动尝试从assets提取rootfs
+    // 新建容器时（forceNoRootfs）不自动提取，让用户手动选择
     LaunchedEffect(state.skipPermissions, state.unGrantedPermissions.isEmpty()) {
         val permissionsReady = state.skipPermissions || state.unGrantedPermissions.isEmpty()
-        if (permissionsReady && !autoExtractStarted && (state.noRootfs || state.forceNoRootfs)) {
+        if (permissionsReady && !autoExtractStarted && state.noRootfs && !state.forceNoRootfs) {
             autoExtractStarted = true
             reporter.msgTitle = "正在自动提取Rootfs..."
             reporter.stage = ProgressStage.PROCESSING
@@ -116,19 +117,13 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     prepareVm.onRootfsExtracted(extractedRootfs.name)
                 } else {
                     // 未找到assets中的rootfs，回退到手动选择
-                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包（支持 .tar.xz、.tar.gz、.tar.zst 格式）")
+                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
                     reporter.stage = ProgressStage.NOT_STARTED
                     autoExtractStarted = false
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
-                val errorMsg = e.message ?: ""
-                val specificErrorTip = when {
-                    errorMsg.contains("xz") -> "\n提示：如果是.tar.xz文件解压失败，可能是因为该压缩包使用了.tar.gz格式。"
-                    errorMsg.contains("gz") -> "\n提示：如果是.tar.gz文件解压失败，可能是因为该压缩包使用了.tar.zst格式。"
-                    else -> ""
-                }
-                reporter.msg("自动提取rootfs过程中出现错误：${e.stackTraceToString()}", "自动提取失败，请手动选择rootfs压缩包（支持 .tar.xz、.tar.gz、.tar.zst 格式）。\n（日志可点击展开查看）$specificErrorTip")
+                reporter.msg("自动提取rootfs过程中出现错误：${e.stackTraceToString()}", "自动提取失败，请手动选择rootfs压缩包。\n（日志可点击展开查看）")
                 reporter.stage = ProgressStage.DONE_FAILURE
                 autoExtractStarted = false
             }
@@ -166,14 +161,15 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     }
                 }
             } else if (state.noRootfs || state.forceNoRootfs) {
-                // 如果正在自动提取，显示进度
-                if (reporter.stage == ProgressStage.PROCESSING || 
-                    reporter.stage == ProgressStage.DONE_SUCCESS || 
-                    reporter.stage == ProgressStage.DONE_FAILURE) {
+                // 首次启动时，如果正在自动提取，显示进度
+                if (state.noRootfs && !state.forceNoRootfs && 
+                    (reporter.stage == ProgressStage.PROCESSING || 
+                     reporter.stage == ProgressStage.DONE_SUCCESS || 
+                     reporter.stage == ProgressStage.DONE_FAILURE)) {
                     RootfsAutoExtractProgress(reporter)
                 }
-                // 如果自动提取失败或未开始，显示手动选择
-                else if (reporter.stage == ProgressStage.NOT_STARTED && !autoExtractStarted) {
+                // 新建容器或自动提取失败/未开始时，显示手动选择
+                else if (state.forceNoRootfs || (reporter.stage == ProgressStage.NOT_STARTED && !autoExtractStarted)) {
                     RootfsSelect(
                         getAvailableUsers = { rootfs: String -> ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name } },
                         settingVm::onChangeRootfsLoginUser, settingVm::onChangeRootfsName,
@@ -181,7 +177,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         onAutoExtractStart = { autoExtractStarted = true }
                     )
                 } else {
-                    // 等待自动提取
+                    // 等待自动提取完成
                     Box(Modifier.fillMaxSize()) {
                         Text("正在准备中...", Modifier.align(Alignment.Center))
                     }
@@ -251,7 +247,7 @@ private fun RootfsSelect(
     val TAG = "RootfsSelectScreen"
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
-    val reporter = initReporter ?: rememberTaskReporter(msgTitle = "缺少Rootfs。请点击按钮选择一个包含Rootfs的压缩包（支持 .tar.xz、.tar.gz、.tar.zst 格式）。")
+    val reporter = initReporter ?: rememberTaskReporter(msgTitle = "缺少Rootfs。请点击按钮选择一个包含Rootfs的 .tar.xz 或 .tar.gz 压缩包。")
     var rootfsName by remember { mutableStateOf(initRootfsName) }
     var isSetCurrent by remember { mutableStateOf(true) }
     val dialogState = rememberConfirmDialogState()
@@ -270,15 +266,9 @@ private fun RootfsSelect(
                 reporter.stage = ProgressStage.DONE_SUCCESS
             } catch (e: Throwable) {
                 e.printStackTrace()
-                val errorMsg = e.message ?: ""
-                val specificErrorTip = when {
-                    errorMsg.contains("xz") -> "\n提示：如果是.tar.xz文件解压失败，可能是因为该压缩包使用了.tar.gz格式。"
-                    errorMsg.contains("gz") -> "\n提示：如果是.tar.gz文件解压失败，可能是因为该压缩包使用了.tar.zst格式。"
-                    else -> ""
-                }
                 reporter.msg(
                     "解压rootfs过程中出现错误，结束。\n" + e.stackTraceToString(),
-                    "解压失败。请选择一个包含Rootfs的压缩包（支持 .tar.xz、.tar.gz、.tar.zst 格式）。\n（日志可点击展开查看）$specificErrorTip"
+                    "解压失败。请点击按钮选择一个包含Rootfs的 .tar.xz 或 .tar.gz 压缩包。\n（日志可点击展开查看）"
                 )
                 reporter.stage = ProgressStage.DONE_FAILURE
             }
@@ -314,7 +304,7 @@ private fun RootfsSelect(
                     }) { Text("从App内置提取") }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                Button({ readFileLauncher.launch(arrayOf("application/x-xz", "application/gzip", "application/zstd", "application/x-zstd", "*/*")) })
+                Button({ readFileLauncher.launch(arrayOf("application/x-xz", "application/gzip", "*/*")) })
                 { Text("手动选择") }
             }
             // 解压成功后显示完成按钮
@@ -377,7 +367,7 @@ private fun RootfsAutoExtractProgress(reporter: SimpleTaskReporter) {
             Text("Rootfs提取成功！正在设置启动命令...", style = MaterialTheme.typography.bodyLarge)
         }
         
-        // 解压失败后显示重试按钮
+        // 解压失败后显示提示
         if (reporter.stage == ProgressStage.DONE_FAILURE) {
             Spacer(modifier = Modifier.height(16.dp))
             Text("提取失败，请手动选择rootfs压缩包", style = MaterialTheme.typography.bodyLarge)
