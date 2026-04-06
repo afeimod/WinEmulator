@@ -66,6 +66,11 @@ class PrepareViewModel : ViewModel() {
         _uiState.update { it.copy(forceNoRootfs = true) }
     }
 
+    /** 取消新建容器，将 [PrepareUiState.forceNoRootfs] 设为false */
+    fun onCancelForceNoRootfs() {
+        _uiState.update { it.copy(forceNoRootfs = false) }
+    }
+
     /** rootfs自动提取成功后调用，用于更新状态 */
     fun onRootfsExtracted(rootfsName: String) {
         _uiState.update { it.copy(forceNoRootfs = false, noRootfs = false) }

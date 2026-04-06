@@ -21,9 +21,13 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -185,7 +189,8 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         initReporter = reporter,
                         onAutoExtractStart = { autoExtractStarted = true },
                         onRootfsExtracted = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) },
-                        onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) }
+                        onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) },
+                        onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null
                     )
                 } else {
                     // 等待自动提取完成
@@ -245,6 +250,7 @@ private fun PermissionGrant(
  * @param onAutoExtractStart 回调函数，当用户触发自动提取时调用
  * @param onRootfsExtracted rootfs提取/选择完成后的回调，用于更新状态
  * @param onSetCurrentRootfs 设置当前rootfs的回调
+ * @param onCancel 取消/返回的回调，用于新建容器时返回
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -258,6 +264,7 @@ private fun RootfsSelect(
     onAutoExtractStart: (() -> Unit)? = null,
     onRootfsExtracted: ((String) -> Unit)? = null,
     onSetCurrentRootfs: (suspend (String) -> Unit)? = null,
+    onCancel: (() -> Unit)? = null,
 ) {
     val TAG = "RootfsSelectScreen"
     val scope = rememberCoroutineScope()
@@ -293,7 +300,16 @@ private fun RootfsSelect(
 
     ConfirmDialog(dialogState)
 
-    CenterAlignedTopAppBar(title = { Text("Rootfs") })
+    CenterAlignedTopAppBar(
+        title = { Text("Rootfs") },
+        navigationIcon = {
+            if (onCancel != null) {
+                IconButton(onClick = onCancel) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            }
+        }
+    )
     Spacer(Modifier.height(16.dp))
     Column(
         Modifier
