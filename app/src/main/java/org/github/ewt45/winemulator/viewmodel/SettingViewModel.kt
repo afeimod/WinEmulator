@@ -295,7 +295,8 @@ class SettingViewModel : ViewModel() {
 
             FuncOnChangeAction.ADD -> Unit
             FuncOnChangeAction.DEL -> {
-                if (newName == rootfsCurrDir.name || newName == rootfsCurrDir.canonicalFile.name)
+                // 检查是否为当前正在运行的rootfs（current符号链接指向的rootfs）
+                if (rootfsCurrDir.exists() && newName == rootfsCurrDir.canonicalFile.name)
                     throw RuntimeException("该Rootfs当前正在运行，无法删除")
                 //不知为绑定的那些（dev, proc）文件夹用java方法无法删除。用rm -r 倒是可以
                 val output = Utils.readLinesProcessOutput(ProcessBuilder(listOf("sh","-c", "rm -r ${File(rootfsAllDir, oldName).absolutePath}"))
