@@ -484,14 +484,23 @@ object Utils {
                 else -> throw RuntimeException("不支持的压缩格式: $foundFileName")
             }
             
-            reporter.progress(0F)
-            
-            // 直接打开输入流进行解压，不要重复打开assets文件
-            reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
-            ctx.assets.open(foundFileName).use { inputStream ->
-                val compressedTarInput = Archive.getCompressedInput(compType, inputStream)
-                Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
+            // 获取 assets 文件大小用于进度显示
+            val compSize: Long = try {
+                ctx.assets.openFd(foundFileName).use { it.length }
+            } catch (e: Exception) {
+                // 如果无法获取文件大小，使用一个估计值（500MB）
+                500L * 1024 * 1024
             }
+            
+            reporter.progress(0F)
+            reporter.totalValue = compSize
+            
+            reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
+            
+            // 打开输入流进行解压，使用use确保正确关闭
+            val inputStream = ctx.assets.open(foundFileName)
+            val compressedTarInput = Archive.getCompressedInput(compType, inputStream)
+            Archive.decompressCompressedTarStream(compressedTarInput, tmpOutDir, reporter)
             
             reporter.msg(null, "(2/3) 正在移动到目标文件夹...")
             reporter.progress(0F)
