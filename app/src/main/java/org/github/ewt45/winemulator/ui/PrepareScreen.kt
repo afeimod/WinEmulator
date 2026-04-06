@@ -218,7 +218,8 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         onAutoExtractStart = { autoExtractStarted = true },
                         onRootfsExtracted = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) },
                         onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) },
-                        onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null
+                        onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
+                        defaultIsSetCurrent = !state.forceNoRootfs // 首次启动默认勾选，新建容器默认不勾选
                     )
                 } else {
                     // 等待自动提取完成
@@ -279,6 +280,7 @@ private fun PermissionGrant(
  * @param onRootfsExtracted rootfs提取/选择完成后的回调，用于更新状态
  * @param onSetCurrentRootfs 设置当前rootfs的回调
  * @param onCancel 取消/返回的回调，用于新建容器时返回
+ * @param defaultIsSetCurrent "下次启动app运行该容器"选项的默认勾选状态，首次启动时默认true，新建容器时默认false
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -293,13 +295,14 @@ private fun RootfsSelect(
     onRootfsExtracted: ((String) -> Unit)? = null,
     onSetCurrentRootfs: (suspend (String) -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
+    defaultIsSetCurrent: Boolean = true,
 ) {
     val TAG = "RootfsSelectScreen"
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
     val reporter = initReporter ?: rememberTaskReporter(msgTitle = "缺少Rootfs。请点击按钮选择一个包含Rootfs的 .tar.xz 或 .tar.gz 压缩包。")
     var rootfsName by remember { mutableStateOf(initRootfsName) }
-    var isSetCurrent by remember { mutableStateOf(true) }
+    var isSetCurrent by remember { mutableStateOf(defaultIsSetCurrent) }
     val dialogState = rememberConfirmDialogState()
 
     val readFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
