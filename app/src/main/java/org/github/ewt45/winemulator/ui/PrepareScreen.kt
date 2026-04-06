@@ -90,10 +90,11 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
 
     }
     
-    // 权限授予后，自动尝试从assets提取rootfs
+    // 首次启动时（noRootfs），自动尝试从assets提取rootfs
+    // 新建容器时（forceNoRootfs）不自动提取，让用户手动选择
     LaunchedEffect(state.skipPermissions, state.unGrantedPermissions.isEmpty()) {
         val permissionsReady = state.skipPermissions || state.unGrantedPermissions.isEmpty()
-        if (permissionsReady && !autoExtractStarted && (state.noRootfs || state.forceNoRootfs)) {
+        if (permissionsReady && !autoExtractStarted && state.noRootfs && !state.forceNoRootfs) {
             autoExtractStarted = true
             reporter.msgTitle = "正在自动提取Rootfs..."
             reporter.stage = ProgressStage.PROCESSING
@@ -160,14 +161,15 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     }
                 }
             } else if (state.noRootfs || state.forceNoRootfs) {
-                // 如果正在自动提取，显示进度
-                if (reporter.stage == ProgressStage.PROCESSING || 
-                    reporter.stage == ProgressStage.DONE_SUCCESS || 
-                    reporter.stage == ProgressStage.DONE_FAILURE) {
+                // 首次启动时，如果正在自动提取，显示进度
+                if (state.noRootfs && !state.forceNoRootfs && 
+                    (reporter.stage == ProgressStage.PROCESSING || 
+                     reporter.stage == ProgressStage.DONE_SUCCESS || 
+                     reporter.stage == ProgressStage.DONE_FAILURE)) {
                     RootfsAutoExtractProgress(reporter)
                 }
-                // 如果自动提取失败或未开始，显示手动选择
-                else if (reporter.stage == ProgressStage.NOT_STARTED && !autoExtractStarted) {
+                // 新建容器或自动提取失败/未开始时，显示手动选择
+                else if (state.forceNoRootfs || (reporter.stage == ProgressStage.NOT_STARTED && !autoExtractStarted)) {
                     RootfsSelect(
                         getAvailableUsers = { rootfs: String -> ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name } },
                         settingVm::onChangeRootfsLoginUser, settingVm::onChangeRootfsName,
@@ -175,7 +177,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         onAutoExtractStart = { autoExtractStarted = true }
                     )
                 } else {
-                    // 等待自动提取
+                    // 等待自动提取完成
                     Box(Modifier.fillMaxSize()) {
                         Text("正在准备中...", Modifier.align(Alignment.Center))
                     }
@@ -365,7 +367,7 @@ private fun RootfsAutoExtractProgress(reporter: SimpleTaskReporter) {
             Text("Rootfs提取成功！正在设置启动命令...", style = MaterialTheme.typography.bodyLarge)
         }
         
-        // 解压失败后显示重试按钮
+        // 解压失败后显示提示
         if (reporter.stage == ProgressStage.DONE_FAILURE) {
             Spacer(modifier = Modifier.height(16.dp))
             Text("提取失败，请手动选择rootfs压缩包", style = MaterialTheme.typography.bodyLarge)
