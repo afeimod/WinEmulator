@@ -78,8 +78,18 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     val state by prepareVm.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
-    val reporter = rememberTaskReporter(msgTitle = "首次启动准备中...")
+    // 标题会在后续根据场景动态设置
+    val reporter = rememberTaskReporter(msgTitle = "")
     var autoExtractStarted by remember { mutableStateOf(false) } // 标记是否已经开始自动提取
+    
+    // 根据场景设置 reporter 标题
+    LaunchedEffect(state.forceNoRootfs, state.noRootfs) {
+        reporter.msgTitle = when {
+            state.forceNoRootfs -> "新建容器"
+            state.noRootfs -> "请选择或提取Rootfs"
+            else -> ""
+        }
+    }
 
     // 退出prepareScreen
     LaunchedEffect(state.isPrepareFinished) {
