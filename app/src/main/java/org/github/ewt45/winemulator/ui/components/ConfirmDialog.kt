@@ -47,7 +47,11 @@ class ConfirmDialogState {
     fun showConfirm(text: String, onConfirm: (suspend () -> Unit)? = null) {
         updateValuesAndShow(text, true) {
             if (onConfirm == null) return@updateValuesAndShow
-            runCatching { onConfirm() }.exceptionOrNull()?.stackTraceToString()?.let { updateValuesAndShow(it) }
+            runCatching { onConfirm() }.exceptionOrNull()?.let { e ->
+                // 显示简洁的错误消息，而不是完整的堆栈跟踪
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                updateValuesAndShow("操作失败：$errorMsg")
+            }
         }
     }
 
@@ -56,7 +60,11 @@ class ConfirmDialogState {
      */
     fun showBlock(text: String = "", action: suspend () -> Unit) {
         updateValuesAndShow(text, false) {
-            runCatching { action() }.exceptionOrNull()?.stackTraceToString()?.let { updateValuesAndShow(it) }
+            runCatching { action() }.exceptionOrNull()?.let { e ->
+                // 显示简洁的错误消息，而不是完整的堆栈跟踪
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                updateValuesAndShow("操作失败：$errorMsg")
+            }
         }
     }
 

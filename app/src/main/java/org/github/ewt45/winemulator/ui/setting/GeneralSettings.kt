@@ -187,8 +187,13 @@ fun GeneralRootfsSelect(
                 onRootfsSelectChange(rootfsName)
             }
         } else if (type == TYPE_DEL) {
-            dialogState.showConfirm("确定删除该Rootfs吗？\n其内部所有文件都将被删除，请谨慎操作！\n\n$rootfsName") {
-                onRootfsNameChange(rootfsName, rootfsName, FuncOnChangeAction.DEL)
+            // 如果是当前正在运行的rootfs，直接显示提示，不执行删除
+            if (isCurr) {
+                dialogState.showConfirm("该Rootfs当前正在运行，无法删除。\n\n$rootfsName")
+            } else {
+                dialogState.showConfirm("确定删除该Rootfs吗？\n其内部所有文件都将被删除，请谨慎操作！\n\n$rootfsName") {
+                    onRootfsNameChange(rootfsName, rootfsName, FuncOnChangeAction.DEL)
+                }
             }
         }
     }
