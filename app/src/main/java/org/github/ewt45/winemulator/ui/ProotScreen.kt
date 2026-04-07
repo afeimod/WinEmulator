@@ -192,24 +192,61 @@ fun ColoredTerminalOutput(
     output: List<String>,
     coloredPrompt: AnnotatedString
 ) {
-    // 提示符的正则表达式模式
-    val promptPattern = Regex("""^[\w@.:/~-]+[\$#]\s*$""")
+    // 提示符的正则表达式模式：匹配 "用户名@主机:路径$" 或 "用户名@主机:路径#"
+    // 例如：root@localhost:~$ 或 afei@localhost:~$
+    val promptPattern = Regex("""^([\w]+)@([\w.]+):([/~][^\s]*)([#$])(\s*)$""")
+    
+    // 颜色定义
+    val rootUserColor = Color(0xFFE0E0E0)  // root用户白色
+    val normalUserColor = Color(0xFF64B5F6)  // 普通用户蓝色
+    val hostColor = Color(0xFF4DD0E1)  // 主机名青色
+    val pathColor = Color(0xFF81C784)  // 路径绿色
+    val symbolColor = Color(0xFFFFD54F)  // 符号黄色
     
     // 构建带样式的输出
     val annotatedOutput = buildAnnotatedString {
         output.forEachIndexed { index, line ->
-            // 检查这一行是否是提示符
-            val trimmedLine = line.trimEnd()
+            // 检查这一行是否是提示符行
+            val matchResult = promptPattern.find(line.trimEnd())
             
-            if (promptPattern.matches(trimmedLine) || trimmedLine.endsWith("# ") || trimmedLine.endsWith("$ ")) {
-                // 这是提示符行，使用彩色提示符
-                append(coloredPrompt)
+            if (matchResult != null) {
+                // 这是提示符行，使用彩色样式
+                val userName = matchResult.groupValues[1]
+                val hostName = matchResult.groupValues[2]
+                val path = matchResult.groupValues[3]
+                val symbol = matchResult.groupValues[4]
+                val trailing = matchResult.groupValues[5]
+                
+                // 用户名颜色：root为白色，其他为蓝色
+                val userColor = if (userName == "root") rootUserColor else normalUserColor
+                
+                // 添加彩色提示符
+                withStyle(SpanStyle(color = userColor, fontWeight = FontWeight.Bold)) {
+                    append(userName)
+                }
+                withStyle(SpanStyle(color = symbolColor)) {
+                    append("@")
+                }
+                withStyle(SpanStyle(color = hostColor, fontWeight = FontWeight.Bold)) {
+                    append(hostName)
+                }
+                withStyle(SpanStyle(color = symbolColor)) {
+                    append(":")
+                }
+                withStyle(SpanStyle(color = pathColor, fontWeight = FontWeight.Bold)) {
+                    append(path)
+                }
+                withStyle(SpanStyle(color = symbolColor)) {
+                    append(symbol)
+                    append(trailing)
+                }
+                
                 // 如果原行有换行符，添加换行
                 if (line.endsWith("\n")) {
                     append("\n")
                 }
             } else {
-                // 普通输出行
+                // 普通输出行，直接添加
                 append(line)
             }
         }
