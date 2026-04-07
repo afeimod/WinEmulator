@@ -94,14 +94,16 @@ fun ProotTerminalContent(
         ) {
             SelectionContainer {
                 Text(
-                    text = output.joinToString(separator = ""),
+                    // 处理回车符，将 \r\n 或单独的 \r 转换为换行
+                    text = output.joinToString(separator = "\n").replace("\r\n", "\n").replace("\r", "\n"),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Normal,
                         lineHeight = 18.sp
                     ),
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
