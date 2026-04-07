@@ -70,10 +70,9 @@ class TerminalViewModel : ViewModel() {
 
         //另起协程获取输出以及等待关闭
         viewModelScope.launch(Dispatchers.IO) {
-            updateOutput("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            updateOutput("  终端开始运行")
-            updateOutput("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            updateOutput("")
+            // 简洁的启动提示
+            updateOutput("终端已连接")
+            updateOutput("---")
             try {
                 BufferedReader(InputStreamReader(process!!.inputStream)).use { reader ->
                     val builder = StringBuilder()
