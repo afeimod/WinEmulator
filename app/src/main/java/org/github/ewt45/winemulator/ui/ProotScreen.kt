@@ -230,6 +230,7 @@ fun ColoredTerminalOutput(
 
 /**
  * 兼容旧版本的函数（保留用于预览等场景）
+ * 使用简化的预览输出，不依赖TerminalViewModel扩展
  */
 @Composable
 fun ProotTerminalScreenImpl(
@@ -237,27 +238,90 @@ fun ProotTerminalScreenImpl(
     runCommand: (String) -> Unit,
     viewModel: TerminalViewModel? = null
 ) {
-    if (viewModel != null) {
-        ProotTerminalContent(
-            viewModel = viewModel,
-            onRunCommand = runCommand
-        )
-    } else {
-        // 如果没有viewModel，使用默认的简单渲染
-        val simpleViewModel = remember {
-            object : TerminalViewModel() {
-                init {
-                    currentUser = output.find { it.contains("@") }?.substringBefore("@") ?: "root"
-                    currentHost = "localhost"
-                    currentPath = "~"
-                    isConnected = true
-                }
+    // 创建简单的预览用彩色提示符
+    val previewPrompt = remember {
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = Color(0xFFE0E0E0), fontWeight = FontWeight.Bold)) {
+                append("root")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append("@")
+            }
+            withStyle(SpanStyle(color = Color(0xFF4DD0E1), fontWeight = FontWeight.Bold)) {
+                append("localhost")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append(":")
+            }
+            withStyle(SpanStyle(color = Color(0xFF81C784), fontWeight = FontWeight.Bold)) {
+                append("~")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append("# ")
             }
         }
-        ProotTerminalContent(
-            viewModel = simpleViewModel,
-            onRunCommand = runCommand
-        )
+    }
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .imePadding()
+    ) {
+        val textVScroll = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(textVScroll)
+                .horizontalScroll(rememberScrollState())
+                .fillMaxWidth(),
+        ) {
+            SelectionContainer {
+                ColoredTerminalOutput(
+                    output = output.toList(),
+                    coloredPrompt = previewPrompt
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = MaterialTheme.shapes.medium
+                )
+                .padding(4.dp)
+        ) {
+            TextField(
+                value = "",
+                modifier = Modifier.fillMaxWidth(),
+                onValueChange = { },
+                label = { 
+                    Text(
+                        text = "输入命令",
+                        fontFamily = FontFamily.Monospace
+                    ) 
+                },
+                placeholder = {
+                    Text(
+                        text = "请输入命令...",
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.Monospace
+                ),
+                enabled = false,
+                trailingIcon = { }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -279,14 +343,26 @@ fun ProotTerminalScreenPreview() {
         "root@localhost:~$ "
     ) }
     
-    // 创建模拟的viewModel
-    val previewViewModel = remember {
-        object : TerminalViewModel() {
-            init {
-                currentUser = "root"
-                currentHost = "localhost"
-                currentPath = "~"
-                isConnected = true
+    // 创建简单的预览用彩色提示符
+    val previewPrompt = remember {
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = Color(0xFFE0E0E0), fontWeight = FontWeight.Bold)) {
+                append("root")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append("@")
+            }
+            withStyle(SpanStyle(color = Color(0xFF4DD0E1), fontWeight = FontWeight.Bold)) {
+                append("localhost")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append(":")
+            }
+            withStyle(SpanStyle(color = Color(0xFF81C784), fontWeight = FontWeight.Bold)) {
+                append("~")
+            }
+            withStyle(SpanStyle(color = Color(0xFFFFD54F))) {
+                append("# ")
             }
         }
     }
@@ -300,8 +376,64 @@ fun ProotTerminalScreenPreview() {
     
     Spacer(modifier = Modifier.height(4.dp))
     
-    ProotTerminalContent(
-        viewModel = previewViewModel,
-        onRunCommand = { output.add("root@localhost:~$ $it") }
-    )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        val textVScroll = rememberScrollState()
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(textVScroll)
+                .horizontalScroll(rememberScrollState())
+                .fillMaxWidth(),
+        ) {
+            SelectionContainer {
+                ColoredTerminalOutput(
+                    output = output.toList(),
+                    coloredPrompt = previewPrompt
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = MaterialTheme.shapes.medium
+                )
+                .padding(4.dp)
+        ) {
+            TextField(
+                value = "",
+                modifier = Modifier.fillMaxWidth(),
+                onValueChange = { },
+                label = { 
+                    Text(
+                        text = "输入命令",
+                        fontFamily = FontFamily.Monospace
+                    ) 
+                },
+                placeholder = {
+                    Text(
+                        text = "请输入命令...",
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.Monospace
+                ),
+                enabled = false,
+                trailingIcon = { }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+    }
 }
