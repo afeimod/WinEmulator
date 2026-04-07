@@ -6,6 +6,12 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -50,9 +56,59 @@ class TerminalViewModel : ViewModel() {
     var isConnected by mutableStateOf(false)
         private set
 
+    /** root用户的颜色（白色） */
+    private val rootUserColor = Color(0xFFE0E0E0)
+    
+    /** 普通用户的颜色（蓝色） */
+    private val normalUserColor = Color(0xFF64B5F6)
+    
+    /** 主机名颜色（青色） */
+    private val hostColor = Color(0xFF4DD0E1)
+    
+    /** 路径颜色（绿色） */
+    private val pathColor = Color(0xFF81C784)
+    
+    /** 符号颜色（黄色） */
+    private val symbolColor = Color(0xFFFFD54F)
+
     /** 美化的命令提示符格式: 用户名@主机:路径$ */
     val promptPrefix: String
-        get() = "$currentUser@$currentHost:$currentPath\$ "
+        get() = "$currentUser@$currentHost:$currentPath$ "
+    
+    /**
+     * 获取带颜色的命令提示符 (AnnotatedString)
+     * root用户显示为白色，其他用户显示为蓝色
+     */
+    fun getColoredPrompt(): AnnotatedString {
+        val userColor = if (currentUser == "root") rootUserColor else normalUserColor
+        
+        return buildAnnotatedString {
+            // 用户名
+            withStyle(SpanStyle(color = userColor, fontWeight = FontWeight.Bold)) {
+                append(currentUser)
+            }
+            // @ 符号
+            withStyle(SpanStyle(color = symbolColor)) {
+                append("@")
+            }
+            // 主机名
+            withStyle(SpanStyle(color = hostColor, fontWeight = FontWeight.Bold)) {
+                append(currentHost)
+            }
+            // : 符号
+            withStyle(SpanStyle(color = symbolColor)) {
+                append(":")
+            }
+            // 路径
+            withStyle(SpanStyle(color = pathColor, fontWeight = FontWeight.Bold)) {
+                append(currentPath)
+            }
+            // $ 或 # 符号
+            withStyle(SpanStyle(color = symbolColor)) {
+                append(if (currentUser == "root") "# " else "$ ")
+            }
+        }
+    }
 
     /**
      * 启动终端
