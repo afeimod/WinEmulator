@@ -368,6 +368,16 @@ class SettingViewModel : ViewModel() {
         editDateStoreAsync(x11_keep_screen_on.key, enabled)
     }
 
+    /**
+     * 获取当前选择的登录用户名
+     * 从rootfs_login_user_json中读取当前rootfs对应的用户名
+     */
+    suspend fun getCurrentLoginUser(): String {
+        val currentRootfsName = Consts.rootfsCurrDir.canonicalFile.name
+        val loginUsersMap = generalState.value.localRootfsLoginUsersMap
+        return loginUsersMap[currentRootfsName] ?: "root"
+    }
+
 }
 
 data class PrefProot(
