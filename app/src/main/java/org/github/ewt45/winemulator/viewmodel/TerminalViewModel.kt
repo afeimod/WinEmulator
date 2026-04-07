@@ -3,13 +3,11 @@ package org.github.ewt45.winemulator.viewmodel
 import android.system.OsConstants.SIGCONT
 import android.system.OsConstants.SIGSTOP
 import android.util.Log
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -31,7 +29,9 @@ class TerminalViewModel : ViewModel() {
     private var processWriter: OutputStreamWriter? = null
 
     /** 输出行。每个字符串代表一行，换行字符包括在字符串结尾，拼接时不应再添加 */
-    val output = mutableStateOf<List<String>>(emptyList())
+    private val _output = mutableStateOf<List<String>>(emptyList())
+    val output get() = _output
+
     private val outputMutex = Mutex() //锁，修改output相关内容时应该使用
 
     /** 当前用户名 */
@@ -51,7 +51,7 @@ class TerminalViewModel : ViewModel() {
         private set
 
     /** 美化的命令提示符格式: 用户名@主机:路径$ */
-    private val promptPrefix: String
+    val promptPrefix: String
         get() = "$currentUser@$currentHost:$currentPath\$ "
 
     /**
@@ -60,7 +60,7 @@ class TerminalViewModel : ViewModel() {
     suspend fun startTerminal() {
         if (process != null) return
         isConnected = true
-        
+
         process = withContext(Dispatchers.IO) {
             terminal.attach().start()
         }
@@ -90,7 +90,8 @@ class TerminalViewModel : ViewModel() {
                             outputMutex.withLock {
                                 // 如果500ms内字符输出没有更新过，则将当前缓存的无换行字符串显示出来。
                                 if (lastReadCharTime == lastReadCharTimeCopy && lastReadCharTimeCopy != 0L && builder.isNotEmpty()) {
-                                    val lastLine = output.lastOrNull()
+                                    val currentList = _output.value
+                                    val lastLine = if (currentList.isNotEmpty()) currentList[currentList.lastIndex] else null
                                     if (lastLine?.endsWith('\n') != false) updateOutput(builder.toString())
                                     else updateOutputAtLast(builder.toString())
                                     builder.clear()
@@ -99,15 +100,13 @@ class TerminalViewModel : ViewModel() {
                             }
                         }
                     }
-                    
-                    // 解析路径变化的正则
-                    val pathRegex = Regex("""\~?([/\w.-]*)""")
+
                     while (reader.read().also { readInt = it } != -1) {
                         charRead = readInt.toChar()
                         outputMutex.withLock {
                             lastReadCharTime = System.currentTimeMillis()
                             builder.append(charRead)
-                            
+
                             // 尝试解析路径（简单的启发式方法）
                             if (charRead == ':' && builder.length > 2) {
                                 val potentialPath = builder.toString().takeLast(50)
@@ -115,19 +114,19 @@ class TerminalViewModel : ViewModel() {
                                     currentPath = extractPath(potentialPath)
                                 }
                             }
-                            
+
                             if (charRead == '\n') {
                                 val line = builder.toString()
                                 // 检测用户名变化
                                 detectUserChange(line)
-                                
+
                                 // 限制输出数量
-                                val currentList = output.value.toMutableList()
+                                val currentList = _output.value.toMutableList()
                                 if (currentList.size > 800) {
-                                    currentList.removeRange(0, 400)
+                                    currentList.removeAt(0) // 使用 removeAt 而不是 removeRange
                                 }
                                 currentList.add(line)
-                                output.value = currentList
+                                _output.value = currentList
                                 builder.clear()
                             }
                         }
@@ -143,10 +142,11 @@ class TerminalViewModel : ViewModel() {
             closeResources()
         }
 
-        if (Proot.lastTimeCmd.isNotBlank())
+        if (Proot.lastTimeCmd.isNotBlank()) {
             updateOutput("使用以下参数启动proot：")
             updateOutput(Proot.lastTimeCmd)
             updateOutput("")
+        }
         return
     }
 
@@ -173,9 +173,9 @@ class TerminalViewModel : ViewModel() {
             }
         }
         // 检测 whoami 输出
-        if (line.contains("root") && output.value.size > 5) {
+        if (line.contains("root") && _output.value.size > 5) {
             // 检查前几行是否有 whoami 命令
-            val recentLines = output.value.takeLast(5)
+            val recentLines = _output.value.takeLast(5)
             if (recentLines.any { it.contains("whoami") }) {
                 currentUser = "root"
             }
@@ -186,23 +186,23 @@ class TerminalViewModel : ViewModel() {
      * 更新输出
      */
     private fun updateOutput(line: String) {
-        val currentList = output.value.toMutableList()
+        val currentList = _output.value.toMutableList()
         currentList.add(line)
-        output.value = currentList
+        _output.value = currentList
     }
 
     /**
      * 在最后一行追加内容
      */
     private fun updateOutputAtLast(additional: String) {
-        val currentList = output.value.toMutableList()
+        val currentList = _output.value.toMutableList()
         if (currentList.isNotEmpty()) {
             val lastIndex = currentList.lastIndex
             currentList[lastIndex] = currentList[lastIndex] + additional
-            output.value = currentList
+            _output.value = currentList
         } else {
             currentList.add(additional)
-            output.value = currentList
+            _output.value = currentList
         }
     }
 
