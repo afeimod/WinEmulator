@@ -104,6 +104,34 @@ class TerminalViewModel : ViewModel() {
                         charRead = readInt.toChar()
                         outputMutex.withLock {
                             lastReadCharTime = System.currentTimeMillis()
+                            
+                            // 处理回车符：将 \r\n 或 \r 视为换行
+                            if (charRead == '\r') {
+                                // 看看下一个字符是否是 \n
+                                val nextInt = reader.read()
+                                if (nextInt != -1) {
+                                    val nextChar = nextInt.toChar()
+                                    if (nextChar != '\n') {
+                                        // 如果下一个字符不是 \n，把 \r 当作换行处理
+                                        val line = builder.toString()
+                                        // 检测用户名变化
+                                        detectUserChange(line)
+                                        // 添加当前行
+                                        val currentList = _output.value.toMutableList()
+                                        if (currentList.size > 800) {
+                                            currentList.removeAt(0)
+                                        }
+                                        currentList.add(line)
+                                        _output.value = currentList
+                                        builder.clear()
+                                        // 把下一个非 \n 字符加入新的行
+                                        builder.append(nextChar)
+                                    }
+                                    // 如果是 \r\n，继续读取下一个字符（\n 已经被读取，跳过）
+                                }
+                                continue // 继续下一次循环
+                            }
+                            
                             builder.append(charRead)
 
                             // 尝试解析路径（简单的启发式方法）
