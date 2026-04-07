@@ -116,9 +116,9 @@ fun TerminalStatusBar(
     }
     
     val userColor = if (currentUser == "root") {
-        Color(0xFFFF5252) // 红色 - root用户
+        Color(0xFFFFFFFF) // 白色 - root用户（普通颜色）
     } else {
-        Color(0xFF64B5F6) // 蓝色 - 普通用户
+        Color(0xFF64B5F6) // 蓝色 - 普通用户（高亮）
     }
     
     Row(
