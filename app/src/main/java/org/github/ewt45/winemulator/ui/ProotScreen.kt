@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -413,20 +414,18 @@ fun ProotTerminalScreenImpl(
  */
 @Composable
 fun ProotTerminalScreenPreview() {
-    val output = remember { 
-        mutableStateListOf(
-            "\u001B[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001B[0m\n",
-            "\u001B[32m  终端开始运行\u001B[0m\n",
-            "\u001B[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001B[0m\n",
-            "\n",
-            "\u001B[1;32mroot\u001B[0m\u001B[1;33m@\u001B[0m\u001B[1;36mlocalhost\u001B[0m\u001B[1;33m:\u001B[0m\u001B[1;34m~\u001B[0m\u001B[1;33m$ \u001B[0mls --color=always\n",
-            "\u001B[0m\u001B[01;34mtotal 64\u001B[0m\n",
-            "\u001B[01;34mdrwxr-xr-x\u001B[0m \u001B[01;34m5\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[01;34m.\u001B[0m\n",
-            "\u001B[01;34mdrwxr-xr-x\u001B[0m \u001B[01;34m3\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[01;34m..\u001B[0m\n",
-            "\u001B[0m\u001B[01;34m-rw-r--r--\u001B[0m \u001B[01;34m1\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[00mfile1.txt\u001B[0m\n",
-            "\u001B[1;32mroot\u001B[0m\u001B[1;33m@\u001B[0m\u001B[1;36mlocalhost\u001B[0m\u001B[1;33m:\u001B[0m\u001B[1;34m~\u001B[0m\u001B[1;33m$ \u001B[0m"
-        )
-    }
+    val output = listOf(
+        "\u001B[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001B[0m\n",
+        "\u001B[32m  终端开始运行\u001B[0m\n",
+        "\u001B[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001B[0m\n",
+        "\n",
+        "\u001B[1;32mroot\u001B[0m\u001B[1;33m@\u001B[0m\u001B[1;36mlocalhost\u001B[0m\u001B[1;33m:\u001B[0m\u001B[1;34m~\u001B[0m\u001B[1;33m$ \u001B[0mls --color=always\n",
+        "\u001B[0m\u001B[01;34mtotal 64\u001B[0m\n",
+        "\u001B[01;34mdrwxr-xr-x\u001B[0m \u001B[01;34m5\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[01;34m.\u001B[0m\n",
+        "\u001B[01;34mdrwxr-xr-x\u001B[0m \u001B[01;34m3\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[01;34m..\u001B[0m\n",
+        "\u001B[0m\u001B[01;34m-rw-r--r--\u001B[0m \u001B[01;34m1\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[34;01mroot\u001B[0m \u001B[01;34m4096\u001B[0m \u001B[35;01mApr\u001B[0m \u001B[00m7\u001B[0m \u001B[35;01m08:00\u001B[0m \u001B[00mfile1.txt\u001B[0m\n",
+        "\u001B[1;32mroot\u001B[0m\u001B[1;33m@\u001B[0m\u001B[1;36mlocalhost\u001B[0m\u001B[1;33m:\u001B[0m\u001B[1;34m~\u001B[0m\u001B[1;33m$ \u001B[0m"
+    )
     
     SimpleTerminalStatusBar(
         currentUser = "root",
