@@ -114,6 +114,9 @@ class SettingViewModel : ViewModel() {
      * rootfs不包含 包括[Consts.rootfsCurrDir] 暂时先用这个替代rootfsList。后续可以改成一个包含rootfs信息的列表（不对 不是字符串的话没法存datastore了） */
     val rootfsUsersOptions = mutableStateOf(mapOf<String, List<ProotRootfs.UserInfo>>())
 
+    /** rootfs 别名映射，key 为文件夹名，value 为别名 */
+    val rootfsAliasMap = mutableStateOf(mapOf<String, String>())
+
     val generalFLow = dataStore.data.map { pref ->
         PrefGeneral(
             general_resolution.run { pref[key] ?: default },
@@ -177,6 +180,8 @@ class SettingViewModel : ViewModel() {
         viewModelScope.launch(IO) {
             resolutionText = general_resolution.get() //resolutionText不随flow更改，初始化先读取一下
             rootfsUsersOptions.value = getRootfsUsersOptions()
+            // 更新别名映射
+            rootfsAliasMap.value = getRootfsList().associateWith { Utils.Rootfs.getAlias(File(rootfsAllDir, it)) }
             // 目前 localRootfsLoginUsersMap 依赖 rootfsUsersOptions 才能正常工作。所以也要手动刷新
             onChangeRootfsLoginUser("", "")
         }
@@ -331,6 +336,13 @@ class SettingViewModel : ViewModel() {
     }
 
     fun onChangeRootfsLang(lang: String) = editDateStoreAsync(general_rootfs_lang.key, lang)
+
+    /** 修改某rootfs的别名 */
+    fun onChangeRootfsAlias(rootfsName: String, newAlias: String) {
+        Utils.Rootfs.setAlias(File(rootfsAllDir, rootfsName), newAlias)
+        // 更新内存中的别名映射
+        rootfsAliasMap.value = rootfsAliasMap.value.toMutableMap().apply { this[rootfsName] = newAlias }
+    }
 
     // InputControls设置相关
     fun onChangeInputControlsEnabled(enabled: Boolean) = editDateStoreAsync(inputcontrols_enabled.key, enabled)

@@ -393,9 +393,18 @@ private fun RootfsSelect(
                 HorizontalDivider(Modifier.padding(16.dp), 2.dp)
                 Text("退出之前，您还可以编辑以下内容")
 
-                GeneralRootfsSelect_RootfsName(rootfsName, false, dialogState) { oldRootfsName, newRootfsName ->
-                    onRootfsNameChange(oldRootfsName, newRootfsName, FuncOnChangeAction.EDIT)
-                }
+                var rootfsAlias by remember { mutableStateOf(Utils.Rootfs.getAlias(File(Consts.rootfsAllDir, rootfsName))) }
+                GeneralRootfsSelect_RootfsName(
+                    rootfsName = rootfsName,
+                    rootfsAlias = rootfsAlias,
+                    isCurr = false,
+                    dialogState = dialogState,
+                    onAliasChange = { _, newAlias ->
+                        Utils.Rootfs.setAlias(File(Consts.rootfsAllDir, rootfsName), newAlias)
+                        rootfsAlias = newAlias
+                    }
+                    // 不传入 onRootfsNameChange，只修改别名，不修改文件夹名
+                )
 
                 val userList = getAvailableUsers(rootfsName)
                 userList.find { it != "root" }?.let { nonRootUser ->
@@ -508,7 +517,14 @@ private fun PrepareStageScreenFinishPreview() {
             Text("退出之前，您还可以编辑以下内容。。")
 
             Spacer(Modifier.height(16.dp))
-            GeneralRootfsSelect_RootfsName("rootfs-1", false, dialogState) { _, _ -> }
+            GeneralRootfsSelect_RootfsName(
+                rootfsName = "rootfs-1",
+                rootfsAlias = "rootfs-1",
+                isCurr = false,
+                dialogState = dialogState,
+                onAliasChange = { _, _ -> },
+                onRootfsNameChange = { _, _ -> }
+            )
 
             val userList = listOf("root", "aid_u0_a287", "iuser").filter { !it.startsWith("aid_") }.sorted()
             val nonRootUser = userList.find { it != "root" }
