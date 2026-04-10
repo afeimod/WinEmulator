@@ -63,6 +63,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
+import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream
 import org.apache.commons.compress.utils.InputStreamStatistics
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.IOUtils
@@ -273,14 +274,18 @@ object Utils {
         }
     }
 
-    /** 返回一个path的权限（755这种） */
+    /** 返回一个path的完整权限（包含setuid/setgid/sticky），如 4755 */
     fun Path.getMode(): Int {
-        var result = 0
-        //TODO 代码缩减时enum的ordinal会保留吗
-        getPosixFilePermissions(LinkOption.NOFOLLOW_LINKS).forEach { item ->
-            result = result or (1 * 2.0.pow((8 - item.ordinal))).toInt() //懒得挨个对比了，直接用序号，应该没问题吧？
+        return try {
+            val stat = Os.stat(absolutePathString())
+            (stat.st_mode.toInt() and 0x1FFF) // 0x1FFF = 0o7777
+        } catch (e: Exception) {
+            var result = 0
+            getPosixFilePermissions(LinkOption.NOFOLLOW_LINKS).forEach { item ->
+                result = result or (1 * 2.0.pow((8 - item.ordinal))).toInt()
+            }
+            result
         }
-        return result
     }
 
     /** 在[Activity.onSaveInstanceState] 中设置。在 [Activity.onCreate] 中获取判断 */
@@ -485,7 +490,9 @@ object Utils {
             }
             
             reporter.progress(0F)
-            reporter.totalValue = 100L
+            // 获取 assets 文件大小
+            val compSize = ctx.assets.open(foundFileName).use { it.available().toLong() }
+            reporter.totalValue = compSize
             
             reporter.msg(null, "(1/3) 正在解压到临时文件夹...")
             val compressedTarInput = Archive.getCompressedInput(compType, ctx.assets.open(foundFileName))
@@ -529,10 +536,19 @@ object Utils {
             var entryName = path.absolutePathString().substring(removeLen).trim('/')
             if (path.isDirectory(LinkOption.NOFOLLOW_LINKS)) entryName += "/"
             //符号链接时要自己构建，它读文件不会检查符号链接（文件夹倒会。。。它这库也不行啊还以为多好用呢）
-            return if (path.isSymbolicLink())
+            val entry = if (path.isSymbolicLink())
                 TarArchiveEntry(entryName, TarConstants.LF_SYMLINK).also { it.linkName = path.readSymbolicLink().pathString }
             else
                 TarArchiveEntry(path, entryName, LinkOption.NOFOLLOW_LINKS)
+            // 保存 uid 和 gid
+            try {
+                val stat = Os.stat(path.absolutePathString())
+                entry.userId = stat.st_uid
+                entry.groupId = stat.st_gid
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to get uid/gid for $path", e)
+            }
+            return entry
         }
 
         /**
@@ -557,9 +573,11 @@ object Utils {
             TarArchiveOutputStream(Archive.getCompressedOutput(compType, ctx.openOutput(uri))).use { tOut ->
                 // 长文件名
                 tOut.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU)
-                //添加rootfs目录
-                tOut.putArchiveEntry(getTarEntry(rootfsDir.toPath(), parentPrefixLen))
-//                tOut.closeArchiveEntry()
+                //添加rootfs目录，并正确关闭条目
+                val rootEntry = getTarEntry(rootfsDir.toPath(), parentPrefixLen)
+                rootEntry.mode = rootfsDir.toPath().getMode()
+                tOut.putArchiveEntry(rootEntry)
+                tOut.closeArchiveEntry()
                 var tmpCount = 0L
                 var tarEntry: TarArchiveEntry? = null
                 rootfsContents.toMutableList().walk { filePath ->
@@ -576,6 +594,10 @@ object Utils {
                             filePath.inputStream().use { it.copyTo(tOut) }
                         }
                         tOut.closeArchiveEntry()
+                        // 打印关键文件日志
+                        if (filePath.pathString.contains("locale-archive")) {
+                            Log.i(TAG, "已备份: ${filePath.pathString}")
+                        }
                     } catch (e: Exception) {
                         e.printStackTrace()
                         reporter.msg("压缩时出现错误。文件=${filePath.pathString} 。 错误=${e.stackTraceToString()}")
@@ -584,7 +606,9 @@ object Utils {
                 // 绑定文件夹变为空文件夹放进压缩包
                 for (dir in ignoreRootfsSubDirs.filter { it != "storage" }) {
                     val path = Paths.get(rootfsDir.absolutePath, dir)
-                    tOut.putArchiveEntry(getTarEntry(path, parentPrefixLen).also { if (dir == "tmp") it.mode = "777".toInt(8) })
+                    val entry = getTarEntry(path, parentPrefixLen)
+                    if (dir == "tmp") entry.mode = "777".toInt(8)
+                    tOut.putArchiveEntry(entry)
                     tOut.closeArchiveEntry()
                 }
                 tOut.finish()
@@ -664,11 +688,11 @@ object Utils {
             CompressedType.TZST -> ZstdCompressorInputStream(rawInput)
         }
 
-        /** 将一个普通输出流转换为对应的压缩器输出流 如 [XZCompressorInputStream] [GzipCompressorOutputStream] */
+        /** 将一个普通输出流转换为对应的压缩器输出流 如 [XZCompressorOutputStream] [GzipCompressorOutputStream] */
         fun getCompressedOutput(type: CompressedType, rawOutput: OutputStream?): CompressorOutputStream<out OutputStream> = when (type) {
             CompressedType.XZ -> XZCompressorOutputStream(rawOutput)
             CompressedType.GZ -> GzipCompressorOutputStream(rawOutput)
-            CompressedType.TZST -> throw RuntimeException("Zstd压缩输出暂不支持")
+            CompressedType.TZST -> ZstdCompressorOutputStream(rawOutput)
         }
 
         /**
@@ -743,7 +767,7 @@ object Utils {
             }
             //先完整循环一遍， 确保中间文件和最终文件都已创建。
 
-            //FIXME 由于目前设置PROOT_L2S_DIR为.l2s文件夹时 locale-gen无法创建语言文件，而目前修复l2s又会将文件都放到.l2s文件夹，所以先不处理了，
+            // 修改后的 fixL2sFiles 调用，不再删除文件
             fixL2sFiles(outDir, symLinkList, reporter, skipProcess = true)
 
             // 文件夹权限应该在全部文件和符号链接处理完之后进行。
@@ -762,35 +786,11 @@ object Utils {
 
         /**
          * 修复l2s文件软链接指向的路径
-         * @param skipProcess 跳过处理。目前指定l2s变量会有问题，所以先不处理了
+         * @param skipProcess 如果为true，则跳过所有处理（不删除也不修复），直接返回。
          */
         private fun fixL2sFiles(outDir: File, symLinkList: List<SymLink>, reporter: TaskReporter, skipProcess: Boolean = false) {
             if (skipProcess) {
-                reporter.msg("跳过修复l2s文件, 全部删除...")
-                fun delL2s(files: List<File>, reporter: TaskReporter) =
-                    files.forEach { if (it.delete()) reporter.msg("删除l2s文件：${it.absolutePath}") }
-
-                val l2sDir = File(outDir, ".l2s")
-                //如果不处理，把相关文件都删掉。靠程序重新创建
-                for (item in symLinkList) {
-                    try {
-                        val symlinkFile = File(item.symlink)
-                        val pointToFile = File(item.pointTo)
-                        //自己是中间文件或硬链接模拟，都可以执行相同操作：删除自身，同目录/l2s目录下指向文件名
-                        if (symlinkFile.name.startsWith(".l2s.") || pointToFile.name.startsWith(".l2s.")) {
-                            delL2s(listOf(symlinkFile, File(symlinkFile.parentFile!!, pointToFile.name), File(l2sDir, pointToFile.name)), reporter)
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        reporter.msg("删除l2s文件时出错。文件=$item 。错误消息 = ${e.stackTraceToString()}")
-                    }
-                }
-                try {
-                    File(outDir, "/.l2s").let { FileUtils.deleteDirectory(it) }.also { reporter.msg("删除 .l2s 文件夹") }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    reporter.msg("删除 .l2s 文件夹失败。错误消息 = ${e.stackTraceToString()}")
-                }
+                reporter.msg("跳过修复l2s文件，保留原样。")
                 return
             }
 
@@ -1130,4 +1130,3 @@ enum class FuncOnChangeAction {
 typealias FuncOnChangeSync<T> = (oldValue: T, newValue: T, action: FuncOnChangeAction) -> Unit
 /** 增删改的回调 异步函数。当为ADD或DEL时old=new */
 typealias FuncOnChange<T> = suspend (oldValue: T, newValue: T, action: FuncOnChangeAction) -> Unit
-
