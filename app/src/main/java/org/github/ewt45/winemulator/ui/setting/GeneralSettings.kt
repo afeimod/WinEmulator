@@ -109,9 +109,11 @@ fun GeneralSettings(
             Consts.rootfsCurrDir.canonicalFile.name,
             state.localRootfsLoginUsersMap,
             settingVM.rootfsUsersOptions.value.mapValues { it.value.map { info -> info.name } },
+            settingVM.rootfsAliasMap.value,
             settingVM::onChangeRootfsName,
             settingVM::onChangeRootfsSelect,
             { rootfs, user -> scope.launch { settingVM.onChangeRootfsLoginUser(rootfs, user) } },
+            settingVM::onChangeRootfsAlias,
             { prepareVm.setForceNoRootfs() },
         )
 //        }
@@ -160,6 +162,7 @@ fun GeneralRootfsLang(
  * @param onRootfsNameChange 文件夹重命名/删除时
  * @param rootfsToLoginUserMap 每个rootfs及其当前选择的登陆用户名。参考：[Consts.Pref.Local.rootfs_login_user_json]。请传入前确保每个rootfs都在其中有key，且对应value 的user符合 [ProotRootfs.getPreferredUser]
  * @param loginUsersOptions 每个rootfs及其对应的全部可使用用户名。 请传入前确保rootfs不包含[Consts.rootfsCurrDir]
+ * @param rootfsAliasMap rootfs 别名映射，key 为文件夹名，value 为别名
  * @param onRootfsSelectChange 当前使用的rootfs变更时
  * @param onUserSelectChange 某个rootfs的登陆用户变化时。参数1是rootfs名，参数2是用户名
  */
@@ -168,9 +171,11 @@ fun GeneralRootfsSelect(
     currRootfs: String,
     rootfsToLoginUserMap: Map<String, String>,
     loginUsersOptions: Map<String, List<String>>,
+    rootfsAliasMap: Map<String, String>,
     onRootfsNameChange: suspend (String, String, FuncOnChangeAction) -> Unit,
     onRootfsSelectChange: suspend (String) -> Unit,
     onUserSelectChange: (String, String) -> Unit,
+    onAliasChange: (String, String) -> Unit,
     navigateToNewRootfs: () -> Unit,
 ) {
 
@@ -181,17 +186,17 @@ fun GeneralRootfsSelect(
 
     val TYPE_SEL = 0 // 切换
     val TYPE_DEL = 1 // 删除
-    fun onClickBtn(type: Int, rootfsName: String, isCurr: Boolean, newRootfsName: String? = null) = scope.launch {
+    fun onClickBtn(type: Int, rootfsName: String, rootfsAlias: String, isCurr: Boolean, newRootfsName: String? = null) = scope.launch {
         if (type == TYPE_SEL && !isCurr) {
-            dialogState.showConfirm("将此文件夹设置为Proot使用的rootfs？\n确定后将退出app, 请手动重启。\n\n$rootfsName") {
+            dialogState.showConfirm("将此文件夹设置为Proot使用的rootfs？\n确定后将退出app, 请手动重启。\n\n$rootfsAlias") {
                 onRootfsSelectChange(rootfsName)
             }
         } else if (type == TYPE_DEL) {
             // 如果是当前正在运行的rootfs，直接显示提示，不执行删除
             if (isCurr) {
-                dialogState.showConfirm("该Rootfs当前正在运行，无法删除。\n\n$rootfsName")
+                dialogState.showConfirm("该Rootfs当前正在运行，无法删除。\n\n$rootfsAlias")
             } else {
-                dialogState.showConfirm("确定删除该Rootfs吗？\n其内部所有文件都将被删除，请谨慎操作！\n\n$rootfsName") {
+                dialogState.showConfirm("确定删除该Rootfs吗？\n其内部所有文件都将被删除，请谨慎操作！\n\n$rootfsAlias") {
                     onRootfsNameChange(rootfsName, rootfsName, FuncOnChangeAction.DEL)
                 }
             }
@@ -211,6 +216,7 @@ fun GeneralRootfsSelect(
 
             for (rootfsName in sortedRootfsList) {
                 val isCurr = rootfsName == currRootfs
+                val rootfsAlias = rootfsAliasMap[rootfsName] ?: rootfsName
                 val userNameOptions = loginUsersOptions[rootfsName]
                 val userName = rootfsToLoginUserMap[rootfsName]
                 if (userNameOptions == null || userName == null) {
@@ -224,10 +230,8 @@ fun GeneralRootfsSelect(
                 Box {
                     Row(Modifier.padding(0.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1F)) {
-                            GeneralRootfsSelect_RootfsName(rootfsName, isCurr, dialogState) { old, new ->
-                                onRootfsNameChange(old, new, FuncOnChangeAction.EDIT)
-                                if (isCurr) onRootfsSelectChange(new)
-                            }
+                            // 设置页面：只修改别名，不修改容器文件夹名
+                            GeneralRootfsSelect_RootfsName(rootfsName, rootfsAlias, isCurr, dialogState, onAliasChange)
                             Spacer(Modifier.height(8.dp))
                             GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userNameOptions, onUserSelectChange)
                         }
@@ -239,11 +243,11 @@ fun GeneralRootfsSelect(
                         ) {
                             val btnModifier = Modifier.size(40.dp)//.padding(4.dp)
                             Column {
-                                IconButton(onClick = { onClickBtn(TYPE_SEL, rootfsName, isCurr) }, btnModifier) {
+                                IconButton(onClick = { onClickBtn(TYPE_SEL, rootfsName, rootfsAlias, isCurr) }, btnModifier) {
                                     if (isCurr) Icon(Icons.Filled.Check, null)
                                     else Icon(painterResource(R.drawable.ic_switch), null)
                                 }
-                                IconButton(onClick = { onClickBtn(TYPE_DEL, rootfsName, isCurr) }, btnModifier)
+                                IconButton(onClick = { onClickBtn(TYPE_DEL, rootfsName, rootfsAlias, isCurr) }, btnModifier)
                                 { Icon(Icons.Filled.Delete, null) }
                                 GeneralRootfsSelect_ExportRootfs(btnModifier, rootfsName)
                             }
@@ -356,27 +360,40 @@ fun GeneralRootfsSelect_LoginUserSelect(
 }
 
 /**
- * [GeneralRootfsSelect] 的子布局。编辑该rootfs的名称
- * @param onRootfsNameChange 传入oldRootfsName 和 newRootfsName
- *      当用户点击回车完成编辑 时，先提示用户确认，确认后执行此回调
+ * [GeneralRootfsSelect] 的子布局。编辑该rootfs的别名
+ * @param rootfsName rootfs 文件夹名
+ * @param rootfsAlias 当前别名
+ * @param onAliasChange 别名修改回调
+ */
+/**
+ * 显示容器名称编辑框
+ * @param rootfsName rootfs 文件夹名
+ * @param rootfsAlias 当前别名
+ * @param onAliasChange 别名修改回调。如果不需要修改别名（如导入后界面），传入空lambda
+ * @param onRootfsNameChange 容器名修改回调。在导入后界面使用，用于重命名容器文件夹
  */
 @Composable
 fun GeneralRootfsSelect_RootfsName(
     rootfsName: String,
+    rootfsAlias: String,
     isCurr: Boolean,
     dialogState: ConfirmDialogState,
-    onRootfsNameChange: suspend (String, String) -> Unit,
+    onAliasChange: (String, String) -> Unit,
+    onRootfsNameChange: suspend (String, String) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
-    TextFieldOption(rootfsName, title = "Rootfs名称", outlined = true) {
-
-        val newName = it.filter { ch -> !ch.isWhitespace() }
+    
+    TextFieldOption(rootfsAlias, title = "Rootfs名称", outlined = true) {
+        val newName = it.trim()
+        if (newName.isBlank() || newName == rootfsAlias) return@TextFieldOption
+        
+        // 修改别名（设置页面使用）
+        onAliasChange(rootfsName, newName)
+        
+        // 修改容器名（导入后界面使用）
+        // 当 onRootfsNameChange 不是默认实现时调用
         scope.launch {
-            if (newName.isBlank() || newName == rootfsName) return@launch
-            val extraTip = if (isCurr) "\n\n该Rootfs当前正在使用，重命名后会退出app，请手动重启。" else ""
-            dialogState.showConfirm("是否将该Rootfs重命名为 $newName？$extraTip") {
-                onRootfsNameChange(rootfsName, newName)
-            }
+            onRootfsNameChange(rootfsName, newName)
         }
     }
 }
@@ -565,7 +582,16 @@ fun GeneralSettingsPreview() {
 //        GeneralRootfsLang(lang, langOptions, { lang = it })
 //        GeneralShareDir(shareDirSet, onChangeShareDir)
         GeneralRootfsSelect(
-            "rootfs-3", rootfsToLoginUserMap, loginUsersOptions, { _, _, _ -> "" }, { _ -> }, { _, _ -> }, {})
+            currRootfs = "rootfs-3",
+            rootfsToLoginUserMap = rootfsToLoginUserMap,
+            loginUsersOptions = loginUsersOptions,
+            rootfsAliasMap = emptyMap(),
+            onRootfsNameChange = { _, _, _ -> },
+            onRootfsSelectChange = { },
+            onUserSelectChange = { _, _ -> },
+            onAliasChange = { _, _ -> },
+            navigateToNewRootfs = { }
+        )
     }
 }
 
