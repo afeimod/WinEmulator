@@ -1,10 +1,12 @@
 <p align="center">
-	<img src="logo.png" width="320" height="150" alt="Linbox Logo" />  
+	<img src="logo.png" width="500" height="250" alt="Linbox Logo" />  
 </p>
-
+<p align="center">
+	<img src="ic_launcher-playstor1e.png" width="320" height="320" alt="Linbox Logo" />  
+</p>
 # linbox
 本仓库是安卓手机利用proot终端内置x11实现运行linux！可以用于办公，娱乐，游戏等！并感谢所有大佬的帮助！
-# 感谢*hostei33 *咔咔龙 *小白一枚 *云起云落 *Asia *Deemo *补补123 *等*以及mobox的所有开发人员！
+# 感谢*hostei33 *咔咔龙 *小白一枚 *moze30 *云起云落 *Asia *Deemo *补补123 *等*以及mobox的所有开发人员！
 ### 手机进开发者选项，勾选停止限制子进程，解决报错9闪退
 本项目由ewt45开启，afeimod续更！
 参考或使用的项目：
