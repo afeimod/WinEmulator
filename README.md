@@ -17,7 +17,7 @@ PRoot-Distro
 等
 下载链接* https://github.com/afeimod/WinEmulator/releases
 <p align="center">
-	<img src="ic_launcher-playstor1e.png" width="220" height="220" alt="Linbox Logo" />  
+	<img src="ic_launcher-playstore.png" width="220" height="220" alt="Linbox Logo" />  
 </p>
 ### 来源链接
 
