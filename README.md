@@ -26,6 +26,7 @@ PRoot-Distro
 ### 来源链接
 
 * https://github.com/jiaxinchen-max/termux-app
+* https://github.com/brunodev85/winlator
 * https://github.com/Waim908/wine-termux *补丁参考
 * https://github.com/lfdevs/mesa-for-android-container
 * https://github.com/wine-mirror/wine
