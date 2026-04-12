@@ -80,7 +80,7 @@ private fun TerminalScreenImpl(
                         isClickable = true
                         
                         viewClient?.let { setTerminalViewClient(it) }
-                        setTextSize(14)
+                        setTextSize(18)
                         
                         terminalSession?.let { attachSession(it) }
                         

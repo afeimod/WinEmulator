@@ -10,7 +10,7 @@ class ViewClientImpl(
     val sessionClient: SessionClientAImpl,
 ) : ViewClientBase() {
 
-    private var mCurrentFontSize = 14
+    private var mCurrentFontSize = 18
 
     /**
      * 优化后的双指缩放：
