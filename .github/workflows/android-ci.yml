@@ -1,53 +1,22 @@
-name: Android CI/CD
+name: Build APK
 
 on:
+  push:
+    branches: ['**']
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: '构建类型'
-        required: true
-        default: 'debug'
-        type: choice
-        options:
-          - debug
-          - release
-          - both
 
 env:
   JAVA_VERSION: '17'
-  ANDROID_COMPILE_SDK: '35'
-  ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
-  ANDROID_SDK_VERSION: '28'
 
 jobs:
-  # ============================================
-  # 调试版本构建（支持多 API 级别）
-  # ============================================
-  debug-build:
-    name: Debug Build - API ${{ matrix.api_level }}
+  build:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        api_level: [26, 28, 34]
-        include:
-          - api_level: 26
-            min_sdk: 26
-          - api_level: 28
-            min_sdk: 26
-          - api_level: 34
-            min_sdk: 26
     
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          ref: ${{ github.ref }}
       
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
@@ -56,312 +25,34 @@ jobs:
       
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          api-level: ${{ matrix.api_level }}
-          build-tools: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
-          cmdline-tools: 'latest'
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            .gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Prepare Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew --version
-      
-      - name: Build debug APK
-        run: |
-          ./gradlew assembleDebug \
-            -PminSdk=${{ matrix.min_sdk }} \
-            -PtargetSdk=${{ matrix.api_level }} \
-            --no-daemon \
-            --stacktrace
-      
-      - name: Rename debug APK
-        run: |
-          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
-            VERSION_CODE=$(grep -oP '(?<=versionCode = )\d+' app/build.gradle.kts || echo "1")
-            VERSION_NAME=$(grep -oP '(?<=versionName = ")[^"]+' app/build.gradle.kts || echo "1.0")
-            BRANCH_NAME=${GITHUB_REF#refs/heads/}
-            BRANCH_NAME=${BRANCH_NAME//\//-}
-            NEW_NAME="WinEmulator-${BRANCH_NAME}-v${VERSION_NAME}-${VERSION_CODE}-api${{ matrix.api_level }}-unsigned.apk"
-            mv app/build/outputs/apk/debug/app-debug.apk "$NEW_NAME"
-            echo "APK_FILE=$NEW_NAME" >> $GITHUB_ENV
-          fi
-      
-      - name: Upload debug APK
-        if: env.APK_FILE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-api${{ matrix.api_level }}-unsigned
-          path: ${{ env.APK_FILE }}
-          retention-days: 7
-          if-no-files-found: error
-
-  # ============================================
-  # 发布版本构建（注入签名 + 自动发布到 nightly Release）
-  # ============================================
-  release-build:
-    name: Release Build
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          ref: ${{ github.ref }}
-      
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'gradle'
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: ${{ env.ANDROID_COMPILE_SDK }}
-          build-tools: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
-          cmdline-tools: 'latest'
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            .gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Prepare Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew --version
       
       - name: Create debug keystore
         run: |
-          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US" 2>/dev/null || true
-      
-      - name: Inject signing config for release build
-        run: |
-          echo "" >> gradle.properties
-          echo "android.injected.signing.store.file=$PWD/debug.keystore" >> gradle.properties
-          echo "android.injected.signing.store.password=android" >> gradle.properties
-          echo "android.injected.signing.key.alias=androiddebugkey" >> gradle.properties
-          echo "android.injected.signing.key.password=android" >> gradle.properties
+          keytool -genkey -v -keystore debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US"
       
       - name: Build release APK
         run: |
-          ./gradlew assembleRelease \
-            -PminSdk=26 \
-            -PtargetSdk=${{ env.ANDROID_SDK_VERSION }} \
-            --no-daemon \
-            --stacktrace
-      
-      - name: Rename release APK
-        run: |
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            VERSION_CODE=$(grep -oP '(?<=versionCode = )\d+' app/build.gradle.kts || echo "1")
-            VERSION_NAME=$(grep -oP '(?<=versionName = ")[^"]+' app/build.gradle.kts || echo "1.0")
-            BRANCH_NAME=${GITHUB_REF#refs/heads/}
-            BRANCH_NAME=${BRANCH_NAME//\//-}
-            NEW_NAME="WinEmulator-${BRANCH_NAME}-v${VERSION_NAME}-${VERSION_CODE}-release-unsigned.apk"
-            mv app/build/outputs/apk/release/app-release.apk "$NEW_NAME"
-            echo "APK_FILE=$NEW_NAME" >> $GITHUB_ENV
-          fi
-      
-      - name: Upload release APK as artifact
-        if: env.APK_FILE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-unsigned
-          path: ${{ env.APK_FILE }}
-          retention-days: 30
-          if-no-files-found: error
-      
-      - name: Publish to GitHub Release (nightly)
-        if: ${{ env.APK_FILE != '' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: nightly
-          name: "Nightly Build"
-          body: |
-            ## 自动构建的夜间版本
-            - 分支: ${{ github.ref_name }}
-            - 提交: ${{ github.sha }}
-            - 构建时间: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          files: ${{ env.APK_FILE }}
-          prerelease: true
-          overwrite_files: true      # ← 关键添加项
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ============================================
-  # 代码质量检查（仅在 debug 或 both 时运行）
-  # ============================================
-  lint:
-    name: Code Lint
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-      
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'gradle'
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: ${{ env.ANDROID_COMPILE_SDK }}
-          build-tools: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
-          cmdline-tools: 'latest'
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            .gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Run lint
-        run: |
           chmod +x gradlew
-          ./gradlew lint --no-daemon
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/debug.keystore \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
       
-      - name: Upload lint reports
+      - name: Rename APK
+        run: |
+          BRANCH=${GITHUB_REF#refs/heads/}
+          BRANCH=${BRANCH//\//-}
+          SHA=$(git rev-parse --short HEAD)
+          mv app/build/outputs/apk/release/app-release.apk "WinEmulator-${BRANCH}-${SHA}.apk"
+      
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: lint-reports
-          path: app/build/reports/lint-results-*.html
+          name: apk
+          path: "*.apk"
           retention-days: 7
-
-  # ============================================
-  # 单元测试（仅在 debug 或 both 时运行）
-  # ============================================
-  unit-test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-      
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: 'gradle'
-      
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: ${{ env.ANDROID_COMPILE_SDK }}
-          build-tools: ${{ env.ANDROID_BUILD_TOOLS_VERSION }}
-          cmdline-tools: 'latest'
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            .gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Run unit tests
-        run: |
-          chmod +x gradlew
-          ./gradlew testDebugUnitTest --no-daemon
-      
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-reports
-          path: app/build/reports/tests/testDebugUnitTest/*.html
-          retention-days: 7
-
-  # ============================================
-  # 构建汇总
-  # ============================================
-  build-summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs: [debug-build, release-build, lint, unit-test]
-    if: always()
-    
-    steps:
-      - name: Build Summary
-        run: |
-          echo "## 构建结果汇总" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ needs.debug-build.result }}" == "success" ]; then
-            echo "✅ 调试版本构建: 成功" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.debug-build.result }}" == "skipped" ]; then
-            echo "⏭️ 调试版本构建: 跳过" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ 调试版本构建: 失败" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.release-build.result }}" == "success" ]; then
-            echo "✅ 发布版本构建: 成功" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.release-build.result }}" == "skipped" ]; then
-            echo "⏭️ 发布版本构建: 跳过" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ 发布版本构建: 失败" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.lint.result }}" == "success" ]; then
-            echo "✅ 代码检查: 通过" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.lint.result }}" == "skipped" ]; then
-            echo "⏭️ 代码检查: 跳过" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ 代码检查: 失败" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.unit-test.result }}" == "success" ]; then
-            echo "✅ 单元测试: 通过" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.unit-test.result }}" == "skipped" ]; then
-            echo "⏭️ 单元测试: 跳过" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ 单元测试: 失败" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**触发事件:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**分支:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "**构建类型:** ${{ github.event.inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**注意:** 构建的APK文件未经过正式签名，发布前请用MT管理器签名。" >> $GITHUB_STEP_SUMMARY
