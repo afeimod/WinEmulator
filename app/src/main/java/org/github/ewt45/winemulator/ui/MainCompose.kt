@@ -61,6 +61,7 @@ import androidx.navigation.navigation
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.MainEmuActivity
 import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
+import org.github.ewt45.winemulator.terminal.ViewClientImpl
 import org.github.ewt45.winemulator.ui.theme.MainTheme
 import org.github.ewt45.winemulator.viewmodel.DialogType
 import org.github.ewt45.winemulator.viewmodel.MainUiState
@@ -80,7 +81,7 @@ fun MainScreen(
     settingVm: SettingViewModel,
     prepareVm: PrepareViewModel,
 ) {
-    val TAG = "MainScreen"
+    val activity = LocalActivity.current as? MainEmuActivity
     val navController = rememberNavController()
 
     val uiState by mainVm.uiState.collectAsState()
@@ -88,21 +89,16 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currDestination = appbarDestList.find { navBackStackEntry?.destination?.hasRoute(it.route::class) == true } ?: startDest
 
-    // 跳转到目的地。如果返回栈中有该目的地，则弹出到这个位置然后再跳转。
     val navigateTo: (Destination) -> Unit = { navController.navigate(it.route) { popUpTo(it.route) { inclusive = true } } }
 
-    // acitivty通过viewmodel修改目的地时，触发跳转
     LaunchedEffect(Unit) {
         mainVm.navigateToEvent.collect { dest -> navigateTo(dest) }
     }
-    // 启动时自动跳转到X11界面（如果设置了自动启动）
     LaunchedEffect(prepareUiState.isPrepareFinished) {
         if (prepareUiState.isPrepareFinished && startDest == Destination.X11) {
-            // 如果准备已完成且目标是X11，自动导航到X11
             navigateTo(Destination.X11)
         }
     }
-    // 开头或中途 需要进入准备屏幕时
     LaunchedEffect(prepareUiState.isPrepareFinished) {
         if (!prepareUiState.isPrepareFinished && currDestination != Destination.Prepare)
             navigateTo(Destination.Prepare)
@@ -114,16 +110,12 @@ fun MainScreen(
             MyTopAppBar(currDestination, { navigateTo(it) })
         },
     ) { innerPadding ->
-        // FIXME tx11已经处理键盘高度变更了，这里应该不用innerPadding 否则会有空白
-        //  但是使用了scaffold的topbar之后需要应用顶部padding
-//            val ignoreSystemInsets = Modifier.padding(innerPadding)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = innerPadding.calculateTopPadding()),
             contentAlignment = Alignment.Center,
         ) {
-//            Column(Modifier.fillMaxHeight().widthIn(max = 600.dp)) { }
             NavHost(
                 navController, startDest.route,
                 enterTransition = { scaleIn() },
@@ -132,14 +124,13 @@ fun MainScreen(
                 composable<RoutePrepare> {
                     PrepareScreen(prepareVm, settingVm) {
                         MainEmuActivity.instance.startEmu()
-                        // 准备完成后直接跳转到X11界面
                         navController.navigate(Destination.X11.route) { popUpTo(Destination.Prepare.route) { inclusive = true } }
                     }
                 }
                 composable<RouteX11> { X11Screen(tx11Content, navigateTo) }
                 navigation<RouteExceptX11>(startDestination = RouteTerminal) {
-                    composable<RouteTerminal> { ProotTerminalScreen(terminalVm) }
-//                        composable<NavDest.Terminal> { TerminalScreen() }
+                    // 核心修复：显式透传 Activity 中的 viewClient 实例
+                    composable<RouteTerminal> { TerminalScreen(terminalVm, activity?.viewClient) }
                     composable<RouteSettings> { SettingScreen(settingVm, terminalVm, prepareVm, navigateTo) }
                 }
             }
@@ -152,19 +143,17 @@ fun MainScreen(
 
 @Composable
 private fun MainDialog(uiState: MainUiState, onClose: (Boolean) -> Unit) {
-    // 对话框
     val dialogType = uiState.dialogType
     val isConfirm = uiState.dialogType == DialogType.CONFIRM
     val isBlock = uiState.dialogType == DialogType.BLOCK
     if (dialogType != DialogType.NONE) {
         AlertDialog(
-            onDismissRequest = {}, //阻止点击外部区域关闭
-//                title = { Text("加载中") },
+            onDismissRequest = {}, 
             text = {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth() // 让 Column 填充对话框宽度
-                        .wrapContentHeight(), // 根据内容调整高度
+                        .fillMaxWidth() 
+                        .wrapContentHeight(), 
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     SelectionContainer {
@@ -191,9 +180,6 @@ private fun MainDialog(uiState: MainUiState, onClose: (Boolean) -> Unit) {
 }
 
 
-/**
- * 顶部的AppBar，显示一个tabRow，包含一些导航目的地。如果传入当前目的地不在列表内，则不显示appbar
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MyTopAppBar(
@@ -204,7 +190,6 @@ private fun MyTopAppBar(
     if (selectIdx != null && selectIdx != -1) {
         TopAppBar(
             title = {
-                //TODO 改为 navigation  参考 https://developer.android.com/develop/ui/compose/components/tabs?hl=zh-cn
                 PrimaryScrollableTabRow(selectIdx, divider = {}) {
                     appbarDestList.forEachIndexed { idx, dest ->
                         Tab(
@@ -224,32 +209,24 @@ private fun MyTopAppBar(
             actions = {
                 IconButton({ setDestination(Destination.X11) }) { Icon(painterResource(R.drawable.ic_hide), null) }
             },
-//        scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
         )
     }
 
 }
 
-/** 按钮。点击可将compose部分的视图展开或折叠。
- * 可拖动: 由于x11的acitivity是View视图，所以拖动还是要用view的layoutParam实现。
- */
 @Composable
 private fun MinimizeButton(
     minimize: Boolean,
     onClick: () -> Unit,
 ) {
-    val TAG = "MinimizeButton"
     val activity = LocalActivity.current
     val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
-
-    //最小化时颜色稍微变化一下吧，否则不容易看到
     val colorSurface = MaterialTheme.colorScheme.surfaceContainerHigh
     val colorContent = MaterialTheme.colorScheme.onSurface
     val colors =
         if (!minimize) IconButtonDefaults.iconButtonColors()
         else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
 
-    // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
     val margin = remember { mutableListOf(0, 100) }
 
     IconButton(
@@ -297,9 +274,6 @@ private fun MinimizeButton(
     }
 }
 
-/**
- * 按钮，点击可显示设置界面
- */
 @Composable
 fun SettingButton(show: Boolean, onClick: () -> Unit) {
     IconButton(onClick = onClick) {
@@ -344,13 +318,11 @@ private fun MainScreenPreview() {
                     composable<RoutePrepare> { PrepareScreenPreview() }
                     composable<RouteX11> { X11ScreenPreview() }
                     navigation<RouteExceptX11>(startDestination = RouteTerminal) {
-                        composable<RouteTerminal> { ProotTerminalScreenPreview() }
-//                        composable<NavDest.Terminal> { TerminalScreenPreview() }
+                        composable<RouteTerminal> { TerminalScreenPreview() }
                         composable<RouteSettings> { SettingScreenPreview() }
                     }
                 }
             }
-//            MainDialog(uiState) { mainVM.closeConfirmDialog(it) }
         }
     }
 }

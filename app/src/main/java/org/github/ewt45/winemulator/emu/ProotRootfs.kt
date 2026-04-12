@@ -6,7 +6,6 @@ import org.github.ewt45.winemulator.Consts
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-
 class ProotRootfs {
     data class UserInfo(
         val name: String,
@@ -20,59 +19,46 @@ class ProotRootfs {
         }
     }
 
-
     companion object {
-        /** 获取一个rootfs文件夹内/etc/passwd 中存储的用户信息。按用户名字母顺序排序 */
         fun getUserInfos(rootfs: File): List<UserInfo> {
-            var returnValue:List<UserInfo>
+            var returnValue: List<UserInfo>
             try {
                 returnValue = FileUtils.readLines(File(rootfs, "/etc/passwd"), StandardCharsets.UTF_8).mapNotNull { line ->
                     line.split(":").takeIf { it.size == 7 }?.let {
                         val uid = it[2].toLong()
+                        // 过滤掉系统预留 UID，但保留 root (0)
                         if (uid < 1000L && uid != 0L) return@let null
-                        if (uid == 65534L) return@let null
+                        if (uid == 65534L) return@let null // 过滤 nobody
                         return@let UserInfo(it[0], uid, it[3].toLong(), it[5], it[6])
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 returnValue = listOf()
             }
             if (returnValue.find { it.name == "root" } == null)
                 returnValue += (UserInfo.ROOT)
-            //proot-distro 把termux作为用户加进去了。在别的app里用不了所以不显示
             return returnValue.filter { !it.name.startsWith("aid_") }.sortedBy { it.name }
         }
 
-        /**
-         * 从/.emuconf 获取当前选择的文件夹名称
-         */
-        fun getCurrentSelectUser(name:String) {
-            TODO("目前是写在了datastore里（json存储）")
-        }
-
-        /**
-         * 同 [getPreferredUser](String?, List)
-         * @param rootfsName 作为 [Consts.Pref.Local.rootfs_login_user_json] 的map的key 获取存储的user名。不能为current
-         */
-        suspend fun getPreferredUser(rootfsName: String):UserInfo  {
-            if (rootfsName == Consts.rootfsCurrDir.name) throw IllegalArgumentException("用于搜索的 rootfsName 不能为 'current'")
+        suspend fun getPreferredUser(rootfsName: String): UserInfo {
+            if (rootfsName == Consts.rootfsCurrDir.name) throw IllegalArgumentException("不能对 current 进行用户搜索")
             val userMap: Map<String, String> = Json.decodeFromString(Consts.Pref.Local.rootfs_login_user_json.get())
-            return getPreferredUser(userMap[rootfsName], getUserInfos(File(Consts.rootfsAllDir,rootfsName)))
+            return getPreferredUser(userMap[rootfsName], getUserInfos(File(Consts.rootfsAllDir, rootfsName)))
         }
 
         /**
-         * 获取某rootfs的应该使用的登陆用户名。
-         * 首先从本地json中读取，如果没有，则优先返回非root用户。最后选项是root用户
-         * @param lastSelectedUserName 本地存储的该rootfs对应的默认用户名，可能为null（若没存过）
-         * @param allUsers 该rootfs全部可选的用户列表
+         * 优化后的用户检测：
+         * 1. 优先使用上次选中的
+         * 2. 其次强制使用 root (UID 0)
+         * 3. 实在没有才随机找一个
          */
-        fun getPreferredUser(lastSelectedUserName: String?, allUsers: List<UserInfo>): UserInfo = allUsers.run {
-            var foundInfo = find { info -> info.name == lastSelectedUserName }
-            if (foundInfo == null) foundInfo = find { info -> info.name != "root" }
-            if (foundInfo == null) foundInfo = find { info -> info.name == "root" }
-            if (foundInfo == null) foundInfo = UserInfo.ROOT
-            return foundInfo
+        fun getPreferredUser(lastSelectedUserName: String?, allUsers: List<UserInfo>): UserInfo {
+            // 优先查找上次手动选中的用户
+            allUsers.find { it.name == lastSelectedUserName }?.let { return it }
+            // 默认优先返回 root 用户
+            allUsers.find { it.name == "root" }?.let { return it }
+            // 保底返回第一个可用用户或硬编码的 root
+            return allUsers.firstOrNull() ?: UserInfo.ROOT
         }
     }
 }

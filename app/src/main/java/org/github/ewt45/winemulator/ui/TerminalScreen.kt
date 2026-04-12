@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.ui
 
-import androidx.activity.compose.LocalActivity
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,10 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,21 +26,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
-import org.github.ewt45.winemulator.MainEmuActivity
 import org.github.ewt45.winemulator.terminal.ViewClientImpl
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
-/**
- * 使用termux的TerminalView显示终端和交互
- * 增强版：添加美观的状态栏和用户名显示
- */
 @Composable
-fun TerminalScreen(viewModel: TerminalViewModel) {
-    val activity = LocalActivity.current as MainEmuActivity
-    
+fun TerminalScreen(
+    viewModel: TerminalViewModel,
+    viewClient: ViewClientImpl? = null
+) {
     TerminalScreenImpl(
-        getViewClient = { activity.viewClient },
+        viewClient = viewClient,
+        terminalSession = viewModel.terminalSession,
         currentUser = viewModel.currentUser,
         currentHost = viewModel.currentHost,
         currentPath = viewModel.currentPath,
@@ -51,56 +48,71 @@ fun TerminalScreen(viewModel: TerminalViewModel) {
 
 @Composable
 private fun TerminalScreenImpl(
-    getViewClient: () -> ViewClientImpl?,
+    viewClient: ViewClientImpl?,
+    terminalSession: TerminalSession?,
     currentUser: String,
     currentHost: String,
     currentPath: String,
     isConnected: Boolean,
 ) {
     Column(
-        Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF121212))
     ) {
-        // 顶部状态栏 - 显示用户名、主机名和当前目录
-        TerminalStatusBar(
-            currentUser = currentUser,
-            currentHost = currentHost,
-            currentPath = currentPath,
-            isConnected = isConnected
-        )
+        TerminalStatusBar(currentUser, currentHost, currentPath, isConnected)
         
-        // 分隔线
         HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
+            thickness = 0.5.dp, 
+            color = Color.White.copy(alpha = 0.1f)
         )
         
-        /*
-        termux中使用TerminalView的xml布局
-        <com.termux.view.TerminalView
-            android:id="@+id/terminal_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:defaultFocusHighlightEnabled="false"
-            android:focusableInTouchMode="true"
-            android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
-            android:scrollbars="vertical"
-            tools:ignore="UnusedAttribute" />
-         */
-        AndroidView({ ctx ->
-            TerminalView(ctx, null).apply {
-                getViewClient()?.let { setTerminalViewClient(it) }
-                isFocusableInTouchMode = true
-                isVerticalScrollBarEnabled = true
-            }
-        }, modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    TerminalView(ctx, null).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        isClickable = true
+                        
+                        viewClient?.let { setTerminalViewClient(it) }
+                        setTextSize(14)
+                        
+                        terminalSession?.let { attachSession(it) }
+                        
+                        setOnTouchListener { v, event ->
+                            if (event.action == MotionEvent.ACTION_DOWN) {
+                                v.requestFocus()
+                                v.requestFocusFromTouch()
+                                v.post {
+                                    val imm = ctx.getSystemService(InputMethodManager::class.java)
+                                    imm?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT)
+                                }
+                            }
+                            false 
+                        }
+                    }
+                },
+                update = { view ->
+                    if (terminalSession != null && view.mTermSession != terminalSession) {
+                        view.attachSession(terminalSession)
+                    }
+                    view.post {
+                        if (view.width > 0 && view.height > 0) {
+                            view.updateSize()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
-/**
- * 终端状态栏组件
- * 显示用户名@主机:路径 格式
- */
 @Composable
 fun TerminalStatusBar(
     currentUser: String,
@@ -109,86 +121,66 @@ fun TerminalStatusBar(
     isConnected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val statusColor = if (isConnected) {
-        Color(0xFF4CAF50) // 绿色 - 已连接
-    } else {
-        Color(0xFFFF9800) // 橙色 - 连接中
-    }
-    
-    val userColor = if (currentUser == "root") {
-        Color(0xFFFFFFFF) // 白色 - root用户（普通颜色）
-    } else {
-        Color(0xFF64B5F6) // 蓝色 - 普通用户（高亮）
-    }
-    
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(Color.Black.copy(alpha = 0.3f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 用户名@主机
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (isConnected) Color(0xFF00FF00) else Color(0xFFFFCC00))
+        )
+        Spacer(Modifier.width(8.dp))
+        
         Text(
             text = "$currentUser@$currentHost",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 12.sp,
+            color = if (currentUser == "root") Color(0xFFFF5555) else Color(0xFF55FFFF),
             fontFamily = FontFamily.Monospace,
-            color = userColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            fontWeight = FontWeight.Bold
         )
         
-        // 冒号分隔符
         Text(
             text = ":",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 12.sp,
+            color = Color.White,
+            fontFamily = FontFamily.Monospace
         )
         
-        // 当前路径
         Text(
             text = currentPath,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp,
+            color = Color(0xFFFFFF55),
             fontFamily = FontFamily.Monospace,
-            color = Color(0xFF81C784), // 浅绿色路径
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         
-        Spacer(modifier = Modifier.width(8.dp))
-        
-        // 连接状态指示器
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(statusColor)
+        Text(
+            text = if (isConnected) "ONLINE" else "OFFLINE",
+            fontSize = 10.sp,
+            color = Color.White.copy(alpha = 0.5f),
+            fontFamily = FontFamily.Monospace
         )
     }
 }
 
 /**
- * 简化版状态栏（用于预览）
+ * 补全预览函数，修复编译错误
  */
 @Composable
-fun SimpleTerminalStatusBar(
-    currentUser: String = "root",
-    currentHost: String = "localhost",
-    currentPath: String = "~",
-    isConnected: Boolean = true
-) {
-    TerminalStatusBar(
-        currentUser = currentUser,
-        currentHost = currentHost,
-        currentPath = currentPath,
-        isConnected = isConnected
+fun TerminalScreenPreview() {
+    TerminalScreenImpl(
+        viewClient = null,
+        terminalSession = null,
+        currentUser = "root",
+        currentHost = "localhost",
+        currentPath = "~",
+        isConnected = true
     )
 }
