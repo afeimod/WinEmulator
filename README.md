@@ -1,7 +1,6 @@
 <p align="center">
 	<img src="ic_launcher-playstore.png" width="220" height="220" alt="Linbox Logo" />  
 </p>
-
 # linbox
 本仓库是安卓手机利用proot终端内置x11实现运行linux！可以用于办公，娱乐，游戏等！并感谢所有大佬的帮助！
 # 感谢*hostei33 *咔咔龙 *小白一枚 *moze30 *云起云落 *Asia *Deemo *补补123 *等*以及mobox的所有开发人员！
