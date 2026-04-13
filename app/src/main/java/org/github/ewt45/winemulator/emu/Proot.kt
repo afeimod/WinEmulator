@@ -16,6 +16,10 @@ import java.nio.charset.StandardCharsets
 class Proot {
     private val TAG = "Proot"
 
+    /** proot 容器内用户的 home 目录，用于 TerminalSession 的 cwd */
+    var containerCwd = "/"
+        private set
+
     suspend fun attach(): ProcessBuilder = withContext(Dispatchers.IO) {
         val rootfs = Consts.rootfsCurrDir
         val prootBin = Consts.prootBin
@@ -32,6 +36,9 @@ class Proot {
         
         val userInfo = ProotRootfs.getPreferredUser(rootfs.canonicalFile.name)
         Log.d(TAG, "启动 Proot，目标用户: ${userInfo.name} (UID: ${userInfo.uid}, GID: ${userInfo.gid})")
+        
+        // 记录容器内的 cwd（proot 容器内的路径，不是 Android 路径）
+        containerCwd = userInfo.home
 
         // 确保用户的 HOME 目录在 rootfs 中存在并有正确权限
         val homeDir = File(rootfs, userInfo.home)
