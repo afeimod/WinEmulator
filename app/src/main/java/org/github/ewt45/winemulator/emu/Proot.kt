@@ -33,6 +33,17 @@ class Proot {
         val userInfo = ProotRootfs.getPreferredUser(rootfs.canonicalFile.name)
         Log.d(TAG, "启动 Proot，目标用户: ${userInfo.name} (UID: ${userInfo.uid}, GID: ${userInfo.gid})")
 
+        // 确保用户的 HOME 目录在 rootfs 中存在并有正确权限
+        val homeDir = File(rootfs, userInfo.home)
+        if (!homeDir.exists()) {
+            homeDir.mkdirs()
+            Log.d(TAG, "创建 HOME 目录: ${homeDir.absolutePath}")
+        }
+        // 确保 HOME 目录有正确的权限（特别是 root 用户）
+        homeDir.setReadable(true, false)
+        homeDir.setWritable(true, false)
+        homeDir.setExecutable(true, false)
+
         // 1. 核心参数 - 使用用户设置的 proot 参数
         val prootArgs = mutableListOf(
             prootBin.absolutePath,
@@ -40,7 +51,7 @@ class Proot {
             "--kernel-release=${ProotHelper.DEFAULT_FAKE_KERNEL_VERSION}",  // 伪装内核版本
             "--rootfs=${rootfs.absolutePath}",
             "--change-id=${userInfo.uid}:${userInfo.gid}",  // 关键：包含 gid
-            "--cwd=${userInfo.home}",
+            // 注意：不使用 --cwd 参数，让 HOME 环境变量和 shell -l 来处理初始目录
             "--bind=${tmpDir.absolutePath}:/tmp",
             "--bind=${rootfs.absolutePath}/tmp:/dev/shm",
             "--bind=/sys",
