@@ -162,25 +162,43 @@ Linbox-WinEmu 基于以下开源项目和技术的集成：
 
 ### 核心技术栈
 
-**Jetpack Compose**：应用界面采用 Jetpack Compose 框架构建，提供现代化的用户界面和流畅的交互体验。
+**Jetpack Compose**：应用界面采用 Jetpack Compose 框架构建，提供现代化的用户界面和流畅的交互体验。https://developer.android.com/jetpack/compose
 
-**Termux-X11**：提供 X11 服务器功能，使 Linux 图形程序能够在 Android 上显示。
+**Termux-X11**：提供 X11 服务器功能，使 Linux 图形程序能够在 Android 上显示。https://github.com/termux/termux-x11
 
-**PRoot**：在非 root 环境下实现 Linux 容器功能，无需特殊权限即可运行完整的 Linux 系统。
+**PRoot**：在非 root 环境下实现 Linux 容器功能，无需特殊权限即可运行完整的 Linux 系统。https://github.com/proot-me/PRoot
 
-**PulseAudio**：音频服务，支持 Linux 应用和 Wine 的音频输出。
+**PulseAudio**：音频服务，支持 Linux 应用和 Wine 的音频输出。https://gitlab.freedesktop.org/pulseaudio/pulseaudio
 
 ### 兼容层和模拟器
 
-**Wine**：Windows 程序兼容层，通过翻译 Windows API 调用到 POSIX 调用实现程序运行。
+**Wine**：Windows 程序兼容层，通过翻译 Windows API 调用到 POSIX 调用实现程序运行。https://www.winehq.org/
 
-**Box64/Box86**：动态二进制翻译器，使 ARM 设备能够运行 x86_64/x86 架构的程序。
+**Box64**：动态二进制翻译器，使 ARM64 设备能够运行 x86_64 架构的程序。https://github.com/ptitSeb/box64
 
-**DXVK/VKD3D/D8VK**：图形 API 转换层，将 DirectX 图形调用转换为 Vulkan 调用，利用 GPU 加速提升性能。
+**Box86**：动态二进制翻译器，使 ARM 设备能够运行 x86 架构的程序。https://github.com/ptitSeb/box86
+
+**DXVK**：DirectX 9/10/11 到 Vulkan 的图形转换层，利用 GPU 加速提升性能。https://github.com/doitsujin/dxvk
+
+**DXVK-ASYNC**：DXVK 的异步编译版本，提升游戏加载速度。https://github.com/Sporif/dxvk-async
+
+**DXVK-GPLASYNC**：DXVK 的 GPL 异步编译版本。https://gitlab.com/Ph42oN/dxvk-gplasync
+
+**VKD3D**：Direct3D 12 到 Vulkan 的转换层，支持运行 DirectX 12 游戏。https://github.com/lutris/vkd3d
+
+**D8VK**：Direct3D 8 到 Vulkan 的转换层。https://github.com/AlpyneDreams/d8vk
 
 ### 参考项目
 
-本项目的开发参考了以下优秀开源项目：Winlator（Android 上的 Wine 容器方案）、Exagear（经典 ARM 模拟器）、Termux/Termux:X11（Android 终端和 X11 支持）、PRoot-Distro（PRoot 发行版管理）以及 Mobox（Box64/86 在 Android 上的集成方案）。
+本项目的开发参考了以下优秀开源项目：
+
+- **Winlator**：Android 上的 Wine 容器方案。https://github.com/brunodev85/winlator
+
+- **Termux**：Android 终端模拟器。https://github.com/termux/termux-app
+
+- **PRoot-Distro**：PRoot 发行版管理工具。https://github.com/proot-me/PRoot-Distro
+
+- **Mobox**：Box64/86 在 Android 上的集成方案。https://github.com/olegos2/mobox
 
 ## 开发者指南
 
@@ -206,7 +224,27 @@ Linbox-WinEmu 的开发离不开以下贡献者和开源项目的支持：
 
 ### 开源依赖
 
-本项目使用了以下开源项目的代码或概念：glibc-packages（Termux 的 glibc 包仓库）、Box64/Box86（ARM 动态翻译器）、DXVK 系列（图形转换层）、VKD3D（Direct3D 12 支持）、Termux-app（终端应用）、Mesa（开源图形驱动）、wine-ge-custom（GloriousEggroll 优化的 Wine 构建）和 wine-tkg（用户自定义 Wine 构建）。
+本项目使用了以下开源项目的代码或概念：
+
+- **glibc-packages**：Termux 的 glibc 包仓库。https://github.com/termux-pacman/glibc-packages
+
+- **Mesa**：开源图形驱动库。https://docs.mesa3d.org/
+
+- **wine-ge-custom**：GloriousEggroll 优化的 Wine 构建版本。https://github.com/GloriousEggroll/wine-ge-custom
+
+- **wine-tkg**：用户自定义 Wine 构建工具。https://github.com/Frogging-Family/wine-tkg-git
+
+- **wine-wayland**：Wayland 环境的 Wine 支持。https://github.com/Kron4ek/wine-wayland
+
+- **wine-tkg (Kron4ek)**：Kron4ek 维护的 Wine TKG 版本。https://github.com/Kron4ek/wine-tkg
+
+- **Valve Wine**：Valve 优化的 Wine 版本。https://github.com/ValveSoftware/wine
+
+- **wine-wayland (Collabora)**：Collabora 的 Wayland Wine 分支。https://gitlab.collabora.com/alf/wine
+
+- **wine-termux**：针对 Termux 优化的 Wine。https://github.com/Waim908/wine-termux
+
+- **mesa-zink**：Mesa Zink 渲染器。https://github.com/alexvorxx/mesa-zink-11.06.22
 
 ## 下载与反馈
 
