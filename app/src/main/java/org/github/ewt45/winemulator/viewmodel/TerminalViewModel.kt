@@ -40,8 +40,10 @@ class TerminalViewModel : ViewModel() {
             }
             val executable = cmdList[0]
             val args = cmdList.drop(1).toTypedArray()
-            val cwd = pb.directory()?.absolutePath ?: "/"
-            
+            // 关键修复：不能使用 pb.directory()?.absolutePath，因为这是 Android 文件系统路径
+            // proot 容器内看不到 Android 路径，必须使用 "/" 让 proot 的 -w 参数处理实际 cwd
+            val cwd = "/"
+
             // 关键修复：从 ProcessBuilder 提取环境变量
             // 如果不传这个 envs，proot 就会因为找不到临时目录而回退到 Termux 默认路径，导致权限报错
             val envs = pb.environment().map { "${it.key}=${it.value}" }.toTypedArray()
