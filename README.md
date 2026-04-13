@@ -8,21 +8,23 @@
     <img src="logo.png" width="500" height="250" alt="Linbox Logo" />
 </p>
 
-<p align="center">
-    <table>
-        <tr>
-            <td><img src="test1.png" width="300" alt="Screenshot 1" /></td>
-            <td><img src="test2.png" width="300" alt="Screenshot 2" /></td>
-            <td><img src="test3.png" width="300" alt="Screenshot 3" /></td>
-        </tr>
-    </table>
-</p>
 
 ## 项目简介
 
 Linbox-WinEmu（原 WinEmulator）是一款运行在 Android 设备上的 Linux 环境模拟器，通过利用 PRoot、Box64/86、Termux-X11 等技术，在 Android 手机或平板上创建一个完整的 Linux 容器环境，从而实现运行 Windows 应用程序和游戏的目的。本应用支持自定义分辨率、多种输入模式、Wine 兼容层配置以及 DXVK/VKD3D 图形加速，适用于办公、娱乐和游戏等多种场景。
 
 本项目由 ewt45 发起，afeimod 持续维护更新。
+
+<p align="center">
+    <table>
+        <tr>
+            <td><img src="test1.png" width="500" alt="Screenshot 1" /></td>
+            <td><img src="test2.png" width="500" alt="Screenshot 2" /></td>
+            <td><img src="test3.png" width="500" alt="Screenshot 3" /></td>
+        </tr>
+    </table>
+</p>
+
 
 ## 核心功能
 
