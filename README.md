@@ -13,8 +13,8 @@ Linbox-WinEmu（原 WinEmulator）是一款运行在 Android 设备上的 Linux 
 <p align="center">
     <table>
         <tr>
-            <td><img src="test1.png" width="800" height="520" alt="Screenshot 1" /></td>
-            <td><img src="test2.png" width="800" height="520" alt="Screenshot 2" /></td>
+            <td><img src="test1.png" width="800" height="620" alt="Screenshot 1" /></td>
+            <td><img src="test2.png" width="800" height="620" alt="Screenshot 2" /></td>
         </tr>
     </table>
 </p>
