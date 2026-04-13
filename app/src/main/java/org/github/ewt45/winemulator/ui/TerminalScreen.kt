@@ -176,10 +176,10 @@ fun TerminalStatusBar(
 }
 
 /**
- * 简化版状态栏（用于预览）
+ * 简化版状态栏（用于预览）- TerminalScreen专用
  */
 @Composable
-fun SimpleTerminalStatusBar(
+fun TerminalScreenStatusBar(
     currentUser: String = "root",
     currentHost: String = "localhost",
     currentPath: String = "~",
