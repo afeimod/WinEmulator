@@ -1,26 +1,57 @@
 package org.github.ewt45.winemulator.ui
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import org.github.ewt45.winemulator.Consts
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -80,11 +111,7 @@ fun ExpandableFloatingMenu(
         modifier = modifier.fillMaxSize()
     ) {
         // 点击外部区域收起菜单
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = fadeIn(animationSpec = tween(200)),
-            exit = fadeOut(animationSpec = tween(200))
-        ) {
+        if (isExpanded) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -98,22 +125,16 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单
+        // 展开的子菜单 - 使用简单的 AnimatedVisibility
         AnimatedVisibility(
             visible = isExpanded,
             modifier = Modifier
                 .offset { IntOffset(offsetX.roundToInt(), (offsetY - 260f).roundToInt()) },
-            enter = fadeIn(animationSpec = tween(200)) + expandVertically(
-                expandFrom = Alignment.Bottom,
-                animationSpec = tween(300, easing = FastOutSlowInEasing)
-            ) + slideInVertically(
+            enter = fadeIn(animationSpec = tween(200)) + slideInVertically(
                 initialOffsetY = { it },
                 animationSpec = tween(300, easing = FastOutSlowInEasing)
             ),
-            exit = fadeOut(animationSpec = tween(200)) + shrinkVertically(
-                shrinkTowards = Alignment.Bottom,
-                animationSpec = tween(200)
-            ) + slideOutVertically(
+            exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(
                 targetOffsetY = { it },
                 animationSpec = tween(200)
             ),
@@ -126,7 +147,7 @@ fun ExpandableFloatingMenu(
             ) {
                 // X11显示设置
                 FloatingMenuItem(
-                    icon = Icons.Filled.Monitor,
+                    icon = Icons.Filled.SwapVert,
                     label = "X11显示设置",
                     onClick = {
                         isExpanded = false
@@ -136,7 +157,7 @@ fun ExpandableFloatingMenu(
                 
                 // 虚拟按键设置
                 FloatingMenuItem(
-                    icon = Icons.Filled.Gamepad,
+                    icon = Icons.Filled.TouchApp,
                     label = "虚拟按键设置",
                     onClick = {
                         isExpanded = false
@@ -172,7 +193,6 @@ fun ExpandableFloatingMenu(
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                 .size(Consts.Ui.minimizedIconSize.dp)
                 .pointerInput(Unit) {
-                    // 处理拖动手势
                     detectDragGestures(
                         onDragStart = { offset ->
                             pressStartX = offset.x
@@ -201,7 +221,7 @@ fun ExpandableFloatingMenu(
                             // 计算总拖动距离
                             val totalDragX = change.position.x - pressStartX
                             val totalDragY = change.position.y - pressStartY
-                            val totalDistance = abs(totalDragX) + abs(totalDragY)
+                            val totalDistance = kotlin.math.abs(totalDragX) + kotlin.math.abs(totalDragY)
                             
                             // 只有超过阈值才认为是拖动
                             if (totalDistance > dragThreshold) {
@@ -285,103 +305,5 @@ private fun FloatingMenuItem(
                 tint = MaterialTheme.colorScheme.primary
             )
         }
-    }
-}
-
-/**
- * 使用 IconButton 处理点击的悬浮球版本（兼容旧版）
- */
-@Deprecated("请使用 ExpandableFloatingMenu")
-@Composable
-fun MiniButton2(
-    modifier: Modifier = Modifier,
-    parentWidth: Float,
-    parentHeight: Float,
-    onExpand: () -> Unit
-) {
-    val density = LocalDensity.current
-    val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
-    
-    // 拖动阈值
-    val dragThreshold = with(density) { 30.dp.toPx() }
-    
-    // 初始位置
-    val initialX = with(density) { 48.dp.toPx() }
-    val initialY = with(density) { 100.dp.toPx() }
-    
-    var offsetX by rememberSaveable { mutableStateOf(initialX) }
-    var offsetY by rememberSaveable { mutableStateOf(initialY) }
-    var hasDragged by rememberSaveable { mutableStateOf(false) }
-    var pressStartX by rememberSaveable { mutableFloatStateOf(0f) }
-    var pressStartY by rememberSaveable { mutableFloatStateOf(0f) }
-    
-    LaunchedEffect(parentWidth, parentHeight, buttonSizePx) {
-        if (parentWidth > 0 && parentHeight > 0) {
-            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-        }
-    }
-    
-    IconButton(
-        onClick = {
-            if (!hasDragged) {
-                onExpand()
-            }
-        },
-        modifier = Modifier
-            .size(Consts.Ui.minimizedIconSize.dp)
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        pressStartX = offset.x
-                        pressStartY = offset.y
-                        hasDragged = false
-                    },
-                    onDragEnd = {
-                        if (hasDragged) {
-                            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                            
-                            val halfWidth = buttonSizePx / 2
-                            val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
-                            offsetX = newX
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                        }
-                        hasDragged = false
-                    },
-                    onDragCancel = {
-                        hasDragged = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        val totalDragX = change.position.x - pressStartX
-                        val totalDragY = change.position.y - pressStartY
-                        val totalDistance = abs(totalDragX) + abs(totalDragY)
-                        
-                        if (totalDistance > dragThreshold) {
-                            hasDragged = true
-                        }
-                        
-                        if (hasDragged) {
-                            change.consume()
-                            offsetX = offsetX + dragAmount.x
-                            offsetY = offsetY + dragAmount.y
-                        }
-                    }
-                )
-            }
-    ) {
-        Icon(
-            painter = painterResource(a.io.github.ewt45.winemulator.R.drawable.ic_fullscreen),
-            contentDescription = "展开",
-            modifier = Modifier
-                .size(36.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = MaterialTheme.shapes.small
-                )
-                .padding(8.dp),
-            tint = MaterialTheme.colorScheme.onSurface,
-        )
     }
 }

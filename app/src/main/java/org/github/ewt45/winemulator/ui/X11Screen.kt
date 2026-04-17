@@ -1,45 +1,29 @@
 package org.github.ewt45.winemulator.ui
 
-import a.io.github.ewt45.winemulator.R
 import android.content.Context
 import android.util.Log
 import android.view.View
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.view.ViewGroup.MarginLayoutParams
 import android.widget.FrameLayout
-import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonColors
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.preference.PreferenceManager
 import com.termux.x11.input.InputStub
 import com.termux.x11.input.RenderData
-import kotlin.math.abs
-import kotlin.math.roundToInt
 import org.github.ewt45.winemulator.Consts
-import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
 import org.github.ewt45.winemulator.inputcontrols.InputControlsView
 import org.github.ewt45.winemulator.inputcontrols.X11InputSender
@@ -188,185 +172,6 @@ private fun findLorieView(view: View): com.termux.x11.LorieView? {
         }
     }
     return null
-}
-
-/** 
- * 悬浮球实现：
- * - 使用 IconButton 处理点击（onClick）
- * - 使用 pointerInput 处理拖动
- * 两者互不干扰
- */
-@Composable
-private fun MiniButton2(
-    modifier: Modifier = Modifier,
-    parentWidth: Float,
-    parentHeight: Float,
-    onExpand: () -> Unit
-) {
-    val density = LocalDensity.current
-    val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
-    
-    // 拖动阈值：超过这个距离才认为是拖动
-    val dragThreshold = with(density) { 30.dp.toPx() }
-    
-    // 初始位置（距离左上角 48dp，垂直方向 100dp）
-    val initialX = with(density) { 48.dp.toPx() }
-    val initialY = with(density) { 100.dp.toPx() }
-    
-    // 使用 rememberSaveable 持久化位置，避免重组时重置
-    var offsetX by rememberSaveable { mutableStateOf(initialX) }
-    var offsetY by rememberSaveable { mutableStateOf(initialY) }
-    
-    // 用于跟踪是否已经开始拖动
-    var hasDragged by rememberSaveable { mutableStateOf(false) }
-    // 用于存储按下的起始位置
-    var pressStartX by rememberSaveable { mutableFloatStateOf(0f) }
-    var pressStartY by rememberSaveable { mutableFloatStateOf(0f) }
-    
-    // 当父容器尺寸变化时，确保悬浮球仍在边界内
-    LaunchedEffect(parentWidth, parentHeight, buttonSizePx) {
-        if (parentWidth > 0 && parentHeight > 0) {
-            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-        }
-    }
-    
-    // 使用 IconButton 处理点击，它的 onClick 不会和 pointerInput 冲突
-    IconButton(
-        onClick = {
-            // 点击事件会在这里触发
-            // 只有在没有拖动的情况下才触发
-            if (!hasDragged) {
-                onExpand()
-            }
-        },
-        modifier = Modifier
-            .size(Consts.Ui.minimizedIconSize.dp)
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
-                // 处理拖动手势
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        pressStartX = offset.x
-                        pressStartY = offset.y
-                        hasDragged = false
-                    },
-                    onDragEnd = {
-                        if (hasDragged) {
-                            // 先将位置限制在边界内
-                            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                            
-                            // 吸附到最近边缘
-                            val halfWidth = buttonSizePx / 2
-                            val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
-                            offsetX = newX
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                        }
-                        // 重置拖动状态
-                        hasDragged = false
-                    },
-                    onDragCancel = {
-                        hasDragged = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        // 计算总拖动距离（使用 change.position 计算，因为 dragAmount 可能已经消费）
-                        val totalDragX = change.position.x - pressStartX
-                        val totalDragY = change.position.y - pressStartY
-                        val totalDistance = abs(totalDragX) + abs(totalDragY)
-                        
-                        // 只有超过阈值才认为是拖动
-                        if (totalDistance > dragThreshold) {
-                            hasDragged = true
-                        }
-                        
-                        // 如果在拖动模式中，更新位置
-                        if (hasDragged) {
-                            change.consume()
-                            
-                            // 使用 dragAmount 作为增量，这是 detectDragGestures 提供的正确增量
-                            // 直接加上 dragAmount，而不是再计算 delta
-                            offsetX = offsetX + dragAmount.x
-                            offsetY = offsetY + dragAmount.y
-                        }
-                    }
-                )
-            }
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_fullscreen),
-            contentDescription = "展开",
-            modifier = Modifier
-                .size(36.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = MaterialTheme.shapes.small
-                )
-                .padding(8.dp),
-            tint = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-@Deprecated("现在不需要操作View了")
-@Composable
-private fun MiniButton(
-    minimize: Boolean,
-    onClick: () -> Unit,
-) {
-    val activity = LocalActivity.current
-    val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
-    //最小化时颜色稍微变化一下吧，否则不容易看到
-    val colorSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val colorContent = MaterialTheme.colorScheme.onSurface
-    val colors =
-        if (!minimize) IconButtonDefaults.iconButtonColors()
-        else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
-    // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
-    val margin = remember { mutableListOf(0, 100) }
-    IconButton(
-        onClick = {
-            val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
-            val nextValue = !minimize
-            view.apply {
-                val lp = layoutParams as MarginLayoutParams
-                lp.height = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.width = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.leftMargin = if (nextValue) margin[0] else 0
-                lp.topMargin = if (nextValue) margin[1] else 0
-                lp.rightMargin = 0
-                lp.bottomMargin = 0
-                requestLayout()
-                if (nextValue)
-                    view.post { view.snapToNearestEdgeHalfway() }
-            }
-            onClick()
-        },
-        modifier = Modifier
-            .size(Consts.Ui.minimizedIconSize.dp)
-            .pointerInput(minimize) {
-                if (!minimize)
-                    return@pointerInput
-                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
-                detectDragGestures(
-                    onDragEnd = { view.snapToNearestEdgeHalfway() }
-                ) { change, dragAmount ->
-                    change.consume()
-                    val lp = view.layoutParams as MarginLayoutParams
-                    lp.leftMargin += dragAmount.x.toInt()
-                    lp.topMargin += dragAmount.y.toInt()
-                    margin[0] = lp.leftMargin
-                    margin[1] = lp.topMargin
-                    view.requestLayout()
-                }
-            },
-        colors = colors
-    ) {
-        Icon(
-            painter = painterResource(if (minimize) R.drawable.ic_fullscreen else R.drawable.ic_hide),
-            contentDescription = "全屏/最小化",
-        )
-    }
 }
 
 @Preview(widthDp = 300, heightDp = 500)
