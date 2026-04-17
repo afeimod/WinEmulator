@@ -7,24 +7,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,12 +34,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import org.github.ewt45.winemulator.Consts
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * 可展开的悬浮菜单按钮
- * 点击主按钮展开子菜单，子菜单以独立的悬浮小按钮形式显示在主按钮上方
+ * 点击主按钮展开子菜单，子菜单以半圆形排列显示在主按钮上方
  */
 @Composable
 fun ExpandableFloatingMenu(
@@ -99,13 +93,14 @@ fun ExpandableFloatingMenu(
         }
     }
     
-    // 菜单项之间的间距
-    val menuItemSpacing = with(density) { 12.dp.toPx() }
+    // 半圆形排列参数
+    val arcRadius = with(density) { 120.dp.toPx() } // 弧线半径
+    val arcSpreadAngle = 180f // 半圆跨越的角度
     
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // 点击外部区域收起菜单（但菜单本身可以点击）
+        // 点击外部区域收起菜单
         if (isExpanded) {
             Box(
                 modifier = Modifier
@@ -120,58 +115,54 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单 - 显示在主按钮上方
+        // 展开的子菜单 - 半圆形排列
         if (isExpanded) {
-            Column(
-                modifier = Modifier
-                    .offset { 
-                        IntOffset(
-                            offsetX.roundToInt() + (buttonSizePx / 2 - miniButtonSizePx / 2).roundToInt(), 
-                            (offsetY - buttonSizePx - menuItemSpacing * 4).roundToInt() 
-                        ) 
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(menuItemSpacing.dp)
-            ) {
-                // X11显示设置 - 最上面
-                MiniFloatingButton(
-                    icon = Icons.Default.Info,
-                    contentDescription = "X11显示设置",
-                    onClick = {
-                        isExpanded = false
-                        onX11SettingsClick()
-                    }
-                )
+            // 菜单项数据：图标、描述、点击回调
+            val menuItems = listOf(
+                Triple(Icons.Default.Home, "主菜单", onMainMenuClick),
+                Triple(Icons.Filled.Settings, "一般设置", onGeneralSettingsClick),
+                Triple(Icons.Default.Menu, "虚拟按键设置", onVirtualKeysClick),
+                Triple(Icons.Default.Info, "X11显示设置", onX11SettingsClick)
+            )
+            
+            // 计算半圆弧上的位置
+            val centerX = offsetX + buttonSizePx / 2 - miniButtonSizePx / 2
+            val centerY = offsetY - arcRadius
+            
+            menuItems.forEachIndexed { index, (icon, description, onClick) ->
+                // 计算在弧线上的角度
+                // 从左到右均匀分布
+                val angleRad = PI.toFloat() * (index.toFloat() / (menuItems.size - 1))
+                val angleDeg = 180f * (index.toFloat() / (menuItems.size - 1))
                 
-                // 虚拟按键设置
-                MiniFloatingButton(
-                    icon = Icons.Default.Menu,
-                    contentDescription = "虚拟按键设置",
-                    onClick = {
-                        isExpanded = false
-                        onVirtualKeysClick()
-                    }
-                )
+                // 计算位置
+                val x = centerX + arcRadius * cos(angleRad)
+                val y = centerY + arcRadius * sin(angleRad)
                 
-                // 一般设置
-                MiniFloatingButton(
-                    icon = Icons.Filled.Settings,
-                    contentDescription = "一般设置",
-                    onClick = {
-                        isExpanded = false
-                        onGeneralSettingsClick()
-                    }
-                )
-                
-                // 主菜单 - 最下面
-                MiniFloatingButton(
-                    icon = Icons.Filled.Home,
-                    contentDescription = "主菜单",
-                    onClick = {
-                        isExpanded = false
-                        onMainMenuClick()
-                    }
-                )
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                        .size(40.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = CircleShape
+                        )
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            isExpanded = false
+                            onClick()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = description,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
             }
         }
         
@@ -247,39 +238,5 @@ fun ExpandableFloatingMenu(
                 )
             }
         }
-    }
-}
-
-/**
- * 悬浮菜单中的小型悬浮按钮（圆形图标按钮）
- */
-@Composable
-private fun MiniFloatingButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(40.dp)
-            .background(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = CircleShape
-            )
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
     }
 }
