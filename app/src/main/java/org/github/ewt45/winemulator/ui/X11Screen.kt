@@ -152,10 +152,14 @@ fun X11Screen(
         BoxWithConstraints(
             Modifier.fillMaxSize()
         ) {
-            MiniButton2(
+            // 使用新的可展开悬浮菜单
+            ExpandableFloatingMenu(
                 parentWidth = constraints.maxWidth.toFloat(),
                 parentHeight = constraints.maxHeight.toFloat(),
-                onExpand = { onNavigateToOthers(Destination.ExceptX11) }
+                onMainMenuClick = { onNavigateToOthers(Destination.Terminal) },
+                onGeneralSettingsClick = { onNavigateToOthers(Destination.Settings) },
+                onVirtualKeysClick = { onNavigateToOthers(Destination.Settings) },
+                onX11SettingsClick = { onNavigateToOthers(Destination.Settings) }
             )
         }
     }
