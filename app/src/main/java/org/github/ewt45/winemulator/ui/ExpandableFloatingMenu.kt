@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import org.github.ewt45.winemulator.Consts
-import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -42,7 +41,7 @@ import kotlin.math.sin
 
 /**
  * 可展开的悬浮菜单按钮
- * 点击主按钮展开子菜单，子菜单以半圆形排列显示在主按钮上方
+ * 点击主按钮展开子菜单，子菜单以向上弯曲的弧形排列显示在主按钮上方
  */
 @Composable
 fun ExpandableFloatingMenu(
@@ -93,9 +92,12 @@ fun ExpandableFloatingMenu(
         }
     }
     
-    // 半圆形排列参数
-    val arcRadius = with(density) { 120.dp.toPx() } // 弧线半径
-    val arcSpreadAngle = 180f // 半圆跨越的角度
+    // 弧形排列参数
+    val arcRadius = with(density) { 80.dp.toPx() } // 弧线半径
+    val arcAngle = 90f // 弧线跨越的总角度（90度） 
+    
+    // 判断悬浮球在屏幕哪一侧（用于决定弧度方向）
+    val isOnLeftSide = offsetX < parentWidth / 2
     
     Box(
         modifier = modifier.fillMaxSize()
@@ -115,7 +117,7 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单 - 半圆形排列
+        // 展开的子菜单 - 向上弯曲的弧形排列
         if (isExpanded) {
             // 菜单项数据：图标、描述、点击回调
             val menuItems = listOf(
@@ -125,19 +127,30 @@ fun ExpandableFloatingMenu(
                 Triple(Icons.Default.Info, "X11显示设置", onX11SettingsClick)
             )
             
-            // 计算半圆弧上的位置
+            // 弧线的中心点（在主按钮上方）
             val centerX = offsetX + buttonSizePx / 2 - miniButtonSizePx / 2
             val centerY = offsetY - arcRadius
             
             menuItems.forEachIndexed { index, (icon, description, onClick) ->
                 // 计算在弧线上的角度
-                // 从左到右均匀分布
-                val angleRad = PI.toFloat() * (index.toFloat() / (menuItems.size - 1))
-                val angleDeg = 180f * (index.toFloat() / (menuItems.size - 1))
+                // 4个按钮，均匀分布在弧线上
+                // 如果在左侧，弧度向左弯；如果在右侧，弧度向右弯
+                val angleFraction = if (isOnLeftSide) {
+                    // 左侧：从右到左（弧度向左弯）
+                    1f - (index.toFloat() / (menuItems.size - 1))
+                } else {
+                    // 右侧：从左到右（弧度向右弯）
+                    index.toFloat() / (menuItems.size - 1)
+                }
                 
-                // 计算位置
-                val x = centerX + arcRadius * cos(angleRad)
-                val y = centerY + arcRadius * sin(angleRad)
+                // 角度从中间向两边分布：中间是0度，两边是±arcAngle/2
+                val angleDeg = arcAngle * (angleFraction - 0.5f)
+                val angleRad = Math.toRadians(angleDeg.toDouble()).toFloat()
+                
+                // 计算位置：向上弯曲的弧形
+                // cos决定左右偏移，sin决定上下偏移（sin为正时向上）
+                val x = centerX + arcRadius * sin(angleRad)
+                val y = centerY - arcRadius * (1 - cos(angleRad))
                 
                 Box(
                     modifier = Modifier
