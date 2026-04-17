@@ -113,7 +113,7 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单 - 弧形排列，弧度朝向屏幕边缘
+        // 展开的子菜单 - 弧形排列，弧度朝向屏幕中心
         if (isExpanded) {
             // 菜单项数据：图标、描述、点击回调
             val menuItems = listOf(
@@ -124,31 +124,31 @@ fun ExpandableFloatingMenu(
             )
             
             // 弧线参数
-            val arcRadius = with(density) { 80.dp.toPx() } // 弧线半径
-            val arcSpread = 60f // 弧线跨越的角度
+            val arcRadius = with(density) { 70.dp.toPx() } // 弧线半径
+            val arcSpread = 120f // 弧线跨越的角度
             
-            // 根据位置决定弧度方向
-            // 左侧时弧度向左，右侧时弧度向右
-            val bendDirection = if (isOnLeftSide) 1f else -1f
+            // 根据位置决定弧度方向 - 朝向屏幕中心
+            // 左侧时弧度向右（朝向中心），右侧时弧度向左（朝向中心）
+            val bendDirection = if (isOnLeftSide) -1f else 1f
             
             menuItems.forEachIndexed { index, (icon, description, onClick) ->
                 // 计算在弧线上的位置
                 // 从一端到另一端均匀分布
                 val fraction = index.toFloat() / (menuItems.size - 1)
                 
-                // 角度：中间为0度，向两边延伸
+                // 角度：中间为0度，向两边延伸（带方向，朝向中心）
                 val angleDeg = arcSpread * (fraction - 0.5f) * bendDirection
                 val angleRad = Math.toRadians(angleDeg.toDouble()).toFloat()
                 
                 // 位置计算
-                // 中心点在主按钮上方
+                // 中心点在主按钮位置
                 val centerX = offsetX + buttonSizePx / 2 - miniButtonSizePx / 2
-                val centerY = offsetY - arcRadius
+                val centerY = offsetY
                 
                 // 使用三角函数计算位置
-                // x: 左右偏移（朝向屏幕边缘方向）
-                // y: 上下偏移（向上弯曲）
-                val x = centerX + arcRadius * sin(angleRad) * bendDirection
+                // x: 左右偏移（朝向屏幕中心方向）
+                // y: 上下偏移（向上弯曲成弧形）
+                val x = centerX + arcRadius * sin(angleRad)
                 val y = centerY - arcRadius * (1 - cos(angleRad))
                 
                 Box(
