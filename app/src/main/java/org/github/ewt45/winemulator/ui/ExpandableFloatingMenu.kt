@@ -124,12 +124,12 @@ fun ExpandableFloatingMenu(
             )
             
             // 弧线参数
-            val arcRadius = with(density) { 70.dp.toPx() } // 弧线半径
-            val arcSpread = 120f // 弧线跨越的角度
+            val arcRadius = with(density) { 100.dp.toPx() } // 弧线半径
+            val arcSpread = 150f // 弧线跨越的角度
             
-            // 根据位置决定弧度方向 - 朝向屏幕中心
-            // 左侧时弧度向右（朝向中心），右侧时弧度向左（朝向中心）
-            val bendDirection = if (isOnLeftSide) -1f else 1f
+            // 根据位置决定弧度方向
+            // 左侧时弧度向右弯（⊃），右侧时弧度向左弯（⊂）
+            val bendDirection = if (isOnLeftSide) 1f else -1f
             
             menuItems.forEachIndexed { index, (icon, description, onClick) ->
                 // 计算在弧线上的位置
@@ -147,9 +147,9 @@ fun ExpandableFloatingMenu(
                 
                 // 使用三角函数计算位置
                 // x: 左右偏移（朝向屏幕中心方向）
-                // y: 上下偏移（向上弯曲成弧形）
+                // y: 上下偏移（向下弯曲成∩形弧形，中间低两边高）
                 val x = centerX + arcRadius * sin(angleRad)
-                val y = centerY - arcRadius * (1 - cos(angleRad))
+                val y = centerY + arcRadius * (1 + cos(angleRad))
                 
                 Box(
                     modifier = Modifier
