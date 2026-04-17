@@ -1,10 +1,5 @@
 package org.github.ewt45.winemulator.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -26,10 +21,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -125,21 +119,10 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单 - 使用简单的 AnimatedVisibility
-        AnimatedVisibility(
-            visible = isExpanded,
+        // 展开的子菜单
+        Box(
             modifier = Modifier
-                .offset { IntOffset(offsetX.roundToInt(), (offsetY - 260f).roundToInt()) },
-            enter = fadeIn(animationSpec = tween(200)) + slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = tween(300, easing = FastOutSlowInEasing)
-            ),
-            exit = fadeOut(animationSpec = tween(200)) + slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = tween(200)
-            ),
-            verticalAlignment = Alignment.Bottom,
-            horizontalAlignment = Alignment.End
+                .offset { IntOffset(offsetX.roundToInt(), (offsetY - 260f).roundToInt()) }
         ) {
             Column(
                 horizontalAlignment = Alignment.End,
@@ -147,7 +130,7 @@ fun ExpandableFloatingMenu(
             ) {
                 // X11显示设置
                 FloatingMenuItem(
-                    icon = Icons.Filled.SwapVert,
+                    icon = Icons.Filled.MoreVert,
                     label = "X11显示设置",
                     onClick = {
                         isExpanded = false
@@ -157,7 +140,7 @@ fun ExpandableFloatingMenu(
                 
                 // 虚拟按键设置
                 FloatingMenuItem(
-                    icon = Icons.Filled.TouchApp,
+                    icon = Icons.Filled.List,
                     label = "虚拟按键设置",
                     onClick = {
                         isExpanded = false
@@ -177,7 +160,7 @@ fun ExpandableFloatingMenu(
                 
                 // 主菜单
                 FloatingMenuItem(
-                    icon = Icons.Filled.Menu,
+                    icon = Icons.Filled.List,
                     label = "主菜单",
                     onClick = {
                         isExpanded = false
@@ -201,34 +184,27 @@ fun ExpandableFloatingMenu(
                         },
                         onDragEnd = {
                             if (hasDragged) {
-                                // 先将位置限制在边界内
                                 offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
                                 offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                                
-                                // 吸附到最近边缘
                                 val halfWidth = buttonSizePx / 2
                                 val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
                                 offsetX = newX
                                 offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
                             }
-                            // 重置拖动状态
                             hasDragged = false
                         },
                         onDragCancel = {
                             hasDragged = false
                         },
                         onDrag = { change, dragAmount ->
-                            // 计算总拖动距离
                             val totalDragX = change.position.x - pressStartX
                             val totalDragY = change.position.y - pressStartY
-                            val totalDistance = kotlin.math.abs(totalDragX) + kotlin.math.abs(totalDragY)
+                            val totalDistance = abs(totalDragX) + abs(totalDragY)
                             
-                            // 只有超过阈值才认为是拖动
                             if (totalDistance > dragThreshold) {
                                 hasDragged = true
                             }
                             
-                            // 如果在拖动模式中，更新位置
                             if (hasDragged) {
                                 change.consume()
                                 offsetX = offsetX + dragAmount.x
@@ -241,14 +217,12 @@ fun ExpandableFloatingMenu(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
                 ) {
-                    // 点击事件：只有在没有拖动的情况下才触发
                     if (!hasDragged) {
                         isExpanded = !isExpanded
                     }
                 },
             contentAlignment = Alignment.Center
         ) {
-            // 背景
             Box(
                 modifier = Modifier
                     .size(Consts.Ui.minimizedIconSize.dp)
