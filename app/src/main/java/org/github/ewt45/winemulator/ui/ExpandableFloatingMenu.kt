@@ -113,7 +113,7 @@ fun ExpandableFloatingMenu(
             )
         }
         
-        // 展开的子菜单 - 弧形排列，弧度朝向屏幕中心
+        // 展开的子菜单 - 横向弧形排列，按钮从左到右排列成弧形
         if (isExpanded) {
             // 菜单项数据：图标、描述、点击回调
             val menuItems = listOf(
@@ -123,33 +123,32 @@ fun ExpandableFloatingMenu(
                 Triple(Icons.Default.Info, "X11显示设置", onX11SettingsClick)
             )
             
-            // 弧线参数
-            val arcRadius = with(density) { 100.dp.toPx() } // 弧线半径
-            val arcSpread = 150f // 弧线跨越的角度
+            // 横向弧线参数
+            val arcRadius = with(density) { 80.dp.toPx() } // 弧线半径
+            val arcSpread = 180f // 弧线跨越的角度（半圆）
             
-            // 根据位置决定弧度方向
-            // 左侧时弧度向右弯（⊃），右侧时弧度向左弯（⊂）
-            val bendDirection = if (isOnLeftSide) 1f else -1f
+            // 根据悬浮窗位置决定弧度方向
+            // 右侧时显示左侧半圆弧（⊃），左侧时显示右侧半圆弧（⊂）
+            val bendDirection = if (isOnLeftSide) -1f else 1f
+            
+            // 中心点在主按钮位置
+            val centerX = offsetX + buttonSizePx / 2 - miniButtonSizePx / 2
+            val centerY = offsetY
             
             menuItems.forEachIndexed { index, (icon, description, onClick) ->
-                // 计算在弧线上的位置
-                // 从一端到另一端均匀分布
+                // 计算在弧线上的位置 - 横向排列
+                // 从左到右均匀分布
                 val fraction = index.toFloat() / (menuItems.size - 1)
                 
-                // 角度：中间为0度，向两边延伸（带方向，朝向中心）
+                // 角度：中间为0度，向两边延伸（带方向）
                 val angleDeg = arcSpread * (fraction - 0.5f) * bendDirection
                 val angleRad = Math.toRadians(angleDeg.toDouble()).toFloat()
                 
-                // 位置计算
-                // 中心点在主按钮位置
-                val centerX = offsetX + buttonSizePx / 2 - miniButtonSizePx / 2
-                val centerY = offsetY
-                
-                // 使用三角函数计算位置
-                // x: 左右偏移（朝向屏幕中心方向）
-                // y: 上下偏移（向下弯曲成∩形弧形，中间低两边高）
+                // 横向弧形位置计算
+                // x: 水平方向扩展
+                // y: 垂直方向形成弧度
                 val x = centerX + arcRadius * sin(angleRad)
-                val y = centerY + arcRadius * (1 + cos(angleRad))
+                val y = centerY - arcRadius * (1 - cos(angleRad))
                 
                 Box(
                     modifier = Modifier
