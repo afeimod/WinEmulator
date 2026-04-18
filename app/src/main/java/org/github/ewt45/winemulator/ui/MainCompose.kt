@@ -136,7 +136,7 @@ fun MainScreen(
                         navController.navigate(Destination.X11.route) { popUpTo(Destination.Prepare.route) { inclusive = true } }
                     }
                 }
-                composable<RouteX11> { X11Screen(tx11Content, navigateTo) }
+                composable<RouteX11> { X11Screen(tx11Content, navigateTo, settingVm = settingVm) }
                 navigation<RouteExceptX11>(startDestination = RouteTerminal) {
                     composable<RouteTerminal> { ProotTerminalScreen(terminalVm) }
 //                        composable<NavDest.Terminal> { TerminalScreen() }

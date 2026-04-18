@@ -1,165 +1,193 @@
 package org.github.ewt45.winemulator.ui
 
-import a.io.github.ewt45.winemulator.R
 import android.content.Context
 import android.util.Log
 import android.view.View
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.view.ViewGroup.MarginLayoutParams
 import android.widget.FrameLayout
-import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonColors
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.preference.PreferenceManager
 import com.termux.x11.input.InputStub
 import com.termux.x11.input.RenderData
-import kotlin.math.abs
-import kotlin.math.roundToInt
-import org.github.ewt45.winemulator.Consts
-import org.github.ewt45.winemulator.Utils.Ui.snapToNearestEdgeHalfway
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
 import org.github.ewt45.winemulator.inputcontrols.InputControlsView
 import org.github.ewt45.winemulator.inputcontrols.X11InputSender
 import org.github.ewt45.winemulator.inputcontrols.InputEventHandler
+import org.github.ewt45.winemulator.viewmodel.SettingViewModel
+import kotlinx.coroutines.delay
 
 /**
  * X11 Screen composable that displays X11 content with virtual controls overlay
- * 
- * This is the fixed version that properly routes input events from virtual controls
- * to the X11 session through the LorieView JNI bridge.
+ *
+ * This screen includes:
+ * - X11 rendering content from LorieView
+ * - Virtual controls overlay
+ * - Expandable floating menu with independent popup windows for:
+ *   - General settings (container language, shared folders, rootfs management)
+ *   - Virtual keys settings (enable/disable, profile selection, layout editing)
+ *   - X11 display settings (resolution, touch mode, orientation, scale)
+ *
+ * Input events from virtual controls are routed through the X11InputSender
+ * to the X11 session via the LorieView JNI bridge.
  */
 @Composable
 fun X11Screen(
     x11Content: (Context) -> View,
     onNavigateToOthers: (Destination) -> Unit,
-    // Add callback to get LorieView from the X11 content view
-    onLorieViewReady: ((InputStub) -> Unit)? = null
+    onLorieViewReady: ((InputStub) -> Unit)? = null,
+    settingVm: SettingViewModel? = null
 ) {
     val context = LocalContext.current
     val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-    // X11 Input Sender - 用于通过InputEventSender发送按键事件
+
     val x11InputSender = remember { X11InputSender() }
-    // RenderData for touch events
     val renderData = remember { RenderData() }
-    // 加载当前选中的虚拟按键配置 ID
-    val currentProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
     val manager = remember { InputControlsManager(context) }
-    val profile = remember(currentProfileId) {
-        if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
+
+    // 状态变量
+    var currentProfileId by remember { mutableStateOf(prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)) }
+    var showTouchscreenControls by remember { mutableStateOf(prefs.getBoolean("show_touchscreen_controls", false)) }
+
+    // 轮询监听 SharedPreferences 变化（后备同步机制）
+    LaunchedEffect(Unit) {
+        while (true) {
+            val newShowControls = prefs.getBoolean("show_touchscreen_controls", false)
+            val newProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+
+            if (newShowControls != showTouchscreenControls) {
+                Log.d("X11Screen", "showTouchscreenControls changed: $showTouchscreenControls -> $newShowControls")
+                showTouchscreenControls = newShowControls
+            }
+            if (newProfileId != currentProfileId) {
+                Log.d("X11Screen", "currentProfileId changed: $currentProfileId -> $newProfileId")
+                currentProfileId = newProfileId
+            }
+            delay(300)
+        }
     }
-    // Create InputEventHandler that uses X11InputSender
-    // InputEventHandler receives evdev keycodes from InputControlsView
+
+    // InputEventHandler 使用 X11InputSender
     val inputEventHandler = remember {
         object : InputEventHandler {
             override fun onKeyEvent(keycode: Int, isDown: Boolean) {
-                // keycode is evdev keycode from Binding class
-                // X11InputSender will convert it to Android keycode and send via InputEventSender
                 x11InputSender.sendEvdevKeyEvent(keycode, isDown)
             }
             override fun onPointerMove(dx: Int, dy: Int) {
-                // Send mouse motion event (relative movement)
                 x11InputSender.sendMouseMotionEvent(dx, dy)
             }
             override fun onPointerButton(button: Int, isDown: Boolean) {
-                // Send mouse button event
-                // button: 0=left, 1=right, 2=middle
                 x11InputSender.sendMouseButtonEvent(button, isDown)
             }
         }
     }
-    // Create InputControlsView with the event handler
+
+    // 只创建一次 InputControlsView，避免重建
     val inputControlsView = remember {
         InputControlsView(context, editMode = false).apply {
-            profile?.let { setProfile(it) }
             this.inputEventHandler = inputEventHandler
-            // 根据设置决定是否显示虚拟按键，默认关闭
-            showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
         }
     }
-    // 监听显示设置的改变
-    LaunchedEffect(prefs.getBoolean("show_touchscreen_controls", false)) {
-        inputControlsView.showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+
+    // 监听显示开关变化并实时更新视图
+    LaunchedEffect(showTouchscreenControls) {
+        inputControlsView.showTouchscreenControls = showTouchscreenControls
+        Log.d("X11Screen", "Updated showTouchscreenControls: $showTouchscreenControls")
     }
-    // Listen for profile changes
+
+    // 监听配置 ID 变化并实时更新视图
     LaunchedEffect(currentProfileId) {
         val newProfile = if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
         inputControlsView.setProfile(newProfile)
+        Log.d("X11Screen", "Updated profile to: ${newProfile?.name}")
     }
-    // Box with X11 content and virtual controls overlay
+
+    // 即时刷新函数（供悬浮弹窗回调使用）
+    val refreshControlsImmediately = {
+        val newShowControls = prefs.getBoolean("show_touchscreen_controls", false)
+        val newProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+
+        var needRefresh = false
+        if (newShowControls != showTouchscreenControls) {
+            showTouchscreenControls = newShowControls
+            needRefresh = true
+        }
+        if (newProfileId != currentProfileId) {
+            currentProfileId = newProfileId
+            needRefresh = true
+        }
+
+        // 如果状态没有变化，仍然强制刷新一次视图（保证一致性）
+        if (!needRefresh) {
+            inputControlsView.showTouchscreenControls = newShowControls
+            val newProfile = if (newProfileId != 0) manager.getProfile(newProfileId) else manager.getProfiles().firstOrNull()
+            inputControlsView.setProfile(newProfile)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
-        // X11 rendering content
+        // X11 渲染视图
         AndroidView(
             factory = { ctx ->
                 val view = x11Content(ctx)
-                // Try to get LorieView from the X11 content view
-                // The x11Content should return a LorieView or a view that contains it
                 try {
                     val lorieView = if (view is com.termux.x11.LorieView) {
                         view
                     } else {
-                        // Try to find LorieView in the view hierarchy
                         findLorieView(view)
                     }
-                    lorieView?.let { 
-                        // Initialize X11InputSender with the LorieView (which implements InputStub)
+                    lorieView?.let {
                         x11InputSender.initialize(it)
-                        // Setup render data for touch coordinate transformation
-                        renderData.scale = android.graphics.PointF(1f, 1f) // Default scale
+                        renderData.scale = android.graphics.PointF(1f, 1f)
                         x11InputSender.renderData = renderData
-                        // Notify that LorieView is ready
                         onLorieViewReady?.invoke(it)
                         Log.d("X11Screen", "X11InputSender initialized with LorieView")
                     } ?: run {
                         Log.e("X11Screen", "Could not find LorieView in X11 content")
                     }
                 } catch (e: Exception) {
-                    // If we can't get LorieView, log the error
                     Log.e("X11Screen", "Failed to initialize X11InputSender: ${e.message}", e)
                 }
                 view
             },
             modifier = Modifier.fillMaxSize()
         )
-        // Virtual controls overlay
+
+        // 虚拟按键覆盖层
         AndroidView(
             factory = { inputControlsView },
             modifier = Modifier.fillMaxSize()
         )
-        // 悬浮球：使用 BoxWithConstraints 获取父布局尺寸
-        BoxWithConstraints(
-            Modifier.fillMaxSize()
-        ) {
-            MiniButton2(
+
+        val floatingPopupState = remember { FloatingPopupState() }
+
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            ExpandableFloatingMenu(
                 parentWidth = constraints.maxWidth.toFloat(),
                 parentHeight = constraints.maxHeight.toFloat(),
-                onExpand = { onNavigateToOthers(Destination.ExceptX11) }
+                onMainMenuClick = { onNavigateToOthers(Destination.Terminal) },
+                onGeneralSettingsClick = { floatingPopupState.showPopup(FloatingPopupType.GENERAL_SETTINGS) },
+                onVirtualKeysClick = { floatingPopupState.showPopup(FloatingPopupType.VIRTUAL_KEYS_SETTINGS) },
+                onX11SettingsClick = { floatingPopupState.showPopup(FloatingPopupType.X11_SETTINGS) }
+            )
+        }
+
+        settingVm?.let { vm ->
+            FloatingSettingsPopups(
+                popupState = floatingPopupState,
+                settingVm = vm,
+                onVirtualKeysSettingsChanged = refreshControlsImmediately
             )
         }
     }
-    // Cleanup on dispose
+
     DisposableEffect(Unit) {
         onDispose {
             x11InputSender.release()
@@ -186,190 +214,12 @@ private fun findLorieView(view: View): com.termux.x11.LorieView? {
     return null
 }
 
-/** 
- * 悬浮球实现：
- * - 使用 IconButton 处理点击（onClick）
- * - 使用 pointerInput 处理拖动
- * 两者互不干扰
- */
-@Composable
-private fun MiniButton2(
-    modifier: Modifier = Modifier,
-    parentWidth: Float,
-    parentHeight: Float,
-    onExpand: () -> Unit
-) {
-    val density = LocalDensity.current
-    val buttonSizePx = with(density) { Consts.Ui.minimizedIconSize.dp.toPx() }
-    
-    // 拖动阈值：超过这个距离才认为是拖动
-    val dragThreshold = with(density) { 30.dp.toPx() }
-    
-    // 初始位置（距离左上角 48dp，垂直方向 100dp）
-    val initialX = with(density) { 48.dp.toPx() }
-    val initialY = with(density) { 100.dp.toPx() }
-    
-    // 使用 rememberSaveable 持久化位置，避免重组时重置
-    var offsetX by rememberSaveable { mutableStateOf(initialX) }
-    var offsetY by rememberSaveable { mutableStateOf(initialY) }
-    
-    // 用于跟踪是否已经开始拖动
-    var hasDragged by rememberSaveable { mutableStateOf(false) }
-    // 用于存储按下的起始位置
-    var pressStartX by rememberSaveable { mutableFloatStateOf(0f) }
-    var pressStartY by rememberSaveable { mutableFloatStateOf(0f) }
-    
-    // 当父容器尺寸变化时，确保悬浮球仍在边界内
-    LaunchedEffect(parentWidth, parentHeight, buttonSizePx) {
-        if (parentWidth > 0 && parentHeight > 0) {
-            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-        }
-    }
-    
-    // 使用 IconButton 处理点击，它的 onClick 不会和 pointerInput 冲突
-    IconButton(
-        onClick = {
-            // 点击事件会在这里触发
-            // 只有在没有拖动的情况下才触发
-            if (!hasDragged) {
-                onExpand()
-            }
-        },
-        modifier = Modifier
-            .size(Consts.Ui.minimizedIconSize.dp)
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
-                // 处理拖动手势
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        pressStartX = offset.x
-                        pressStartY = offset.y
-                        hasDragged = false
-                    },
-                    onDragEnd = {
-                        if (hasDragged) {
-                            // 先将位置限制在边界内
-                            offsetX = offsetX.coerceIn(0f, parentWidth - buttonSizePx)
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                            
-                            // 吸附到最近边缘
-                            val halfWidth = buttonSizePx / 2
-                            val newX = if (offsetX + halfWidth < parentWidth / 2) 0f else parentWidth - buttonSizePx
-                            offsetX = newX
-                            offsetY = offsetY.coerceIn(0f, parentHeight - buttonSizePx)
-                        }
-                        // 重置拖动状态
-                        hasDragged = false
-                    },
-                    onDragCancel = {
-                        hasDragged = false
-                    },
-                    onDrag = { change, dragAmount ->
-                        // 计算总拖动距离（使用 change.position 计算，因为 dragAmount 可能已经消费）
-                        val totalDragX = change.position.x - pressStartX
-                        val totalDragY = change.position.y - pressStartY
-                        val totalDistance = abs(totalDragX) + abs(totalDragY)
-                        
-                        // 只有超过阈值才认为是拖动
-                        if (totalDistance > dragThreshold) {
-                            hasDragged = true
-                        }
-                        
-                        // 如果在拖动模式中，更新位置
-                        if (hasDragged) {
-                            change.consume()
-                            
-                            // 使用 dragAmount 作为增量，这是 detectDragGestures 提供的正确增量
-                            // 直接加上 dragAmount，而不是再计算 delta
-                            offsetX = offsetX + dragAmount.x
-                            offsetY = offsetY + dragAmount.y
-                        }
-                    }
-                )
-            }
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_fullscreen),
-            contentDescription = "展开",
-            modifier = Modifier
-                .size(36.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = MaterialTheme.shapes.small
-                )
-                .padding(8.dp),
-            tint = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-}
-
-@Deprecated("现在不需要操作View了")
-@Composable
-private fun MiniButton(
-    minimize: Boolean,
-    onClick: () -> Unit,
-) {
-    val activity = LocalActivity.current
-    val miniIconPx = (Consts.Ui.minimizedIconSize * LocalDensity.current.density).toInt()
-    //最小化时颜色稍微变化一下吧，否则不容易看到
-    val colorSurface = MaterialTheme.colorScheme.surfaceContainerHigh
-    val colorContent = MaterialTheme.colorScheme.onSurface
-    val colors =
-        if (!minimize) IconButtonDefaults.iconButtonColors()
-        else IconButtonColors(colorSurface, colorContent, colorSurface, colorContent)
-    // 记住最小化时的位置。全屏后再次最小化时恢复到上一次位置而非默认位置
-    val margin = remember { mutableListOf(0, 100) }
-    IconButton(
-        onClick = {
-            val view = activity?.findViewById<View>(R.id.compose_view) ?: return@IconButton
-            val nextValue = !minimize
-            view.apply {
-                val lp = layoutParams as MarginLayoutParams
-                lp.height = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.width = if (nextValue) miniIconPx else MATCH_PARENT
-                lp.leftMargin = if (nextValue) margin[0] else 0
-                lp.topMargin = if (nextValue) margin[1] else 0
-                lp.rightMargin = 0
-                lp.bottomMargin = 0
-                requestLayout()
-                if (nextValue)
-                    view.post { view.snapToNearestEdgeHalfway() }
-            }
-            onClick()
-        },
-        modifier = Modifier
-            .size(Consts.Ui.minimizedIconSize.dp)
-            .pointerInput(minimize) {
-                if (!minimize)
-                    return@pointerInput
-                val view = activity?.findViewById<View>(R.id.compose_view) ?: return@pointerInput
-                detectDragGestures(
-                    onDragEnd = { view.snapToNearestEdgeHalfway() }
-                ) { change, dragAmount ->
-                    change.consume()
-                    val lp = view.layoutParams as MarginLayoutParams
-                    lp.leftMargin += dragAmount.x.toInt()
-                    lp.topMargin += dragAmount.y.toInt()
-                    margin[0] = lp.leftMargin
-                    margin[1] = lp.topMargin
-                    view.requestLayout()
-                }
-            },
-        colors = colors
-    ) {
-        Icon(
-            painter = painterResource(if (minimize) R.drawable.ic_fullscreen else R.drawable.ic_hide),
-            contentDescription = "全屏/最小化",
-        )
-    }
-}
-
 @Preview(widthDp = 300, heightDp = 500)
 @Composable
 fun X11ScreenPreview() {
     X11Screen(
         x11Content = { ctx -> FrameLayout(ctx).apply { setBackgroundColor(android.graphics.Color.GRAY) } },
-        {}
+        {},
+        settingVm = null
     )
 }
