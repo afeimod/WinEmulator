@@ -63,6 +63,9 @@ fun X11Screen(
     // 用于监听show_touchscreen_controls的变化
     var showTouchscreenControls by remember { mutableStateOf(prefs.getBoolean("show_touchscreen_controls", false)) }
 
+    // 创建一个复合key用于强制重组InputControlsView
+    var viewKey by remember { mutableStateOf(0L) }
+
     // 使用轮询方式监听SharedPreferences变化（比监听器更可靠）
     LaunchedEffect(Unit) {
         while (true) {
@@ -70,13 +73,11 @@ fun X11Screen(
             val newProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
             
             // 只有值真正变化时才更新
-            if (newShowControls != showTouchscreenControls) {
-                Log.d("X11Screen", "showTouchscreenControls changed: $showTouchscreenControls -> $newShowControls")
+            if (newShowControls != showTouchscreenControls || newProfileId != currentProfileId) {
+                Log.d("X11Screen", "Settings changed: showControls=$newShowControls, profileId=$newProfileId")
                 showTouchscreenControls = newShowControls
-            }
-            if (newProfileId != currentProfileId) {
-                Log.d("X11Screen", "currentProfileId changed: $currentProfileId -> $newProfileId")
                 currentProfileId = newProfileId
+                viewKey++ // 递增key强制重组
             }
             
             delay(300) // 每300ms检查一次
@@ -103,22 +104,16 @@ fun X11Screen(
         }
     }
     // Create InputControlsView with the event handler
-    val inputControlsView = remember(showTouchscreenControls, currentProfileId) {
+    // 使用viewKey作为key确保状态变化时强制重组
+    val inputControlsView = remember(viewKey) {
+        Log.d("X11Screen", "Creating InputControlsView with showControls=$showTouchscreenControls, profileId=$currentProfileId")
         InputControlsView(context, editMode = false).apply {
-            profile?.let { setProfile(it) }
+            val profileToSet = if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
+            profileToSet?.let { setProfile(it) }
             this.inputEventHandler = inputEventHandler
-            // 根据设置决定是否显示虚拟按键，默认关闭
+            // 根据设置决定是否显示虚拟按键
             showTouchscreenControls = showTouchscreenControls
         }
-    }
-    // 监听显示设置的改变
-    LaunchedEffect(showTouchscreenControls) {
-        inputControlsView.showTouchscreenControls = showTouchscreenControls
-    }
-    // Listen for profile changes
-    LaunchedEffect(currentProfileId) {
-        val newProfile = if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
-        inputControlsView.setProfile(newProfile)
     }
     // Box with X11 content and virtual controls overlay
     Box(Modifier.fillMaxSize()) {
