@@ -1,22 +1,13 @@
 package org.github.ewt45.winemulator.ui
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -26,12 +17,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.preference.PreferenceManager
 import com.termux.x11.input.InputStub
 import com.termux.x11.input.RenderData
-import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.inputcontrols.InputControlsManager
 import org.github.ewt45.winemulator.inputcontrols.InputControlsView
 import org.github.ewt45.winemulator.inputcontrols.X11InputSender
 import org.github.ewt45.winemulator.inputcontrols.InputEventHandler
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
+import kotlinx.coroutines.delay
 
 /**
  * X11 Screen composable that displays X11 content with virtual controls overlay
@@ -72,21 +63,23 @@ fun X11Screen(
     // 用于监听show_touchscreen_controls的变化
     var showTouchscreenControls by remember { mutableStateOf(prefs.getBoolean("show_touchscreen_controls", false)) }
 
-    // 添加SharedPreferences监听器以响应悬浮弹窗中的设置变化
-    DisposableEffect(prefs) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            when (key) {
-                "show_touchscreen_controls" -> {
-                    showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
-                }
-                InputControlsFragment.SELECTED_PROFILE_ID -> {
-                    currentProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
-                }
+    // 使用轮询方式监听SharedPreferences变化（比监听器更可靠）
+    LaunchedEffect(Unit) {
+        while (true) {
+            val newShowControls = prefs.getBoolean("show_touchscreen_controls", false)
+            val newProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+            
+            // 只有值真正变化时才更新
+            if (newShowControls != showTouchscreenControls) {
+                Log.d("X11Screen", "showTouchscreenControls changed: $showTouchscreenControls -> $newShowControls")
+                showTouchscreenControls = newShowControls
             }
-        }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            if (newProfileId != currentProfileId) {
+                Log.d("X11Screen", "currentProfileId changed: $currentProfileId -> $newProfileId")
+                currentProfileId = newProfileId
+            }
+            
+            delay(300) // 每300ms检查一次
         }
     }
     // Create InputEventHandler that uses X11InputSender
