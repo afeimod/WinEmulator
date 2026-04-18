@@ -103,8 +103,8 @@ fun ExpandableFloatingMenu(
                 Triple(Icons.Default.Info, "X11显示设置", onX11SettingsClick)
             )
 
-            val arcRadius = with(density) { 50.dp.toPx() }
-            val arcSpread = 100f
+            val arcRadius = with(density) { 60.dp.toPx() }
+            val arcSpread = 120f
 
             val mainCenterX = offsetX + buttonSizePx / 2
             val mainCenterY = offsetY + buttonSizePx / 2
