@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.ui
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
@@ -13,7 +14,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -65,6 +68,22 @@ fun X11Screen(
     val profile = remember(currentProfileId) {
         if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
     }
+
+    // 用于监听show_touchscreen_controls的变化
+    var showTouchscreenControls by remember { mutableStateOf(prefs.getBoolean("show_touchscreen_controls", false)) }
+
+    // 添加SharedPreferences监听器以响应悬浮弹窗中的设置变化
+    DisposableEffect(prefs) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "show_touchscreen_controls") {
+                showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
     // Create InputEventHandler that uses X11InputSender
     // InputEventHandler receives evdev keycodes from InputControlsView
     val inputEventHandler = remember {
@@ -86,17 +105,17 @@ fun X11Screen(
         }
     }
     // Create InputControlsView with the event handler
-    val inputControlsView = remember {
+    val inputControlsView = remember(showTouchscreenControls, currentProfileId) {
         InputControlsView(context, editMode = false).apply {
             profile?.let { setProfile(it) }
             this.inputEventHandler = inputEventHandler
             // 根据设置决定是否显示虚拟按键，默认关闭
-            showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+            showTouchscreenControls = showTouchscreenControls
         }
     }
     // 监听显示设置的改变
-    LaunchedEffect(prefs.getBoolean("show_touchscreen_controls", false)) {
-        inputControlsView.showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+    LaunchedEffect(showTouchscreenControls) {
+        inputControlsView.showTouchscreenControls = showTouchscreenControls
     }
     // Listen for profile changes
     LaunchedEffect(currentProfileId) {
