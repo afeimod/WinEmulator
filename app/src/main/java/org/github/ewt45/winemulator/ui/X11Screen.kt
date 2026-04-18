@@ -62,8 +62,8 @@ fun X11Screen(
     val x11InputSender = remember { X11InputSender() }
     // RenderData for touch events
     val renderData = remember { RenderData() }
-    // 加载当前选中的虚拟按键配置 ID
-    val currentProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+    // 加载当前选中的虚拟按键配置 ID - 改为响应式状态变量
+    var currentProfileId by remember { mutableStateOf(prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)) }
     val manager = remember { InputControlsManager(context) }
     val profile = remember(currentProfileId) {
         if (currentProfileId != 0) manager.getProfile(currentProfileId) else manager.getProfiles().firstOrNull()
@@ -75,8 +75,13 @@ fun X11Screen(
     // 添加SharedPreferences监听器以响应悬浮弹窗中的设置变化
     DisposableEffect(prefs) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "show_touchscreen_controls") {
-                showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+            when (key) {
+                "show_touchscreen_controls" -> {
+                    showTouchscreenControls = prefs.getBoolean("show_touchscreen_controls", false)
+                }
+                InputControlsFragment.SELECTED_PROFILE_ID -> {
+                    currentProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+                }
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
