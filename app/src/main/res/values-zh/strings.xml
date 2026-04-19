@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Win模拟器</string>
+    <string name="app_name">Linbox-WinEmu</string>
 
     <!-- Input Controls -->
     <string name="input_controls">输入控制</string>
