@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -54,6 +55,7 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(TerminalBackground)
+            .imePadding()
     ) {
         // 顶部状态栏 - 简洁设计
         TerminalHeaderBar(
