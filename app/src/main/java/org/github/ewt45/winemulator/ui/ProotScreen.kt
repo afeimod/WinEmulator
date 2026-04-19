@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +26,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -35,20 +38,39 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import org.github.ewt45.winemulator.ui.theme.*
 import org.github.ewt45.winemulator.viewmodel.TerminalViewModel
 
 /**
  * PRoot终端界面 - 极简全屏终端设计
- * 深色主题 + 内置输入框 + 系统输入法
+ * 深色主题 + 内置输入框 + 系统输入法 + 输入法上移动画
  */
 @Composable
 fun ProotTerminalScreen(viewModel: TerminalViewModel) {
     var inputValue by remember { mutableStateOf(TextFieldValue("")) }
     val focusRequester = remember { FocusRequester() }
     var isInputFocused by remember { mutableStateOf(false) }
+    
+    // 使用键盘可见性状态
+    val keyboardVisibleState = rememberKeyboardVisibility()
+    var isKeyboardVisible by remember { mutableStateOf(false) }
+    
+    // 监听键盘可见性状态变化
+    LaunchedEffect(keyboardVisibleState.value) {
+        isKeyboardVisible = keyboardVisibleState.value
+    }
+    
+    // 键盘打开时的上移动画
+    val keyboardPadding by animateDpAsState(
+        targetValue = if (isKeyboardVisible) 48.dp else 0.dp,
+        animationSpec = tween(durationMillis = 250),
+        label = "keyboardPadding"
+    )
     
     Column(
         modifier = Modifier
@@ -100,18 +122,26 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
         }
         
         // 内置命令输入行 - 直接集成在终端底部
-        IntegratedCommandInput(
-            value = inputValue,
-            onValueChange = { inputValue = it },
-            onSendCommand = {
-                if (inputValue.text.isNotBlank()) {
-                    viewModel.runCommand(inputValue.text)
-                    inputValue = TextFieldValue("")
-                }
-            },
-            focusRequester = focusRequester,
-            onFocusChanged = { isInputFocused = it }
-        )
+        // 添加键盘上移动画效果
+        Box(
+            modifier = Modifier
+                .offset(y = -keyboardPadding)
+                .imePadding() // 确保输入法打开时不被遮挡
+        ) {
+            IntegratedCommandInput(
+                value = inputValue,
+                onValueChange = { inputValue = it },
+                onSendCommand = {
+                    if (inputValue.text.isNotBlank()) {
+                        viewModel.runCommand(inputValue.text)
+                        inputValue = TextFieldValue("")
+                    }
+                },
+                focusRequester = focusRequester,
+                onFocusChanged = { isInputFocused = it },
+                isKeyboardVisible = isKeyboardVisible
+            )
+        }
     }
 }
 
@@ -184,6 +214,7 @@ fun ConnectionIndicator(isConnected: Boolean) {
 /**
  * 内置命令输入行 - 直接集成在终端底部
  * 点击后使用系统输入法
+ * 当输入法打开时添加视觉上移效果
  */
 @Composable
 fun IntegratedCommandInput(
@@ -191,15 +222,23 @@ fun IntegratedCommandInput(
     onValueChange: (TextFieldValue) -> Unit,
     onSendCommand: () -> Unit,
     focusRequester: FocusRequester,
-    onFocusChanged: (Boolean) -> Unit
+    onFocusChanged: (Boolean) -> Unit,
+    isKeyboardVisible: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     
+    // 键盘打开时增加输入区域的背景对比度
+    val inputBackgroundColor by animateColorAsState(
+        targetValue = if (isKeyboardVisible) TerminalSurface else TerminalSurfaceVariant,
+        animationSpec = tween(durationMillis = 250),
+        label = "inputBackground"
+    )
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(TerminalSurfaceVariant)
+            .background(inputBackgroundColor)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -420,7 +459,64 @@ fun ProotTerminalScreenPreview() {
                 }
             },
             focusRequester = focusRequester,
-            onFocusChanged = { }
+            onFocusChanged = { },
+            isKeyboardVisible = false
         )
+    }
+}
+
+/**
+ * 键盘可见性状态类
+ * 用于监听输入法键盘的显示/隐藏状态
+ */
+class KeyboardVisibilityState {
+    var isKeyboardVisible by mutableStateOf(false)
+        private set
+    
+    var keyboardHeight by mutableStateOf(0.dp)
+        private set
+    
+    fun updateState(isVisible: Boolean, heightDp: Dp) {
+        isKeyboardVisible = isVisible
+        keyboardHeight = heightDp
+    }
+}
+
+/**
+ * 组合函数：监听键盘可见性变化
+ * 使用 WindowInsets 精确检测键盘高度
+ * 返回键盘可见性状态
+ */
+@Composable
+fun rememberKeyboardVisibility(): State<Boolean> {
+    val keyboardState = remember { KeyboardVisibilityState() }
+    val view = LocalView.current
+    
+    DisposableEffect(Unit) {
+        val listener = ViewCompat.OnApplyWindowInsetsListener { _, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            
+            // 计算实际的键盘高度（减去导航栏高度）
+            val keyboardHeightPx = imeInsets.bottom - navInsets.bottom
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val keyboardHeightDp = with(density) { keyboardHeightPx.toDp() }
+            
+            // 键盘可见且高度大于阈值（100px）
+            val isVisible = imeInsets.bottom > 0 && keyboardHeightPx > 100
+            
+            keyboardState.updateState(isVisible, maxOf(keyboardHeightDp, 0.dp))
+            insets
+        }
+        
+        ViewCompat.setOnApplyWindowInsetsListener(view, listener)
+        
+        onDispose {
+            ViewCompat.setOnApplyWindowInsetsListener(view, null)
+        }
+    }
+    
+    return remember {
+        derivedStateOf { keyboardState.isKeyboardVisible }
     }
 }
