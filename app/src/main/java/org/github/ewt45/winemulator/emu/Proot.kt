@@ -51,7 +51,6 @@ class Proot {
             Consts.prootBin.absolutePath,
 //            "--root-id", // root用户登录
             *proot_bool_options.get().toTypedArray(), // proot的一般参数。用户可能会修改。 默认 "-L","--link2symlink","--kill-on-exit","--sysvipc",
-            "--sysvipc=legacy", // 使用旧版System V IPC支持
             "--no-aslr", // 禁用地址空间布局随机化
             "--avoid-syscalls=getpid,gettimeofday,clock_gettime,getuid,getgid,geteuid,getegid", // 避免特定系统调用
             "--kernel-release=$DEFAULT_FAKE_KERNEL_VERSION",
