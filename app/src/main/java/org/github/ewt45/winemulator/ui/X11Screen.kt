@@ -124,12 +124,12 @@ fun X11Screen(
             needRefresh = true
         }
 
-        // 如果状态没有变化，仍然强制刷新一次视图（保证一致性）
-        if (!needRefresh) {
-            inputControlsView.showTouchscreenControls = newShowControls
-            val newProfile = if (newProfileId != 0) manager.getProfile(newProfileId) else manager.getProfiles().firstOrNull()
-            inputControlsView.setProfile(newProfile)
-        }
+        // 无论状态是否变化，都立即刷新 InputControlsView
+        // 这样可以确保新建配置后立即生效
+        inputControlsView.showTouchscreenControls = newShowControls
+        val newProfile = if (newProfileId != 0) manager.getProfile(newProfileId) else manager.getProfiles().firstOrNull()
+        inputControlsView.setProfile(newProfile)
+        Log.d("X11Screen", "refreshControlsImmediately: show=$newShowControls, profile=${newProfile?.name}")
     }
 
     Box(Modifier.fillMaxSize()) {
