@@ -61,7 +61,7 @@ class RangeScroller(
     fun getRangeIndex(): IntArray {
         val range = element.range ?: Range.FROM_A_TO_Z
         val elementSize = getElementSize()
-        val rangeMax = range.max
+        val rangeMax = range.max.toInt()
 
         // 基于 scrollOffset 计算起始索引（确保负数也能正确处理）
         var from = (scrollOffset / elementSize).toInt()

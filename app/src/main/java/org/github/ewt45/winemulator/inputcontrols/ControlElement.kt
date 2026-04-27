@@ -415,7 +415,6 @@ class ControlElement(
             // Horizontal
             val lineTop = box.top + strokeWidth * 0.5f
             val lineBottom = box.bottom - strokeWidth * 0.5f
-            var startX = box.left.toFloat()
 
             canvas.drawRoundRect(
                 box.left.toFloat(), box.top.toFloat(),
@@ -497,7 +496,6 @@ class ControlElement(
             // Vertical
             val lineLeft = box.left + strokeWidth * 0.5f
             val lineRight = box.right - strokeWidth * 0.5f
-            var startY = box.top.toFloat()
 
             canvas.drawRoundRect(
                 box.left.toFloat(), box.top.toFloat(),
