@@ -142,13 +142,15 @@ class RangeScroller(
     }
 
     fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
+        // 每次触摸都重置偏移量，从触摸位置重新开始
+        scrollOffset = 0f
+        currentOffset = 0f
         isScrolling = false
         isActionDown = true
-        currentBinding = getBindingByPosition(x, y)  // 记录当前选中的按键
+        currentBinding = getBindingByPosition(x, y)  // 根据触摸位置获取当前按键
         binding = currentBinding
         touchTime = System.currentTimeMillis()
         lastPosition = if (element.orientation.toInt() == 0) x else y
-        currentOffset = 0f
         element.setBinding(Binding.NONE)
     }
 
@@ -198,20 +200,21 @@ class RangeScroller(
 
     fun handleTouchUp() {
         if (isActionDown) {
-            // 释放当前按下的按键
-            if (currentBinding != Binding.NONE) {
-                inputControlsView.handleInputEvent(currentBinding, false)
-            }
-
             if (isTap() && !isScrolling) {
-                // 点击：发送按下和释放事件（仅用于点击反馈）
-                val finalBinding = binding
-                inputControlsView.handleInputEvent(finalBinding, true)
-                inputControlsView.postDelayed({
-                    inputControlsView.handleInputEvent(finalBinding, false)
-                }, 30)
+                // 点击：发送按下和释放事件（使用 currentBinding，因为它是根据触摸位置计算的）
+                val finalBinding = currentBinding
+                if (finalBinding != Binding.NONE) {
+                    inputControlsView.handleInputEvent(finalBinding, true)
+                    inputControlsView.postDelayed({
+                        inputControlsView.handleInputEvent(finalBinding, false)
+                    }, 30)
+                }
+            } else {
+                // 滚动模式：释放当前按下的按键
+                if (currentBinding != Binding.NONE) {
+                    inputControlsView.handleInputEvent(currentBinding, false)
+                }
             }
-            // 滚动模式：按键已在滑动过程中发送，这里只需要确保释放
         }
         isActionDown = false
     }
