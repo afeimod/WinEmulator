@@ -4,6 +4,7 @@ import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 
 /**
  * Handles scrolling for range button elements
+ * 修复版：改进滚动逻辑，支持正确的拖拽滚动
  */
 class RangeScroller(
     private val inputControlsView: InputControlsView,
@@ -16,17 +17,29 @@ class RangeScroller(
     private var isDragging = false
     private var lastActivatedIndex: Int = -1
 
+    // 记录开始拖拽时的初始位置，避免累积误差
+    private var dragStartOffset: Float = 0f
+    private var dragStartX: Float = 0f
+    private var dragStartY: Float = 0f
+
     fun getElementSize(): Float {
         return inputControlsView.snappingSize * 4f * element.scale
     }
 
     fun getScrollOffset(): Float = scrollOffset
 
+    fun setScrollOffset(offset: Float) {
+        scrollOffset = offset
+    }
+
     fun getRangeIndex(): IntArray = rangeIndex
 
     fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
         lastTouchX = x
         lastTouchY = y
+        dragStartX = x
+        dragStartY = y
+        dragStartOffset = scrollOffset
         isDragging = true
         lastActivatedIndex = -1
         updateRangeIndex(element, x, y)
@@ -41,11 +54,18 @@ class RangeScroller(
             y - lastTouchY
         }
 
+        // 累加滚动偏移量
         scrollOffset -= delta
         lastTouchX = x
         lastTouchY = y
 
-        updateRangeIndex(element, x, y)
+        // 根据当前滚动位置计算可见范围
+        updateVisibleRange(element)
+        
+        // 触发当前索引对应的按键
+        val currentCenter = calculateCenterIndex(element)
+        triggerBindingForIndex(element, currentCenter)
+        
         inputControlsView.invalidate()
     }
 
@@ -153,29 +173,65 @@ class RangeScroller(
         }
     }
 
-    private fun updateRangeIndex(element: ControlElement, x: Float, y: Float) {
+    /**
+     * 根据触摸位置计算当前的中心索引
+     */
+    private fun calculateCenterIndex(element: ControlElement): Int {
         val range = element.range ?: Range.FROM_A_TO_Z
         val elementSize = getElementSize()
         val box = element.getBoundingBox()
-
+        
+        // 计算触摸点在元素内的相对位置（0到1之间）
         val position: Float = if (element.orientation == 0.toByte()) {
-            (x - box.left + scrollOffset) / elementSize
+            // 水平方向
+            val relativeX = (lastTouchX - box.left + scrollOffset) / (box.width())
+            relativeX.coerceIn(0f, 1f)
         } else {
-            (y - box.top + scrollOffset) / elementSize
+            // 垂直方向
+            val relativeY = (lastTouchY - box.top + scrollOffset) / (box.height())
+            relativeY.coerceIn(0f, 1f)
         }
+        
+        // 根据相对位置计算索引
+        val maxIndex = range.max.toInt() - 1
+        return (position * maxIndex).toInt().coerceIn(0, maxIndex)
+    }
 
-        // Calculate visible range (show about 4-5 items)
-        val visibleCount = 5
-        val centerIndex = position.toInt().coerceIn(0, (range.max - 1).toInt())
-        val startIndex = (centerIndex - visibleCount / 2).coerceAtLeast(0)
+    /**
+     * 更新可见范围
+     */
+    private fun updateVisibleRange(element: ControlElement) {
+        val range = element.range ?: Range.FROM_A_TO_Z
+        val box = element.getBoundingBox()
+        val elementSize = getElementSize()
+        
+        // 计算可见的元素数量
+        val visibleCount = if (element.orientation == 0.toByte()) {
+            (box.width() / elementSize).toInt() + 2
+        } else {
+            (box.height() / elementSize).toInt() + 2
+        }
+        
+        // 根据滚动位置计算当前中心索引
+        val centerIndex = calculateCenterIndex(element)
+        
+        // 计算可见范围的起始和结束索引
+        val halfVisible = (visibleCount / 2).coerceAtLeast(1)
+        val startIndex = (centerIndex - halfVisible).coerceAtLeast(0)
         val endIndex = minOf(startIndex + visibleCount, range.max.toInt())
-
+        
         rangeIndex[0] = startIndex
         rangeIndex[1] = endIndex
+    }
 
-        // Trigger the binding for the center index
-        if (centerIndex != lastActivatedIndex) {
-            // Release previous binding
+    /**
+     * 触发指定索引的绑定
+     */
+    private fun triggerBindingForIndex(element: ControlElement, index: Int) {
+        val range = element.range ?: Range.FROM_A_TO_Z
+        
+        if (index != lastActivatedIndex) {
+            // 释放之前的绑定
             if (lastActivatedIndex >= 0) {
                 val prevBinding = getBindingForRangeIndex(range, lastActivatedIndex)
                 if (prevBinding != Binding.NONE) {
@@ -183,12 +239,24 @@ class RangeScroller(
                 }
             }
 
-            // Activate new binding
-            val binding = getBindingForRangeIndex(range, centerIndex)
+            // 激活新的绑定
+            val binding = getBindingForRangeIndex(range, index)
             if (binding != Binding.NONE) {
                 inputControlsView.handleInputEvent(binding, true)
-                lastActivatedIndex = centerIndex
+                lastActivatedIndex = index
             }
         }
+    }
+
+    /**
+     * 根据触摸位置更新范围索引（兼容旧接口）
+     */
+    private fun updateRangeIndex(element: ControlElement, x: Float, y: Float) {
+        lastTouchX = x
+        lastTouchY = y
+        updateVisibleRange(element)
+        
+        val currentCenter = calculateCenterIndex(element)
+        triggerBindingForIndex(element, currentCenter)
     }
 }

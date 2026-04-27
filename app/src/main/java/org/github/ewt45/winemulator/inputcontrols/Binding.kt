@@ -3,6 +3,7 @@ package org.github.ewt45.winemulator.inputcontrols
 /**
  * Binding types for control elements
  * 按键绑定类型 - 参考 winlator 实现
+ * 修复版：改进键盘按键排序，按字母顺序排列
  */
 enum class Binding(
     val keycode: Int = 0,
@@ -353,9 +354,61 @@ enum class Binding(
 
         fun gamepadBindings(): List<Binding> = entries.filter { it.isGamepad }
 
-        fun keyboardBindingLabels(): Array<String> = keyboardBindings().map { it.toString() }.toTypedArray()
+        /**
+         * 获取排序后的键盘按键标签数组
+         * 按字母顺序和功能分组排列：功能键、字母键、数字键、符号键、控制键、导航键、小键盘
+         */
+        fun keyboardBindingLabels(): Array<String> = getSortedKeyboardBindings().map { it.toString() }.toTypedArray()
 
-        fun keyboardBindingValues(): Array<Binding> = keyboardBindings().toTypedArray()
+        fun keyboardBindingValues(): Array<Binding> = getSortedKeyboardBindings().toTypedArray()
+
+        /**
+         * 获取排序后的键盘按键列表
+         * 按功能分组和字母顺序排列
+         */
+        private fun getSortedKeyboardBindings(): List<Binding> {
+            val keyboardBindings = entries.filter { it.isKeyboard }.toMutableList()
+            
+            // 定义排序规则：分组然后在组内按显示名称排序
+            return keyboardBindings.sortedWith(compareBy<Binding> { binding ->
+                // 根据显示名称分组
+                when {
+                    // NONE 放最前面
+                    binding == NONE -> 0
+                    // 功能键 F1-F12
+                    binding.name.startsWith("KEY_F") -> 1
+                    // 字母键 A-Z（排除已经单独处理的）
+                    binding.name.matches(Regex("^KEY_[A-Z]$")) -> 2
+                    // 数字键 0-9
+                    binding.name.matches(Regex("^KEY_[0-9]$")) -> 3
+                    // 数字行其他键（`-`, `=`, `BS`, Tab等）
+                    binding.name in listOf("KEY_GRAVE", "KEY_MINUS", "KEY_EQUALS", "KEY_BKSP", "KEY_BACKSPACE", 
+                                          "KEY_TAB", "KEY_BRACKET_LEFT", "KEY_BRACKET_RIGHT", "KEY_BACKSLASH",
+                                          "KEY_SEMICOLON", "KEY_APOSTROPHE", "KEY_ENTER",
+                                          "KEY_COMMA", "KEY_PERIOD", "KEY_SLASH") -> 4
+                    // 控制键 Ctrl, Alt, Shift, Win
+                    binding.name.contains("CTRL") || binding.name.contains("SHIFT") || 
+                    binding.name.contains("ALT") || binding.name.contains("WIN") || binding.name.contains("MENU") ||
+                    binding == KEY_SPACE -> 5
+                    // 导航键
+                    binding.name in listOf("KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT",
+                                          "KEY_INSERT", "KEY_HOME", "KEY_END", 
+                                          "KEY_PGUP", "KEY_PAGEUP", "KEY_PGDN", "KEY_PAGEDOWN",
+                                          "KEY_DELETE", "KEY_DEL", "KEY_PRTSCN", "KEY_PRINT",
+                                          "KEY_SCROLL_LOCK", "KEY_PAUSE") -> 6
+                    // 大写锁定和数字锁定
+                    binding.name.contains("CAPITAL") || binding.name.contains("NUM_LOCK") || 
+                    binding.name.contains("NUMLOCK") || binding.name.contains("SCROLL") -> 7
+                    // 小键盘
+                    binding.name.startsWith("NUMPAD") || binding.name.startsWith("KEY_KP") -> 8
+                    // 其他
+                    else -> 9
+                }
+            }.thenBy { binding ->
+                // 在同一组内按显示名称排序
+                binding.toString()
+            })
+        }
 
         fun mouseBindingLabels(): Array<String> = mouseBindings().map { it.toString() }.toTypedArray()
 
