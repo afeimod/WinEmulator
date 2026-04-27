@@ -444,7 +444,9 @@ class ControlElement(
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
-            startX -= scrollOffset % elementSize
+            // 计算初始偏移量（用于循环滚动）
+            val initialOffset = scrollOffset % elementSize
+            var startX = box.left.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val index = i % currentRange.max.toInt()
@@ -524,10 +526,13 @@ class ControlElement(
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
-            startY -= scrollOffset % elementSize
+            // 计算初始偏移量（用于循环滚动）
+            val initialOffset = scrollOffset % elementSize
+            var startY = box.top.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
-                val bindingForIndex = getBindingForRangeIndex(currentRange, i)
+                val index = i % currentRange.max.toInt()
+                val bindingForIndex = getBindingForRangeIndex(currentRange, index)
 
                 // 高亮判断：如果当前选中的 binding 就是这个按键对应的 binding
                 val isHighlight = scroller?.getCurrentBinding() == bindingForIndex
@@ -539,7 +544,7 @@ class ControlElement(
                     canvas.drawLine(lineLeft, startY, lineRight, startY, paint)
                 }
 
-                val text = getRangeTextForIndex(currentRange, i)
+                val text = getRangeTextForIndex(currentRange, index)
                 if (startY < box.bottom && startY + elementSize > box.top) {
                     // 高亮：绘制半透明背景
                     if (isHighlight) {

@@ -56,18 +56,25 @@ class RangeScroller(
     /**
      * 获取可见范围索引 [from, to]
      * 完全参考 winlator 实现
+     * 确保循环滚动时能显示足够的元素
      */
     fun getRangeIndex(): IntArray {
         val range = element.range ?: Range.FROM_A_TO_Z
         val elementSize = getElementSize()
-        
-        // 基于 scrollOffset 计算起始索引
-        val from = kotlin.math.floor((scrollOffset / elementSize) % range.max).toInt()
-        val adjustedFrom = if (from < 0) range.max + from else from
-        
-        val to = adjustedFrom + element.getBindingCount() + 1
-        
-        return intArrayOf(adjustedFrom, to)
+        val rangeMax = range.max
+
+        // 基于 scrollOffset 计算起始索引（确保负数也能正确处理）
+        var from = (scrollOffset / elementSize).toInt()
+        // 处理负数情况
+        from = ((from % rangeMax) + rangeMax) % rangeMax
+
+        // 计算需要显示的元素数量（比 bindingCount 多几个以确保循环时能覆盖）
+        val visibleCount = maxOf(element.getBindingCount() + 2, rangeMax)
+        val to = (from + visibleCount) % rangeMax
+
+        // 如果 to <= from，说明跨越了范围边界，需要两个范围
+        // 但为了简化，我们直接返回 [from, from + visibleCount]，绘制时会用取模
+        return intArrayOf(from, from + visibleCount)
     }
 
     /**
@@ -168,26 +175,43 @@ class RangeScroller(
             }
 
             // 更新当前按下的键（基于新的偏移量）
-            currentBinding = getBindingByPosition(x, y)
-            binding = currentBinding  // 保存用于释放时发送
+            val newBinding = getBindingByPosition(x, y)
+            if (newBinding != currentBinding) {
+                // 切换按键：先释放之前的，再按下新的
+                if (currentBinding != Binding.NONE) {
+                    inputControlsView.handleInputEvent(currentBinding, false)
+                }
+                if (newBinding != Binding.NONE) {
+                    inputControlsView.handleInputEvent(newBinding, true)
+                }
+                currentBinding = newBinding
+                binding = currentBinding
+            }
 
             lastPosition = position
+        } else {
+            // 未进入滚动模式时，也更新 currentBinding 以便点击时使用正确的按键
+            currentBinding = getBindingByPosition(x, y)
+            binding = currentBinding
         }
     }
 
     fun handleTouchUp() {
         if (isActionDown) {
+            // 释放当前按下的按键
+            if (currentBinding != Binding.NONE) {
+                inputControlsView.handleInputEvent(currentBinding, false)
+            }
+
             if (isTap() && !isScrolling) {
-                // 点击：发送按下和释放事件
-                inputControlsView.handleInputEvent(binding, true)
+                // 点击：发送按下和释放事件（仅用于点击反馈）
                 val finalBinding = binding
+                inputControlsView.handleInputEvent(finalBinding, true)
                 inputControlsView.postDelayed({
                     inputControlsView.handleInputEvent(finalBinding, false)
                 }, 30)
-            } else {
-                // 滚动释放：只发送释放事件
-                inputControlsView.handleInputEvent(binding, false)
             }
+            // 滚动模式：按键已在滑动过程中发送，这里只需要确保释放
         }
         isActionDown = false
     }
