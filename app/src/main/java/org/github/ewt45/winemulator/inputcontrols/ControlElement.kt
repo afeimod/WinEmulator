@@ -433,7 +433,8 @@ class ControlElement(
             )
             canvas.clipPath(clipPath)
 
-            val elementSize = snappingSize * 4 * scale
+            // 使用 scroller 的 elementSize，确保与触摸逻辑一致
+            val elementSize = scroller?.getElementSize() ?: (snappingSize * 4 * scale)
             val currentRange = range ?: Range.FROM_A_TO_Z
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
@@ -491,7 +492,8 @@ class ControlElement(
             )
             canvas.clipPath(clipPath)
 
-            val elementSize = snappingSize * 4 * scale
+            // 使用 scroller 的 elementSize，确保与触摸逻辑一致
+            val elementSize = scroller?.getElementSize() ?: (snappingSize * 4 * scale)
             val currentRange = range ?: Range.FROM_A_TO_Z
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
