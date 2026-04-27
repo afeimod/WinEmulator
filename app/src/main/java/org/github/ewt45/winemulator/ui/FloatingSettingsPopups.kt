@@ -466,9 +466,14 @@ fun VirtualKeysSettingsPopup(
                             val newProfile = manager.createProfile(newProfileName)
                             profiles = manager.getProfiles()
                             selectedProfile = newProfile
+                            // 保存新建的配置ID并启用
                             prefs.edit().putInt(InputControlsFragment.SELECTED_PROFILE_ID, newProfile.id).apply()
+                            prefs.edit().putBoolean("show_touchscreen_controls", true).apply()
+                            isControlsEnabled = true
+                            showControls = true
                             showProfileDialog = false
-                            onSettingsChanged()  // 通知外部刷新
+                            // 立即通知外部刷新，确保新建的配置立即生效
+                            onSettingsChanged()
                         }
                     }
                 ) {
