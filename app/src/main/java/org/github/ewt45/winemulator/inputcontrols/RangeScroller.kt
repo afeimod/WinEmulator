@@ -26,12 +26,10 @@ class RangeScroller(
 
     /**
      * 获取单个元素的大小
-     * 使用视图尺寸除以绑定数量，与 winlator 一致
+     * 使用与绘制代码相同的计算方式：snappingSize * 4 * scale
      */
     fun getElementSize(): Float {
-        val boundingBox = element.getBoundingBox()
-        val bindingCount = element.getBindingCount().coerceAtLeast(1)
-        return maxOf(boundingBox.width().toFloat(), boundingBox.height().toFloat()) / bindingCount
+        return inputControlsView.snappingSize * 4f * element.scale
     }
 
     /**
