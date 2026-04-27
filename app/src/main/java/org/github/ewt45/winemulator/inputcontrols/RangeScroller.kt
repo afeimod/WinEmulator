@@ -15,6 +15,7 @@ class RangeScroller(
     private var lastPosition: Float = 0f
     private var touchTime: Long = 0
     private var binding: Binding = Binding.NONE
+    private var currentBinding: Binding = Binding.NONE  // 当前滑动选中的按键
     private var isActionDown: Boolean = false
     private var isScrolling: Boolean = false
 
@@ -42,6 +43,11 @@ class RangeScroller(
     }
 
     fun getScrollOffset(): Float = scrollOffset
+
+    /**
+     * 获取当前滑动选中的按键（用于高亮显示）
+     */
+    fun getCurrentBinding(): Binding = currentBinding
 
     fun setScrollOffset(offset: Float) {
         scrollOffset = offset
@@ -131,7 +137,8 @@ class RangeScroller(
     fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
         isScrolling = false
         isActionDown = true
-        binding = getBindingByPosition(x, y)
+        currentBinding = getBindingByPosition(x, y)  // 记录当前选中的按键
+        binding = currentBinding
         touchTime = System.currentTimeMillis()
         lastPosition = if (element.orientation.toInt() == 0) x else y
         currentOffset = 0f
@@ -160,8 +167,9 @@ class RangeScroller(
                 scrollOffset = scrollSize + scrollOffset
             }
 
-            // 更新当前按下的键
-            binding = getBindingByPosition(x, y)
+            // 更新当前按下的键（基于新的偏移量）
+            currentBinding = getBindingByPosition(x, y)
+            binding = currentBinding  // 保存用于释放时发送
 
             lastPosition = position
         }

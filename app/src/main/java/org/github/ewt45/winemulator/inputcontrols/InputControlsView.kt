@@ -332,6 +332,11 @@ class InputControlsView(
 
     fun getSecondaryColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 2, 119, 189)
 
+    /**
+     * 获取高亮颜色（用于 RANGE-BUTTON 滑动时的高亮显示）
+     */
+    fun getHighlightColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 193, 7)  // 橙黄色高亮
+
     fun getIcon(id: Byte): Bitmap? {
         if (icons[id.toInt()] == null) {
             try {

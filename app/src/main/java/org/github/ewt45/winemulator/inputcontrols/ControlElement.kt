@@ -448,6 +448,11 @@ class ControlElement(
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val index = i % currentRange.max.toInt()
+                val bindingForIndex = getBindingForRangeIndex(currentRange, index)
+
+                // 高亮判断：如果当前选中的 binding 就是这个按键对应的 binding
+                val isHighlight = scroller?.getCurrentBinding() == bindingForIndex
+
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
 
@@ -457,8 +462,19 @@ class ControlElement(
 
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startX < box.right && startX + elementSize > box.left) {
+                    // 高亮：绘制半透明背景
+                    if (isHighlight) {
+                        paint.style = Paint.Style.FILL
+                        paint.color = Color.argb(100, 255, 255, 255)  // 白色半透明背景
+                        canvas.drawRect(startX, box.top.toFloat(), startX + elementSize, box.bottom.toFloat(), paint)
+                    }
+
                     paint.style = Paint.Style.FILL
-                    paint.color = inputControlsView.getPrimaryColor()
+                    paint.color = if (isHighlight) {
+                        inputControlsView.getHighlightColor()  // 高亮时使用高亮色
+                    } else {
+                        inputControlsView.getPrimaryColor()
+                    }
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, elementSize - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -511,6 +527,11 @@ class ControlElement(
             startY -= scrollOffset % elementSize
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
+                val bindingForIndex = getBindingForRangeIndex(currentRange, i)
+
+                // 高亮判断：如果当前选中的 binding 就是这个按键对应的 binding
+                val isHighlight = scroller?.getCurrentBinding() == bindingForIndex
+
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
 
@@ -520,8 +541,19 @@ class ControlElement(
 
                 val text = getRangeTextForIndex(currentRange, i)
                 if (startY < box.bottom && startY + elementSize > box.top) {
+                    // 高亮：绘制半透明背景
+                    if (isHighlight) {
+                        paint.style = Paint.Style.FILL
+                        paint.color = Color.argb(100, 255, 255, 255)  // 白色半透明背景
+                        canvas.drawRect(box.left.toFloat(), startY, box.right.toFloat(), startY + elementSize, paint)
+                    }
+
                     paint.style = Paint.Style.FILL
-                    paint.color = inputControlsView.getPrimaryColor()
+                    paint.color = if (isHighlight) {
+                        inputControlsView.getHighlightColor()  // 高亮时使用高亮色
+                    } else {
+                        inputControlsView.getPrimaryColor()
+                    }
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, box.width() - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -621,6 +653,18 @@ class ControlElement(
             Range.DIGITS -> ((index + 1) % 10).toString()
             Range.FUNCTION_KEYS -> "F${index + 1}"
             Range.NUMPAD_DIGITS -> "NP${(index + 1) % 10}"
+        }
+    }
+
+    /**
+     * 根据范围和索引获取对应的 Binding（用于高亮判断）
+     */
+    private fun getBindingForRangeIndex(range: Range, index: Int): Binding {
+        return when (range) {
+            Range.FROM_A_TO_Z -> Binding.fromString("KEY_${('A'.code + index).toChar()}")
+            Range.DIGITS -> Binding.fromString("KEY_${(index + 1) % 10}")
+            Range.FUNCTION_KEYS -> Binding.fromString("KEY_F${index + 1}")
+            Range.NUMPAD_DIGITS -> Binding.fromString("KEY_KP_${(index + 1) % 10}")
         }
     }
 
@@ -784,6 +828,7 @@ class ControlElement(
             return true
         } else if (pointerId == currentPointerId && type == Type.RANGE_BUTTON) {
             scroller?.handleTouchMove(this, px, py)
+            inputControlsView.invalidate()  // 触发重绘以显示滚动效果
             return true
         }
         return false
