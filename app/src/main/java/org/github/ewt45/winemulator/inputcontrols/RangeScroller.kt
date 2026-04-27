@@ -4,18 +4,12 @@ import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 
 /**
  * Handles scrolling for range button elements
- * 参考 winlator 的实现，重写滚动逻辑
+ * 参考 winlator 实现修复滚动和按键输出问题
  */
 class RangeScroller(
     private val inputControlsView: InputControlsView,
     private val element: ControlElement
 ) {
-    companion object {
-        // 参考 winlator TouchpadView 的常量定义
-        private const val MAX_TAP_MILLISECONDS: Long = 200
-        private const val MAX_TAP_TRAVEL_DISTANCE: Float = 10f
-    }
-
     private var scrollOffset: Float = 0f
     private var currentOffset: Float = 0f
     private var lastPosition: Float = 0f
@@ -23,16 +17,16 @@ class RangeScroller(
     private var binding: Binding = Binding.NONE
     private var isActionDown: Boolean = false
     private var isScrolling: Boolean = false
+    private val rangeIndex = intArrayOf(0, 26) // [from, to]
 
-    fun getElementSize(): Float {
-        val boundingBox = element.getBoundingBox()
-        val range = element.range ?: Range.FROM_A_TO_Z
-        return maxOf(boundingBox.width().toFloat(), boundingBox.height().toFloat()) / range.max.toFloat()
+    companion object {
+        // 参考 winlator TouchpadView 的常量定义
+        private const val MAX_TAP_MILLISECONDS: Long = 200
+        private const val MAX_TAP_TRAVEL_DISTANCE: Float = 10f
     }
 
-    fun getScrollSize(): Float {
-        val range = element.range ?: Range.FROM_A_TO_Z
-        return getElementSize() * range.max.toFloat()
+    fun getElementSize(): Float {
+        return inputControlsView.snappingSize * 4f * element.scale
     }
 
     fun getScrollOffset(): Float = scrollOffset
@@ -41,13 +35,7 @@ class RangeScroller(
         scrollOffset = offset
     }
 
-    fun getRangeIndex(): IntArray {
-        val range = element.range ?: Range.FROM_A_TO_Z
-        val from = ((scrollOffset / getElementSize()) % range.max).toInt()
-        val adjustedFrom = if (from < 0) range.max + from else from
-        val to = adjustedFrom + element.getBindingCount() + 1
-        return intArrayOf(adjustedFrom, to)
-    }
+    fun getRangeIndex(): IntArray = rangeIndex
 
     /**
      * 根据触摸位置获取对应的 Binding
@@ -58,34 +46,53 @@ class RangeScroller(
         val range = element.range ?: Range.FROM_A_TO_Z
         val orientation = element.orientation.toInt()
 
+        // 计算触摸点在元素内的相对偏移
         val offset = if (orientation == 0) {
             x - boundingBox.left - currentOffset
         } else {
             y - boundingBox.top - currentOffset
         }
 
-        val index = ((offset / getElementSize()) % range.max).toInt()
-        val adjustedIndex = if (index < 0) range.max + index else index
+        // 计算元素索引
+        val elementSize = getElementSize()
+        var index = ((offset / elementSize) + (scrollOffset / elementSize)).toInt()
+        
+        // 处理负数和越界
+        index = ((index % range.max) + range.max) % range.max
 
         return when (range) {
             Range.FROM_A_TO_Z -> {
-                val charIndex = 65 + adjustedIndex
-                if (charIndex in 65..90) {
-                    Binding.fromString("KEY_${Char(charIndex)}")
+                // A=0, B=1, ..., Z=25
+                if (index in 0..25) {
+                    Binding.fromString("KEY_${('A'.code + index).toChar()}")
                 } else {
                     Binding.NONE
                 }
             }
             Range.DIGITS -> {
-                val numIndex = (adjustedIndex + 1) % 10
-                Binding.fromString("KEY_$numIndex")
+                // 0=0, 1=1, ..., 9=9
+                if (index in 0..9) {
+                    Binding.fromString("KEY_$index")
+                } else {
+                    Binding.NONE
+                }
             }
             Range.FUNCTION_KEYS -> {
-                Binding.fromString("KEY_F${adjustedIndex + 1}")
+                // F1=1, F2=2, ..., F12=12 (索引1-12)
+                val fKey = ((index % 12) + 1)
+                if (fKey in 1..12) {
+                    Binding.fromString("KEY_F$fKey")
+                } else {
+                    Binding.NONE
+                }
             }
             Range.NUMPAD_DIGITS -> {
-                val numpadIndex = (adjustedIndex + 1) % 10
-                Binding.fromString("KEY_KP_$numpadIndex")
+                // NP0=0, NP1=1, ..., NP9=9
+                if (index in 0..9) {
+                    Binding.fromString("NUMPAD_$index")
+                } else {
+                    Binding.NONE
+                }
             }
         }
     }
@@ -98,12 +105,6 @@ class RangeScroller(
         return System.currentTimeMillis() - touchTime < MAX_TAP_MILLISECONDS
     }
 
-    /**
-     * 处理触摸按下事件
-     * @param element 当前元素（用于兼容性）
-     * @param x 触摸 X 坐标
-     * @param y 触摸 Y 坐标
-     */
     fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
         isActionDown = true
         isScrolling = false
@@ -114,12 +115,6 @@ class RangeScroller(
         element.setBinding(Binding.NONE)
     }
 
-    /**
-     * 处理触摸移动事件
-     * @param element 当前元素（用于兼容性）
-     * @param x 触摸 X 坐标
-     * @param y 触摸 Y 坐标
-     */
     fun handleTouchMove(element: ControlElement, x: Float, y: Float) {
         if (!isActionDown) return
 
@@ -134,14 +129,37 @@ class RangeScroller(
         if (isScrolling) {
             currentOffset += deltaPosition
 
-            val scrollSize = getScrollSize()
+            val scrollSize = getElementSize() * (element.range?.max ?: 26).toFloat()
             scrollOffset = -currentOffset % scrollSize
             if (scrollOffset < 0) {
                 scrollOffset = scrollSize + scrollOffset
             }
 
+            // 更新范围索引
+            updateRangeIndex()
+
             lastPosition = position
         }
+    }
+
+    /**
+     * 更新可见范围索引
+     */
+    private fun updateRangeIndex() {
+        val range = element.range ?: Range.FROM_A_TO_Z
+        val elementSize = getElementSize()
+        
+        // 计算基于滚动偏移的起始索引
+        val scrollElementIndex = (scrollOffset / elementSize).toInt()
+        var fromIndex = scrollElementIndex % range.max
+        if (fromIndex < 0) fromIndex = range.max + fromIndex
+
+        // 计算可见的元素数量（加2以便左右各显示一个额外的元素）
+        val bindingCount = element.getBindingCount().coerceAtLeast(1)
+        val toIndex = fromIndex + bindingCount + 1
+
+        rangeIndex[0] = fromIndex
+        rangeIndex[1] = toIndex
     }
 
     fun handleTouchUp() {
