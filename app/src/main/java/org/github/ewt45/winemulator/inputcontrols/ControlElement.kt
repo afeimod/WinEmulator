@@ -434,7 +434,12 @@ class ControlElement(
             canvas.clipPath(clipPath)
 
             // 使用 scroller 的 elementSize，确保与触摸逻辑一致
-            val elementSize = scroller?.getElementSize() ?: (snappingSize * 4 * scale)
+            // 参考 winlator：elementSize = max(width, height) / bindingCount
+            val elementSize = scroller?.getElementSize() ?: run {
+                val boxWidth = box.width().toFloat()
+                val boxHeight = box.height().toFloat()
+                maxOf(boxWidth, boxHeight) / getBindingCount()
+            }
             val currentRange = range ?: Range.FROM_A_TO_Z
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
@@ -493,7 +498,12 @@ class ControlElement(
             canvas.clipPath(clipPath)
 
             // 使用 scroller 的 elementSize，确保与触摸逻辑一致
-            val elementSize = scroller?.getElementSize() ?: (snappingSize * 4 * scale)
+            // 参考 winlator：elementSize = max(width, height) / bindingCount
+            val elementSize = scroller?.getElementSize() ?: run {
+                val boxWidth = box.width().toFloat()
+                val boxHeight = box.height().toFloat()
+                maxOf(boxWidth, boxHeight) / getBindingCount()
+            }
             val currentRange = range ?: Range.FROM_A_TO_Z
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
