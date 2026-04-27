@@ -26,11 +26,13 @@ class RangeScroller(
 
     fun getElementSize(): Float {
         val boundingBox = element.getBoundingBox()
-        return maxOf(boundingBox.width().toFloat(), boundingBox.height().toFloat()) / element.range.max
+        val range = element.range ?: Range.FROM_A_TO_Z
+        return maxOf(boundingBox.width().toFloat(), boundingBox.height().toFloat()) / range.max.toFloat()
     }
 
     fun getScrollSize(): Float {
-        return getElementSize() * element.range.max
+        val range = element.range ?: Range.FROM_A_TO_Z
+        return getElementSize() * range.max.toFloat()
     }
 
     fun getScrollOffset(): Float = scrollOffset
@@ -40,10 +42,10 @@ class RangeScroller(
     }
 
     fun getRangeIndex(): IntArray {
-        val range = element.range
+        val range = element.range ?: Range.FROM_A_TO_Z
         val from = ((scrollOffset / getElementSize()) % range.max).toInt()
         val adjustedFrom = if (from < 0) range.max + from else from
-        val to = adjustedFrom + element.bindingCount + 1
+        val to = adjustedFrom + element.getBindingCount() + 1
         return intArrayOf(adjustedFrom, to)
     }
 
@@ -53,7 +55,7 @@ class RangeScroller(
      */
     private fun getBindingByPosition(x: Float, y: Float): Binding {
         val boundingBox = element.getBoundingBox()
-        val range = element.range
+        val range = element.range ?: Range.FROM_A_TO_Z
         val orientation = element.orientation.toInt()
 
         val offset = if (orientation == 0) {
@@ -85,7 +87,6 @@ class RangeScroller(
                 val numpadIndex = (adjustedIndex + 1) % 10
                 Binding.fromString("KEY_KP_$numpadIndex")
             }
-            else -> Binding.NONE
         }
     }
 
@@ -97,7 +98,13 @@ class RangeScroller(
         return System.currentTimeMillis() - touchTime < MAX_TAP_MILLISECONDS
     }
 
-    fun handleTouchDown(x: Float, y: Float) {
+    /**
+     * 处理触摸按下事件
+     * @param element 当前元素（用于兼容性）
+     * @param x 触摸 X 坐标
+     * @param y 触摸 Y 坐标
+     */
+    fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
         isActionDown = true
         isScrolling = false
         binding = getBindingByPosition(x, y)
@@ -107,7 +114,13 @@ class RangeScroller(
         element.setBinding(Binding.NONE)
     }
 
-    fun handleTouchMove(x: Float, y: Float) {
+    /**
+     * 处理触摸移动事件
+     * @param element 当前元素（用于兼容性）
+     * @param x 触摸 X 坐标
+     * @param y 触摸 Y 坐标
+     */
+    fun handleTouchMove(element: ControlElement, x: Float, y: Float) {
         if (!isActionDown) return
 
         val position = if (element.orientation.toInt() == 0) x else y
