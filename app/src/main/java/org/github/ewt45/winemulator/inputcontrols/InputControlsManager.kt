@@ -27,6 +27,17 @@ class InputControlsManager(private val context: Context) {
         return profiles
     }
 
+    /**
+     * 强制重新从磁盘加载配置列表
+     * 用于确保在创建新配置后，其他 InputControlsManager 实例能够看到新配置
+     */
+    fun forceReloadProfiles() {
+        profilesLoaded = false
+        profiles.clear()
+        maxProfileId = 0
+        loadProfiles(false)
+    }
+
     private fun copyAssetProfilesIfNeeded() {
         val profilesDir = getProfilesDir(context)
         if (!profilesDir.isDirectory) {
