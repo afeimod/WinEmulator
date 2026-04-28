@@ -236,19 +236,24 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 }
             } else if (state.noRootfs || state.forceNoRootfs || state.autoExtractedRootfsName != null) {
                 // 自动提取成功后显示用户选择界面
-                if (state.autoExtractedRootfsName != null) {
+                val extractedRootfsName = state.autoExtractedRootfsName
+                if (extractedRootfsName != null) {
                     RootfsSelect(
                         getAvailableUsers = { rootfs: String -> ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name } },
                         settingVm::onChangeRootfsLoginUser, settingVm::onChangeRootfsName,
                         initReporter = reporter,
-                        initRootfsName = state.autoExtractedRootfsName,
+                        initRootfsName = extractedRootfsName,
                         initStage = ProgressStage.DONE_SUCCESS,
                         onAutoExtractStart = null, // 自动提取完成后不需要再次触发
                         onRootfsExtracted = { rootfsName -> 
                             // 用户在选择界面点击"完成"后显示重启提示
                             showRestartDialog = true
                         },
-                        onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) },
+                        onSetCurrentRootfs = { rootfsName -> 
+                            scope.launch {
+                                Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                            }
+                        },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
                         defaultIsSetCurrent = true // 首次启动自动提取后默认勾选
                     )
@@ -267,7 +272,11 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         initReporter = reporter,
                         onAutoExtractStart = { autoExtractStarted = true },
                         onRootfsExtracted = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) },
-                        onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) },
+                        onSetCurrentRootfs = { rootfsName -> 
+                            scope.launch {
+                                Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                            }
+                        },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
                         defaultIsSetCurrent = !state.forceNoRootfs // 首次启动默认勾选，新建容器默认不勾选
                     )
