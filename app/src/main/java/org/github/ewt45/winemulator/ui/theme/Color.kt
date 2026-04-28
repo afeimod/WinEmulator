@@ -25,7 +25,7 @@ val TerminalUserBlue = Color(0xFF64B5F6)             // 普通用户蓝色
 val TerminalHostCyan = Color(0xFF4DD0E1)             // 主机名青色
 val TerminalPathWhite = Color(0xFFFFFFFF)            // 路径白色
 val TerminalSymbolYellow = Color(0xFFFFD54F)         // 符号黄色 (@ : $ #)
-val TerminalRootWhite = Color(0xFFE0E0E0)            // root用户白色
+val TerminalRootWhite = Color(0xFFFF9800)            // root用户橙色
 
 // 状态指示颜色
 val TerminalOnlineGreen = Color(0xFF4CAF50)          // 在线状态绿色
