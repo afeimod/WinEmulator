@@ -1,6 +1,10 @@
 package org.github.ewt45.winemulator.ui
 
 import android.content.Context
+import android.content.Intent
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -208,6 +212,18 @@ fun VirtualKeysSettingsPopup(
     var isControlsEnabled by remember { mutableStateOf(false) }
 
     val manager = remember { InputControlsManager(context) }
+
+    // 用于监听 ControlsEditorActivity 返回结果的 ActivityResultLauncher
+    val controlsEditorLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        // 当从 ControlsEditorActivity 返回时，重新加载配置并刷新视图
+        manager.forceReloadProfiles()
+        profiles = manager.getProfiles()
+        val savedId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
+        selectedProfile = if (savedId != 0) manager.getProfile(savedId) else null
+        onSettingsChanged()
+    }
 
     // 加载配置
     LaunchedEffect(Unit) {
@@ -425,9 +441,9 @@ fun VirtualKeysSettingsPopup(
                         Button(
                             onClick = {
                                 selectedProfile?.let { profile ->
-                                    val intent = android.content.Intent(context, ControlsEditorActivity::class.java)
+                                    val intent = Intent(context, ControlsEditorActivity::class.java)
                                     intent.putExtra(ControlsEditorActivity.EXTRA_PROFILE_ID, profile.id)
-                                    context.startActivity(intent)
+                                    controlsEditorLauncher.launch(intent)
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
