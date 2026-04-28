@@ -3,7 +3,6 @@ package org.github.ewt45.winemulator.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -16,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.SpanStyle
@@ -38,6 +38,7 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
     val scroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var isFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (viewModel.output.value.isEmpty()) {
@@ -47,6 +48,14 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
         keyboardController?.show()
     }
 
+    // 当输入框获得焦点时，滚动到底部避免被键盘遮挡
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
+
+    // 新输出追加时滚动到底部
     LaunchedEffect(viewModel.output.value.size) {
         scroll.animateScrollTo(scroll.maxValue)
     }
@@ -63,8 +72,7 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(12.dp)
-                .verticalScroll(scroll)
-                .horizontalScroll(rememberScrollState())
+                .verticalScroll(scroll)   // 仅垂直滚动
                 .clickable {
                     focusRequester.requestFocus()
                     keyboardController?.show()
@@ -151,9 +159,15 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
                     modifier = Modifier
                         .weight(1f)
                         .focusRequester(focusRequester)
-                        .focusable(),
+                        .focusable()
+                        .onFocusChanged { focusState ->
+                            isFocused = focusState.isFocused
+                        },
                     decorationBox = { innerTextField ->
-                        innerTextField()
+                        // 确保输入框内容正常绘制
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            innerTextField()
+                        }
                     }
                 )
             }
@@ -164,4 +178,5 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable
 fun ProotTerminalScreenPreview() {
+    // Preview 实现为空，可根据需要添加模拟数据
 }
