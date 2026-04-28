@@ -24,12 +24,17 @@ data class PrepareUiState(
     val noRootfs: Boolean = false,
     val forceNoRootfs: Boolean = false,
     val shouldRestart: Boolean = false,
+    // 新增：记录自动提取成功的rootfs名称，用于显示用户选择界面
+    val autoExtractedRootfsName: String? = null,
 ) {
     /** 准备完成。若返回true则应离开prepareScreen 进入主界面 */
     val isPrepareFinished:Boolean
         get() = !loading
                 && (skipPermissions || unGrantedPermissions.isEmpty())
                 && !noRootfs && !forceNoRootfs
+    /** 是否应该显示用户选择界面（解压/提取完成后） */
+    val shouldShowUserSelectScreen: Boolean
+        get() = autoExtractedRootfsName != null || forceNoRootfs
 }
 
 class PrepareViewModel : ViewModel() {
@@ -71,8 +76,18 @@ class PrepareViewModel : ViewModel() {
         _uiState.update { it.copy(forceNoRootfs = false) }
     }
 
-    /** rootfs自动提取成功后调用，用于更新状态 */
+    /** rootfs自动提取成功后调用，记录提取的rootfs名称用于显示用户选择界面 */
     fun onRootfsExtracted(rootfsName: String) {
-        _uiState.update { it.copy(forceNoRootfs = false, noRootfs = false) }
+        _uiState.update { it.copy(autoExtractedRootfsName = rootfsName) }
+    }
+
+    /** 用户选择界面完成（点击"完成"按钮）后调用 */
+    fun onUserSelectFinished() {
+        _uiState.update { it.copy(forceNoRootfs = false, noRootfs = false, autoExtractedRootfsName = null) }
+    }
+
+    /** 请求重启应用 */
+    fun requestRestart() {
+        _uiState.update { it.copy(shouldRestart = true) }
     }
 }
