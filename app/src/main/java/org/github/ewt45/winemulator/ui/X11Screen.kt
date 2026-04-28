@@ -110,7 +110,7 @@ fun X11Screen(
     }
 
     // 即时刷新函数（供悬浮弹窗回调使用）
-    val refreshControlsImmediately = {
+    val refreshControlsImmediately: () -> Unit = {
         val newShowControls = prefs.getBoolean("show_touchscreen_controls", false)
         val newProfileId = prefs.getInt(InputControlsFragment.SELECTED_PROFILE_ID, 0)
 
