@@ -87,6 +87,20 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 当从编辑界面返回时，重新加载配置以获取最新保存的按键
+        if (profile != null) {
+            // 重新从文件加载配置
+            val profileId = profile!!.id
+            profile = ControlsProfile.loadProfile(this, ControlsProfile.getProfileFile(this, profileId))
+            profile?.let {
+                inputControlsView.setProfile(it)
+                inputControlsView.invalidate()
+            }
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun hideSystemUI() {
         window.decorView.systemUiVisibility = (
