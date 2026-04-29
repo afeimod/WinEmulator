@@ -72,8 +72,8 @@ import java.net.URL
 private val TAG = "PrepareScreen"
 
 // 下载链接常量
-private const val ROOTFS_DOWNLOAD_UBUNTU = "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
-private const val ROOTFS_DOWNLOAD_DEBIAN = "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+private const val ROOTFS_DOWNLOAD_UBUNTU = "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
+private const val ROOTFS_DOWNLOAD_DEBIAN = "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
 
 @Composable
 fun PrepareScreen(prepareVm: PrepareViewModel, settingVm: SettingViewModel, navigateToMainScreen: suspend () -> Unit) {
