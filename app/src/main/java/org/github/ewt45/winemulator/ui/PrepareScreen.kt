@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
@@ -212,7 +213,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
 
     // 处理下载rootfs的协程
     fun downloadAndExtractRootfs(downloadUrl: String, distroName: String) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             isDownloading = true
             downloadType = distroName
             reporter.msgTitle = "正在下载 $distroName rootfs..."
@@ -236,19 +237,22 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 val contentLength = connection.contentLength.toLong()
                 reporter.totalValue = contentLength
                 
-                connection.getInputStream().use { input ->
-                    FileOutputStream(tmpArchiveFile).use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalBytesRead = 0L
-                        
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalBytesRead += bytesRead
-                            if (contentLength > 0) {
-                                reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
+                // 在IO线程执行网络读写操作
+                withContext(Dispatchers.IO) {
+                    connection.getInputStream().use { input ->
+                        FileOutputStream(tmpArchiveFile).use { output ->
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            var totalBytesRead = 0L
+                            
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalBytesRead += bytesRead
+                                if (contentLength > 0) {
+                                    reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
+                                }
+                                reporter.progressValue(totalBytesRead)
                             }
-                            reporter.progressValue(totalBytesRead)
                         }
                     }
                 }
