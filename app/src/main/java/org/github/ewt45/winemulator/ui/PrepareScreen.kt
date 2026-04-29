@@ -65,6 +65,7 @@ import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
 import org.github.ewt45.winemulator.viewmodel.PrepareViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import java.io.File
+import java.io.FileOutputStream
 import java.net.URL
 
 private val TAG = "PrepareScreen"
@@ -216,7 +217,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             downloadType = distroName
             reporter.msgTitle = "正在下载 $distroName rootfs..."
             reporter.stage = ProgressStage.PROCESSING
-            reporter.progress = 0
+            reporter.progress = 0f
             reporter.msg = "日志："
             
             try {
@@ -245,7 +246,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                             output.write(buffer, 0, bytesRead)
                             totalBytesRead += bytesRead
                             if (contentLength > 0) {
-                                reporter.progress = (totalBytesRead * 100 / contentLength).toFloat()
+                                reporter.progress = ((totalBytesRead * 100 / contentLength).toInt()).toFloat()
                             }
                             reporter.progressValue(totalBytesRead)
                         }
@@ -253,7 +254,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 }
                 
                 reporter.msg("下载完成，开始解压...")
-                reporter.progress = 0
+                reporter.progress = 0f
                 
                 // 创建临时目录用于解压
                 val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
@@ -308,7 +309,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 reporter.stage = ProgressStage.DONE_SUCCESS
                 
                 // 回调，让界面显示用户选择
-                onRootfsDownloaded?.invoke(targetOutDir.name)
+                prepareVm.onRootfsExtracted(targetOutDir.name)
                 
             } catch (e: Throwable) {
                 e.printStackTrace()
@@ -318,7 +319,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             
             isDownloading = false
             downloadType = ""
-            reporter.progress = 100
+            reporter.progress = 100f
         }
     }
 
@@ -425,7 +426,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
 
 /**
  * 显示用户应该授予的权限
- * @param onRequest 用户点击“授权按钮”的回调
+ * @param onRequest 用户点击"授权按钮"的回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -441,7 +442,7 @@ private fun PermissionGrant(
     )
     Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(16.dp)) {
-        Text("为确保app正常运行，请授予以下权限。或者点击“跳过”，不授予权限。")
+        Text("为确保app正常运行，请授予以下权限。或者点击"跳过"，不授予权限。")
         Spacer(Modifier.height(32.dp))
         permissions.forEach { item ->
             Row(
