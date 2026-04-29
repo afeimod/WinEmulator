@@ -71,9 +71,19 @@ import java.net.URL
 
 private val TAG = "PrepareScreen"
 
-// 下载链接常量
-private const val ROOTFS_DOWNLOAD_UBUNTU = "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
-private const val ROOTFS_DOWNLOAD_DEBIAN = "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+// 下载链接映射 - key为发行版名称，value为URL列表（按优先级排序）
+private val ROOTFS_DOWNLOAD_URLS = mapOf(
+    "ubuntu" to listOf(
+        "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz",
+        "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz",
+        "https://github.1zyq1.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
+    ),
+    "debian" to listOf(
+        "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz",
+        "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz",
+        "https://github.1zyq1.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+    )
+)
 
 @Composable
 fun PrepareScreen(prepareVm: PrepareViewModel, settingVm: SettingViewModel, navigateToMainScreen: suspend () -> Unit) {
@@ -212,7 +222,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     }
 
     // 处理下载rootfs的协程
-    fun downloadAndExtractRootfs(downloadUrl: String, distroName: String) {
+    fun downloadAndExtractRootfs(distroName: String) {
         scope.launch(Dispatchers.IO) {
             isDownloading = true
             downloadType = distroName
@@ -221,46 +231,91 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             reporter.progress = 0
             reporter.msg = "日志："
             
-            try {
-                // 创建临时文件
-                val tmpArchiveFile = File(Consts.tmpDir, "download-$distroName-rootfs.tar.xz")
-                tmpArchiveFile.delete()
-                
-                // 下载文件
-                reporter.msg("开始下载 $distroName rootfs...")
-                reporter.msg("下载地址: $downloadUrl")
-                
-                // 使用URLConnection进行下载，支持进度
-                val url = URL(downloadUrl)
-                val connection = url.openConnection()
-                connection.connect()
-                val contentLength = connection.contentLength.toLong()
-                reporter.totalValue = contentLength
-                
-                // 在IO线程执行网络读写操作
-                withContext(Dispatchers.IO) {
-                    connection.getInputStream().use { input ->
-                        FileOutputStream(tmpArchiveFile).use { output ->
-                            val buffer = ByteArray(8192)
-                            var bytesRead: Int
-                            var totalBytesRead = 0L
-                            
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                output.write(buffer, 0, bytesRead)
-                                totalBytesRead += bytesRead
-                                if (contentLength > 0) {
-                                    reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
+            // 获取该发行版的所有下载链接
+            val downloadUrls = ROOTFS_DOWNLOAD_URLS[distroName] ?: emptyList()
+            if (downloadUrls.isEmpty()) {
+                reporter.msg("错误：未找到 $distroName 的下载链接", "下载失败，未找到下载链接。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+                isDownloading = false
+                downloadType = ""
+                reporter.progress = 100
+                return@launch
+            }
+            
+            var downloadSuccess = false
+            var lastException: Throwable? = null
+            
+            // 尝试每个下载链接
+            for ((index, downloadUrl) in downloadUrls.withIndex()) {
+                try {
+                    // 创建临时文件
+                    val tmpArchiveFile = File(Consts.tmpDir, "download-$distroName-rootfs.tar.xz")
+                    tmpArchiveFile.delete()
+                    
+                    // 下载文件
+                    if (index > 0) {
+                        reporter.msg("第${index + 1}个链接也失败了，尝试下一个链接...")
+                    }
+                    reporter.msg("尝试从第${index + 1}个链接下载 $distroName rootfs...")
+                    reporter.msg("下载地址: $downloadUrl")
+                    
+                    // 使用URLConnection进行下载，支持进度
+                    val url = URL(downloadUrl)
+                    val connection = url.openConnection()
+                    connection.connect()
+                    val contentLength = connection.contentLength.toLong()
+                    reporter.totalValue = contentLength
+                    
+                    // 在IO线程执行网络读写操作
+                    withContext(Dispatchers.IO) {
+                        connection.getInputStream().use { input ->
+                            FileOutputStream(tmpArchiveFile).use { output ->
+                                val buffer = ByteArray(8192)
+                                var bytesRead: Int
+                                var totalBytesRead = 0L
+                                
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalBytesRead += bytesRead
+                                    if (contentLength > 0) {
+                                        reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
+                                    }
+                                    reporter.progressValue(totalBytesRead)
                                 }
-                                reporter.progressValue(totalBytesRead)
                             }
                         }
                     }
+                    
+                    // 下载成功，跳出循环
+                    downloadSuccess = true
+                    reporter.msg("从第${index + 1}个链接下载成功！")
+                    break
+                    
+                } catch (e: Throwable) {
+                    lastException = e
+                    reporter.msg("第${index + 1}个链接下载失败: ${e.message}")
+                    // 继续尝试下一个链接
+                    continue
                 }
-                
+            }
+            
+            // 如果所有链接都下载失败
+            if (!downloadSuccess) {
+                reporter.msg("所有下载链接都失败了，最后的错误：${lastException?.stackTraceToString()}", "下载失败，请重试或手动选择。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+                isDownloading = false
+                downloadType = ""
+                reporter.progress = 100
+                return@launch
+            }
+            
+            // 下载成功后继续解压流程
+            try {
                 reporter.msg("下载完成，开始解压...")
                 reporter.progress = 0
                 
                 // 创建临时目录用于解压
+                val tmpArchiveFile = File(Consts.tmpDir, "download-$distroName-rootfs.tar.xz")
                 val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
                     if (it.exists()) {
                         org.apache.commons.io.FileUtils.deleteDirectory(it)
@@ -317,7 +372,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 
             } catch (e: Throwable) {
                 e.printStackTrace()
-                reporter.msg("下载并解压rootfs过程中出现错误：${e.stackTraceToString()}", "下载失败，请重试或手动选择。\n（日志可点击展开查看）")
+                reporter.msg("解压rootfs过程中出现错误：${e.stackTraceToString()}", "下载失败，请重试或手动选择。\n（日志可点击展开查看）")
                 reporter.stage = ProgressStage.DONE_FAILURE
             }
             
@@ -413,8 +468,8 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         defaultIsSetCurrent = !state.forceNoRootfs, // 首次启动默认勾选，新建容器默认不勾选
                         isDownloading = isDownloading,
                         downloadType = downloadType,
-                        onDownloadUbuntu = { downloadAndExtractRootfs(ROOTFS_DOWNLOAD_UBUNTU, "ubuntu") },
-                        onDownloadDebian = { downloadAndExtractRootfs(ROOTFS_DOWNLOAD_DEBIAN, "debian") },
+                        onDownloadUbuntu = { downloadAndExtractRootfs("ubuntu") },
+                        onDownloadDebian = { downloadAndExtractRootfs("debian") },
                         onRootfsDownloaded = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) }
                     )
                 } else {
