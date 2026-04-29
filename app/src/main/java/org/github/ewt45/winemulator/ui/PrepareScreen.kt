@@ -46,6 +46,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
@@ -461,11 +462,12 @@ private fun RootfsSelect(
                 )
 
                 val userList = getAvailableUsers(rootfsName)
-                userList.find { it != "root" }?.let { nonRootUser ->
-                    var userName by remember { mutableStateOf(nonRootUser) }
-                    GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { rootfsName, newUserName ->
-                        userName = newUserName
-                        scope.launch { onChangeUser(rootfsName, newUserName) }
+                var selectedUserName by remember { mutableStateOf(userList.find { it != "root" } ?: "root") }
+                GeneralRootfsSelect_LoginUserSelect(rootfsName, selectedUserName, userList) { rootfsName, newUserName ->
+                    selectedUserName = newUserName
+                    // 使用 runBlocking 确保保存完成后再继续
+                    runBlocking {
+                        onChangeUser(rootfsName, newUserName)
                     }
                 }
 
