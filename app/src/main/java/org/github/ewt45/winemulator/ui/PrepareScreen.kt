@@ -95,6 +95,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     val reporter = rememberTaskReporter(msgTitle = "")
     var autoExtractStarted by remember { mutableStateOf(false) } // 标记是否已经开始自动提取
     var showDownloadDialog by remember { mutableStateOf(false) }
+    var showOnlineDownloadScreen by remember { mutableStateOf(false) }
     
     // 新增：用于显示重启提示对话框的状态
     var showRestartDialog by remember { mutableStateOf(false) }
@@ -199,7 +200,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 } else {
                     reporter.msg("未在assets中找到rootfs压缩包", "请选择在线下载")
                     reporter.stage = ProgressStage.NOT_STARTED
-                    showDownloadDialog = true
+                    showOnlineDownloadScreen = true
                     autoExtractStarted = false
                 }
             } catch (e: Throwable) {
@@ -212,64 +213,65 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
         }
     }
 
+    
+    if (showOnlineDownloadScreen) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        ) {
+            Column(
+                Modifier.align(Alignment.Center),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("未检测到内置 Rootfs", style = MaterialTheme.typography.titleLarge)
 
-    if (showDownloadDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showDownloadDialog = false },
-            title = { Text("下载 Rootfs") },
-            text = { Text("未检测到内置 Rootfs，请选择要下载的系统") },
-            confirmButton = {
-                Column {
-                    Button(onClick = {
-                        showDownloadDialog = false
-                        autoExtractStarted = true
-                        scope.launch {
-                            try {
-                                reporter.msgTitle = "正在下载 Ubuntu..."
-                                reporter.stage = ProgressStage.PROCESSING
-                                reporter.progress = 0
-                                val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, UBUNTU_URL, reporter)
-                                Utils.Rootfs.makeCurrent(rootfs)
-                                prepareVm.onRootfsExtracted(rootfs.name)
-                                reporter.stage = ProgressStage.DONE_SUCCESS
-                                reporter.msg("Ubuntu 安装完成")
-                            } catch (e: Throwable) {
-                                reporter.stage = ProgressStage.DONE_FAILURE
-                                reporter.msg("安装失败：${e.message}")
-                            }
-                            autoExtractStarted = false
+                Button(onClick = {
+                    scope.launch {
+                        try {
+                            reporter.msgTitle = "正在下载 Ubuntu..."
+                            reporter.stage = ProgressStage.PROCESSING
+                            reporter.progress = 0
+                            val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, UBUNTU_URL, reporter)
+                            Utils.Rootfs.makeCurrent(rootfs)
+                            prepareVm.onRootfsExtracted(rootfs.name)
+                            reporter.stage = ProgressStage.DONE_SUCCESS
+                            showOnlineDownloadScreen = false
+                        } catch (e: Throwable) {
+                            reporter.stage = ProgressStage.DONE_FAILURE
+                            reporter.msg("安装失败：${e.message}")
                         }
-                    }) { Text("Ubuntu") }
+                    }
+                }) { Text("在线下载 Ubuntu") }
 
-                    Spacer(Modifier.height(8.dp))
-
-                    Button(onClick = {
-                        showDownloadDialog = false
-                        autoExtractStarted = true
-                        scope.launch {
-                            try {
-                                reporter.msgTitle = "正在下载 Debian..."
-                                reporter.stage = ProgressStage.PROCESSING
-                                reporter.progress = 0
-                                val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, DEBIAN_URL, reporter)
-                                Utils.Rootfs.makeCurrent(rootfs)
-                                prepareVm.onRootfsExtracted(rootfs.name)
-                                reporter.stage = ProgressStage.DONE_SUCCESS
-                                reporter.msg("Debian 安装完成")
-                            } catch (e: Throwable) {
-                                reporter.stage = ProgressStage.DONE_FAILURE
-                                reporter.msg("安装失败：${e.message}")
-                            }
-                            autoExtractStarted = false
+                Button(onClick = {
+                    scope.launch {
+                        try {
+                            reporter.msgTitle = "正在下载 Debian..."
+                            reporter.stage = ProgressStage.PROCESSING
+                            reporter.progress = 0
+                            val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, DEBIAN_URL, reporter)
+                            Utils.Rootfs.makeCurrent(rootfs)
+                            prepareVm.onRootfsExtracted(rootfs.name)
+                            reporter.stage = ProgressStage.DONE_SUCCESS
+                            showOnlineDownloadScreen = false
+                        } catch (e: Throwable) {
+                            reporter.stage = ProgressStage.DONE_FAILURE
+                            reporter.msg("安装失败：${e.message}")
                         }
-                    }) { Text("Debian") }
-                }
-            },
-            dismissButton = {
-                Button(onClick = { showDownloadDialog = false }) { Text("取消") }
+                    }
+                }) { Text("在线下载 Debian") }
+
+                Button(onClick = {
+                    showOnlineDownloadScreen = false
+                }) { Text("手动选择 Rootfs") }
             }
-        )
+        }
+        return
     }
+
+
 
     // 准备完成 启动模拟器
     if (state.isPrepareFinished) {
