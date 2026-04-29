@@ -1,6 +1,13 @@
 package org.github.ewt45.winemulator.ui
 
 
+
+private const val UBUNTU_URL =
+    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
+
+private const val DEBIAN_URL =
+    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,6 +93,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     // 标题会在后续根据场景动态设置
     val reporter = rememberTaskReporter(msgTitle = "")
     var autoExtractStarted by remember { mutableStateOf(false) } // 标记是否已经开始自动提取
+    var showDownloadDialog by remember { mutableStateOf(false) }
     
     // 新增：用于显示重启提示对话框的状态
     var showRestartDialog by remember { mutableStateOf(false) }
@@ -188,8 +196,9 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     reporter.msg("提取rootfs成功：${extractedRootfs.name}", "提取成功！\n（日志可点击展开查看）")
                     reporter.stage = ProgressStage.DONE_SUCCESS
                 } else {
-                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
-                    reporter.stage = ProgressStage.DONE_FAILURE
+                    reporter.msg("未在assets中找到rootfs压缩包", "请选择在线下载")
+                    reporter.stage = ProgressStage.NOT_STARTED
+                    showDownloadDialog = true
                     autoExtractStarted = false
                 }
             } catch (e: Throwable) {
@@ -200,6 +209,65 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             }
             reporter.progress = 100
         }
+    }
+
+
+    if (showDownloadDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDownloadDialog = false },
+            title = { Text("下载 Rootfs") },
+            text = { Text("未检测到内置 Rootfs，请选择要下载的系统") },
+            confirmButton = {
+                Column {
+                    Button(onClick = {
+                        showDownloadDialog = false
+                        autoExtractStarted = true
+                        scope.launch {
+                            try {
+                                reporter.msgTitle = "正在下载 Ubuntu..."
+                                reporter.stage = ProgressStage.PROCESSING
+                                reporter.progress = 0
+                                val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, UBUNTU_URL, reporter)
+                                Utils.Rootfs.makeCurrent(rootfs)
+                                prepareVm.onRootfsExtracted(rootfs.name)
+                                reporter.stage = ProgressStage.DONE_SUCCESS
+                                reporter.msg("Ubuntu 安装完成")
+                            } catch (e: Throwable) {
+                                reporter.stage = ProgressStage.DONE_FAILURE
+                                reporter.msg("安装失败：${e.message}")
+                            }
+                            autoExtractStarted = false
+                        }
+                    }) { Text("Ubuntu") }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Button(onClick = {
+                        showDownloadDialog = false
+                        autoExtractStarted = true
+                        scope.launch {
+                            try {
+                                reporter.msgTitle = "正在下载 Debian..."
+                                reporter.stage = ProgressStage.PROCESSING
+                                reporter.progress = 0
+                                val rootfs = Utils.Rootfs.installRootfsFromUrl(ctx, DEBIAN_URL, reporter)
+                                Utils.Rootfs.makeCurrent(rootfs)
+                                prepareVm.onRootfsExtracted(rootfs.name)
+                                reporter.stage = ProgressStage.DONE_SUCCESS
+                                reporter.msg("Debian 安装完成")
+                            } catch (e: Throwable) {
+                                reporter.stage = ProgressStage.DONE_FAILURE
+                                reporter.msg("安装失败：${e.message}")
+                            }
+                            autoExtractStarted = false
+                        }
+                    }) { Text("Debian") }
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDownloadDialog = false }) { Text("取消") }
+            }
+        )
     }
 
     // 准备完成 启动模拟器
