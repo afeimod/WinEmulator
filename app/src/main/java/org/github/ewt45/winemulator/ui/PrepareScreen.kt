@@ -98,8 +98,8 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             confirmButton = {
                 androidx.compose.material3.Button(
                     onClick = {
-                        showRestartDialog = false
-                        prepareVm.requestRestart()
+                        // 直接关闭应用
+                        MainEmuActivity.instance.finish()
                     }
                 ) { Text("重启") }
             },
@@ -127,11 +127,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     // 退出prepareScreen
     LaunchedEffect(state.isPrepareFinished) {
         if (!state.isPrepareFinished) return@LaunchedEffect
-        if (state.shouldRestart) {
-            MainEmuActivity.instance.finish()
-        } else {
-            navigateToMainScreen()
-        }
+        navigateToMainScreen()
     }
     
     // 首次启动时（noRootfs），自动尝试从assets提取rootfs
