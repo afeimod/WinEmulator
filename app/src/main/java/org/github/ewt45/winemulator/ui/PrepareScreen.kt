@@ -46,6 +46,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
@@ -86,11 +87,40 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     val reporter = rememberTaskReporter(msgTitle = "")
     var autoExtractStarted by remember { mutableStateOf(false) } // 标记是否已经开始自动提取
     
+    // 新增：用于显示重启提示对话框的状态
+    var showRestartDialog by remember { mutableStateOf(false) }
+    
+    // 重启提示对话框
+    if (showRestartDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { },
+            title = { Text("需要重启") },
+            text = { Text("Rootfs已提取成功并设置完成。为了使配置生效，需要重启应用。是否现在重启？") },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        // 直接关闭应用
+                        MainEmuActivity.instance.finish()
+                    }
+                ) { Text("重启") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showRestartDialog = false
+                        prepareVm.onUserSelectFinished()
+                    }
+                ) { Text("暂不重启，稍后手动重启") }
+            }
+        )
+    }
+    
     // 根据场景设置 reporter 标题
-    LaunchedEffect(state.forceNoRootfs, state.noRootfs) {
+    LaunchedEffect(state.forceNoRootfs, state.noRootfs, state.autoExtractedRootfsName) {
         reporter.msgTitle = when {
             state.forceNoRootfs -> "新建容器"
             state.noRootfs -> "请选择或提取Rootfs"
+            state.autoExtractedRootfsName != null -> "Rootfs已提取成功"
             else -> ""
         }
     }
@@ -98,10 +128,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     // 退出prepareScreen
     LaunchedEffect(state.isPrepareFinished) {
         if (!state.isPrepareFinished) return@LaunchedEffect
-        // TODO 尚未实现 restart
-        if (state.shouldRestart) MainEmuActivity.instance.finish()
-        else navigateToMainScreen()
-
+        navigateToMainScreen()
     }
     
     // 首次启动时（noRootfs），自动尝试从assets提取rootfs
@@ -127,8 +154,10 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     
                     // 自动设置当前rootfs（直接设置符号链接，不调用onChangeRootfsSelect避免触发finish）
                     Utils.Rootfs.makeCurrent(extractedRootfs)
-                    // 更新状态，让UI可以继续
+                    // 更新状态，记录提取的rootfs名称，显示用户选择界面
                     prepareVm.onRootfsExtracted(extractedRootfs.name)
+                    // 重置autoExtractStarted，以便后续可以从用户选择界面再次触发
+                    autoExtractStarted = false
                 } else {
                     // 未找到assets中的rootfs，回退到手动选择
                     reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
@@ -202,9 +231,37 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         isRequestingPermission = false
                     }
                 }
-            } else if (state.noRootfs || state.forceNoRootfs) {
-                // 首次启动自动提取时，显示进度（用 autoExtractStarted 区分自动提取和手动选择）
-                if (state.noRootfs && !state.forceNoRootfs && autoExtractStarted &&
+            } else if (state.noRootfs || state.forceNoRootfs || state.autoExtractedRootfsName != null) {
+                // 自动提取成功后显示用户选择界面
+                val extractedRootfsName = state.autoExtractedRootfsName
+                if (extractedRootfsName != null) {
+                    RootfsSelect(
+                        getAvailableUsers = { rootfs: String -> ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name } },
+                        settingVm::onChangeRootfsLoginUser, settingVm::onChangeRootfsName,
+                        initReporter = reporter,
+                        initRootfsName = extractedRootfsName,
+                        initStage = ProgressStage.DONE_SUCCESS,
+                        onAutoExtractStart = null, // 自动提取完成后不需要再次触发
+                        onRootfsExtracted = { rootfsName -> 
+                            // 用户在选择界面点击"完成"后显示重启提示
+                            showRestartDialog = true
+                        },
+                        onSetCurrentRootfs = { rootfsName -> 
+                            scope.launch {
+                                // 1. 创建符号链接
+                                Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                                // 2. 停止终端（如果有终端在运行）
+                                MainEmuActivity.instance.terminalViewModel.stopTerminal()
+                                // 3. 刷新settingVm中的rootfs用户列表，确保读取用户时数据是最新的
+                                settingVm.updateValuesWhenEnterSettings()
+                            }
+                        },
+                        onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
+                        defaultIsSetCurrent = true // 首次启动自动提取后默认勾选
+                    )
+                }
+                // 首次启动自动提取时，显示进度
+                else if (state.noRootfs && !state.forceNoRootfs && autoExtractStarted &&
                     (reporter.stage == ProgressStage.PROCESSING || 
                      reporter.stage == ProgressStage.DONE_SUCCESS)) {
                     RootfsAutoExtractProgress(reporter)
@@ -217,7 +274,16 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         initReporter = reporter,
                         onAutoExtractStart = { autoExtractStarted = true },
                         onRootfsExtracted = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) },
-                        onSetCurrentRootfs = { rootfsName -> Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName)) },
+                        onSetCurrentRootfs = { rootfsName -> 
+                            scope.launch {
+                                // 1. 创建符号链接
+                                Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                                // 2. 停止终端（如果有终端在运行）
+                                MainEmuActivity.instance.terminalViewModel.stopTerminal()
+                                // 3. 刷新settingVm中的rootfs用户列表，确保读取用户时数据是最新的
+                                settingVm.updateValuesWhenEnterSettings()
+                            }
+                        },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
                         defaultIsSetCurrent = !state.forceNoRootfs // 首次启动默认勾选，新建容器默认不勾选
                     )
@@ -373,8 +439,6 @@ private fun RootfsSelect(
             else if (reporter.stage == ProgressStage.DONE_SUCCESS) {
                 Button({
                     scope.launch {
-                        // 更新 prepareVm 状态
-                        onRootfsExtracted?.invoke(rootfsName)
                         if (isSetCurrent && onSetCurrentRootfs != null) {
                             // 设置当前rootfs（不调用onChangeRootfsSelect避免触发finish）
                             onSetCurrentRootfs(rootfsName)
@@ -382,7 +446,8 @@ private fun RootfsSelect(
                             // 兼容旧逻辑：如果没有提供 onSetCurrentRootfs，使用原来的方式
                             MainEmuActivity.instance.settingViewModel.onChangeRootfsSelect(rootfsName)
                         }
-                        // 状态更新后，isPrepareFinished 会变为 true，自动触发跳转
+                        // 调用回调，让调用者处理后续逻辑（如显示重启提示）
+                        onRootfsExtracted?.invoke(rootfsName)
                     }
                 }) { Text("完成") }
             }
@@ -407,11 +472,12 @@ private fun RootfsSelect(
                 )
 
                 val userList = getAvailableUsers(rootfsName)
-                userList.find { it != "root" }?.let { nonRootUser ->
-                    var userName by remember { mutableStateOf(nonRootUser) }
-                    GeneralRootfsSelect_LoginUserSelect(rootfsName, userName, userList) { rootfsName, newUserName ->
-                        userName = newUserName
-                        scope.launch { onChangeUser(rootfsName, newUserName) }
+                var selectedUserName by remember { mutableStateOf(userList.find { it != "root" } ?: "root") }
+                GeneralRootfsSelect_LoginUserSelect(rootfsName, selectedUserName, userList) { rootfsName, newUserName ->
+                    selectedUserName = newUserName
+                    // 使用 runBlocking 确保保存完成后再继续
+                    runBlocking {
+                        onChangeUser(rootfsName, newUserName)
                     }
                 }
 
