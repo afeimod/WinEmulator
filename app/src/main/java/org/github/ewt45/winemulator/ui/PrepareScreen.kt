@@ -217,7 +217,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             downloadType = distroName
             reporter.msgTitle = "正在下载 $distroName rootfs..."
             reporter.stage = ProgressStage.PROCESSING
-            reporter.progress = 0f
+            reporter.progress = 0
             reporter.msg = "日志："
             
             try {
@@ -246,7 +246,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                             output.write(buffer, 0, bytesRead)
                             totalBytesRead += bytesRead
                             if (contentLength > 0) {
-                                reporter.progress = ((totalBytesRead * 100 / contentLength).toInt()).toFloat()
+                                reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
                             }
                             reporter.progressValue(totalBytesRead)
                         }
@@ -254,7 +254,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                 }
                 
                 reporter.msg("下载完成，开始解压...")
-                reporter.progress = 0f
+                reporter.progress = 0
                 
                 // 创建临时目录用于解压
                 val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
@@ -319,7 +319,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
             
             isDownloading = false
             downloadType = ""
-            reporter.progress = 100f
+            reporter.progress = 100
         }
     }
 
@@ -442,7 +442,7 @@ private fun PermissionGrant(
     )
     Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(16.dp)) {
-        Text("为确保app正常运行，请授予以下权限。或者点击"跳过"，不授予权限。")
+        Text("为确保app正常运行，请授予以下权限。或者点击「跳过」，不授予权限。")
         Spacer(Modifier.height(32.dp))
         permissions.forEach { item ->
             Row(
