@@ -23,7 +23,6 @@ data class PrepareUiState(
     val skipPermissions: Boolean = false,
     val noRootfs: Boolean = false,
     val forceNoRootfs: Boolean = false,
-    val shouldRestart: Boolean = false,
     // 新增：记录自动提取成功的rootfs名称，用于显示用户选择界面
     val autoExtractedRootfsName: String? = null,
 ) {
@@ -84,10 +83,5 @@ class PrepareViewModel : ViewModel() {
     /** 用户选择界面完成（点击"完成"按钮）后调用 */
     fun onUserSelectFinished() {
         _uiState.update { it.copy(forceNoRootfs = false, noRootfs = false, autoExtractedRootfsName = null) }
-    }
-
-    /** 请求重启应用 */
-    fun requestRestart() {
-        _uiState.update { it.copy(shouldRestart = true) }
     }
 }
