@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -78,98 +79,103 @@ fun ProotTerminalScreen(viewModel: TerminalViewModel) {
                     keyboardController?.show()
                 }
         ) {
-            viewModel.output.value.forEach { line ->
-                Text(
-                    text = line,
-                    color = TerminalOnSurface,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                val userColor = if (viewModel.currentUser == "root") {
-                    TerminalRootWhite
-                } else {
-                    TerminalUserGreen
-                }
-
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(
-                            SpanStyle(
-                                color = userColor,
-                                fontWeight = FontWeight.Bold
-                            )
-                        ) {
-                            append(viewModel.currentUser)
-                        }
-
-                        withStyle(SpanStyle(color = TerminalSymbolYellow)) {
-                            append("@")
-                        }
-
-                        withStyle(SpanStyle(color = TerminalHostCyan)) {
-                            append(viewModel.currentHost)
-                        }
-
-                        withStyle(SpanStyle(color = TerminalSymbolYellow)) {
-                            append(":")
-                        }
-
-                        withStyle(SpanStyle(color = TerminalPathWhite)) {
-                            append(viewModel.currentPath)
-                        }
-
-                        withStyle(SpanStyle(color = TerminalSymbolYellow)) {
-                            append("$ ")
-                        }
-                    },
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp
-                )
-
-                BasicTextField(
-                    value = inputValue,
-                    onValueChange = {
-                        inputValue = it
-                    },
-                    textStyle = TextStyle(
-                        color = TerminalOnSurface,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp
-                    ),
-                    cursorBrush = SolidColor(TerminalCursor),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            if (inputValue.text.isNotBlank()) {
-                                viewModel.runCommand(inputValue.text)
-                                inputValue = TextFieldValue("")
-                            }
-                            keyboardController?.show()
-                        }
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester)
-                        .focusable()
-                        .onFocusChanged { focusState ->
-                            isFocused = focusState.isFocused
-                        },
-                    decorationBox = { innerTextField ->
-                        // 确保输入框内容正常绘制
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            innerTextField()
-                        }
+            // 使用 SelectionContainer 包裹文本内容以启用文本选择复制功能
+            SelectionContainer {
+                Column {
+                    viewModel.output.value.forEach { line ->
+                        Text(
+                            text = line,
+                            color = TerminalOnSurface,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp
+                        )
                     }
-                )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val userColor = if (viewModel.currentUser == "root") {
+                            TerminalRootWhite
+                        } else {
+                            TerminalUserGreen
+                        }
+
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(
+                                    SpanStyle(
+                                        color = userColor,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                ) {
+                                    append(viewModel.currentUser)
+                                }
+
+                                withStyle(SpanStyle(color = TerminalSymbolYellow)) {
+                                    append("@")
+                                }
+
+                                withStyle(SpanStyle(color = TerminalHostCyan)) {
+                                    append(viewModel.currentHost)
+                                }
+
+                                withStyle(SpanStyle(color = TerminalSymbolYellow)) {
+                                    append(":")
+                                }
+
+                                withStyle(SpanStyle(color = TerminalPathWhite)) {
+                                    append(viewModel.currentPath)
+                                }
+
+                                withStyle(SpanStyle(color = TerminalSymbolYellow)) {
+                                    append("$ ")
+                                }
+                            },
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp
+                        )
+
+                        BasicTextField(
+                            value = inputValue,
+                            onValueChange = {
+                                inputValue = it
+                            },
+                            textStyle = TextStyle(
+                                color = TerminalOnSurface,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp
+                            ),
+                            cursorBrush = SolidColor(TerminalCursor),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (inputValue.text.isNotBlank()) {
+                                        viewModel.runCommand(inputValue.text)
+                                        inputValue = TextFieldValue("")
+                                    }
+                                    keyboardController?.show()
+                                }
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(focusRequester)
+                                .focusable()
+                                .onFocusChanged { focusState ->
+                                    isFocused = focusState.isFocused
+                                },
+                            decorationBox = { innerTextField ->
+                                // 确保输入框内容正常绘制
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    innerTextField()
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
     }
