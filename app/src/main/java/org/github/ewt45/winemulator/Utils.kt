@@ -149,11 +149,21 @@ object Utils {
      * @param link http网址
      * @param dstFile 下载为该本地文件
      */
-    fun downloadLink(link: String, dstFile: File) {
-        val url = URL(link)
-        url.openStream().use { input ->
+    fun downloadLink(link: String, dstFile: File, onProgress: ((Int) -> Unit)? = null) {
+        val conn = URL(link).openConnection()
+        val total = conn.contentLengthLong
+        conn.getInputStream().use { input ->
             FileOutputStream(dstFile).use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(8192)
+                var downloaded = 0L
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    output.write(buffer, 0, read)
+                    downloaded += read
+                    if (total > 0) {
+                        onProgress?.invoke(((downloaded * 100) / total).toInt().coerceIn(0, 100))
+                    }
+                }
             }
         }
     }
@@ -416,6 +426,25 @@ object Utils {
          * uri不是.tar.xz/.tar.gz/.tar.zst时会抛出异常
          * @param reporter 调用[TaskReporter.progressValue] 时传入的是某文件压缩后大小. 本函数会将[TaskReporter.totalValue] 设置为压缩文件总大小
          */
+        suspend fun installRootfsFromUrl(
+            ctx: Context,
+            url: String,
+            reporter: TaskReporter
+        ): File = withContext(Dispatchers.IO) {
+            val tempFile = File(Consts.tmpDir, "download-rootfs.tar.xz").also {
+                if (it.exists()) it.delete()
+            }
+
+            reporter.msg("开始下载Rootfs：$url")
+            Utils.downloadLink(url, tempFile) { percent ->
+                reporter.progress(percent.toFloat() / 100f)
+                reporter.msg("下载进度：$percent%")
+            }
+
+            reporter.msg("下载完成，开始解压...")
+            installRootfsArchive(ctx, Uri.fromFile(tempFile), reporter)
+        }
+
         suspend fun installRootfsArchive(ctx: Context, uri: Uri, reporter: TaskReporter): File = withContext(IO) {
             val tmpArchiveFile = File(Consts.tmpDir, "archive-rootfs-tmp").also { it.delete() }
             val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
