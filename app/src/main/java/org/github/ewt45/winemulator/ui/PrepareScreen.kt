@@ -2,12 +2,6 @@ package org.github.ewt45.winemulator.ui
 
 
 
-private const val UBUNTU_URL =
-    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
-
-private const val DEBIAN_URL =
-    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
-
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +66,13 @@ import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
 import org.github.ewt45.winemulator.viewmodel.PrepareViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import java.io.File
+
+private const val UBUNTU_URL =
+    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
+
+private const val DEBIAN_URL =
+    "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+
 
 private val TAG = "PrepareScreen"
 
