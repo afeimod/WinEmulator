@@ -248,7 +248,12 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         },
                         onSetCurrentRootfs = { rootfsName -> 
                             scope.launch {
+                                // 1. 创建符号链接
                                 Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                                // 2. 停止终端（如果有终端在运行）
+                                MainEmuActivity.instance.terminalViewModel.stopTerminal()
+                                // 3. 刷新settingVm中的rootfs用户列表，确保读取用户时数据是最新的
+                                settingVm.updateValuesWhenEnterSettings()
                             }
                         },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
@@ -271,7 +276,12 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                         onRootfsExtracted = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) },
                         onSetCurrentRootfs = { rootfsName -> 
                             scope.launch {
+                                // 1. 创建符号链接
                                 Utils.Rootfs.makeCurrent(File(Consts.rootfsAllDir, rootfsName))
+                                // 2. 停止终端（如果有终端在运行）
+                                MainEmuActivity.instance.terminalViewModel.stopTerminal()
+                                // 3. 刷新settingVm中的rootfs用户列表，确保读取用户时数据是最新的
+                                settingVm.updateValuesWhenEnterSettings()
                             }
                         },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
