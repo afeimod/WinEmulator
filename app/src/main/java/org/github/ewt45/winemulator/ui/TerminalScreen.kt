@@ -92,8 +92,9 @@ private fun TerminalScreenImpl(
                 getViewClient()?.let { setTerminalViewClient(it) }
                 isFocusableInTouchMode = true
                 isVerticalScrollBarEnabled = true
-                // 启用文本选择功能 - 修复长按无法复制的问题
-                setTextIsSelectable(true)
+                // 启用触摸长按选择文本功能 - 修复长按无法复制的问题
+                // TerminalView 使用自定义文本选择系统，需要确保视图可长按
+                isLongClickable = true
             }
         }, modifier = Modifier.weight(1f))
     }
