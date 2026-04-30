@@ -420,20 +420,29 @@ class InputControlsView(
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    var hasUnhandledPointer = false
+
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
                         val id = event.getPointerId(i)
 
+                        var pointerHandled = false
                         for (element in profile!!.getElements()) {
                             if (element.handleTouchMove(id, x, y)) {
                                 handled = true
+                                pointerHandled = true
                                 break
                             }
                         }
+
+                        if (!pointerHandled) {
+                            hasUnhandledPointer = true
+                        }
                     }
 
-                    if (!handled) {
+                    // Allow free-look / camera drag even while another finger holds buttons.
+                    if (hasUnhandledPointer) {
                         touchpadView?.onTouchEvent(event)
                     }
                 }
