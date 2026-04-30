@@ -1,6 +1,8 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
@@ -136,11 +138,24 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
+    // For long-press key repeat (keyboard keys only)
+    private val repeatHandler = Handler(Looper.getMainLooper())
+    private var repeatRunnable: Runnable? = null
+    private var isKeyDownSent = false  // Track if key down event was sent
+    private var longPressBindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE)  // Store bindings for repeat
+
+    companion object {
+        // Long-press repeat delay constants
+        private const val INITIAL_REPEAT_DELAY = 300L    // Initial delay before first repeat
+        private const val REPEAT_INTERVAL = 100L         // Interval between repeats
+    }
+
     private fun reset() {
         text = ""
         iconId = 0
         range = null
         scroller = null
+        stopKeyRepeat()
         boundingBoxNeedsUpdate = true
     }
 
@@ -681,8 +696,20 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        inputControlsView.handleInputEvent(getBindingAt(0), true)
-                        inputControlsView.handleInputEvent(getBindingAt(1), true)
+                        // Send initial key down event
+                        val binding0 = getBindingAt(0)
+                        val binding1 = getBindingAt(1)
+                        inputControlsView.handleInputEvent(binding0, true)
+                        inputControlsView.handleInputEvent(binding1, true)
+                        isKeyDownSent = true
+
+                        // Store bindings for repeat
+                        longPressBindings = arrayOf(binding0, binding1)
+
+                        // Start key repeat for keyboard keys (not gamepad buttons)
+                        if (!binding0.isGamepad && binding0 != Binding.NONE) {
+                            startKeyRepeat()
+                        }
                     }
                     return true
                 }
@@ -704,6 +731,42 @@ class ControlElement(
             }
         }
         return false
+    }
+
+    /**
+     * Start key repeat for keyboard keys (for long-press support)
+     * Sends periodic key press events to maintain the pressed state
+     */
+    private fun startKeyRepeat() {
+        stopKeyRepeat()
+
+        // Initial delay before starting repeat
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                if (isKeyDownSent && longPressBindings[0] != Binding.NONE) {
+                    // Send key press event to maintain the pressed state
+                    // This keeps the key in "pressed" state without re-triggering key down
+                    if (longPressBindings[0].isKeyboard) {
+                        // For keyboard keys, we send key down again to refresh the held state
+                        inputControlsView.handleInputEvent(longPressBindings[0], true)
+                        inputControlsView.handleInputEvent(longPressBindings[1], true)
+                    }
+                    // Schedule next repeat
+                    repeatHandler.postDelayed(this, REPEAT_INTERVAL)
+                }
+            }
+        }
+        repeatHandler.postDelayed(repeatRunnable!!, INITIAL_REPEAT_DELAY)
+    }
+
+    /**
+     * Stop key repeat
+     */
+    private fun stopKeyRepeat() {
+        repeatRunnable?.let {
+            repeatHandler.removeCallbacks(it)
+            repeatRunnable = null
+        }
     }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
@@ -841,15 +904,21 @@ class ControlElement(
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
+                    // Stop key repeat first
+                    stopKeyRepeat()
+                    isKeyDownSent = false
+
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
+                            // Send key up event for both bindings
                             inputControlsView.handleInputEvent(getBindingAt(0), false)
                             inputControlsView.handleInputEvent(getBindingAt(1), false)
                         }
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
+                        // Send key up event for both bindings
                         inputControlsView.handleInputEvent(getBindingAt(0), false)
                         inputControlsView.handleInputEvent(getBindingAt(1), false)
                     }
