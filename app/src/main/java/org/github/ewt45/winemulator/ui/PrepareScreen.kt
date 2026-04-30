@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.github.ewt45.winemulator.Consts
 import org.github.ewt45.winemulator.FuncOnChangeAction
 import org.github.ewt45.winemulator.MainEmuActivity
@@ -65,8 +66,24 @@ import org.github.ewt45.winemulator.ui.setting.GeneralRootfsSelect_RootfsName
 import org.github.ewt45.winemulator.viewmodel.PrepareViewModel
 import org.github.ewt45.winemulator.viewmodel.SettingViewModel
 import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 
 private val TAG = "PrepareScreen"
+
+// 下载链接映射 - key为发行版名称，value为URL列表（按优先级排序）
+private val ROOTFS_DOWNLOAD_URLS = mapOf(
+    "ubuntu" to listOf(
+        "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz",
+        "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz",
+        "https://github.1zyq1.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/ubuntu.tar.xz"
+    ),
+    "debian" to listOf(
+        "https://github.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz",
+        "https://hub.myxuebi.top/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz",
+        "https://github.1zyq1.com/afeimod/Linbox-Rootfs-patchs/releases/download/rootfs-patch/debian.tar.xz"
+    )
+)
 
 @Composable
 fun PrepareScreen(prepareVm: PrepareViewModel, settingVm: SettingViewModel, navigateToMainScreen: suspend () -> Unit) {
@@ -86,6 +103,8 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
     // 标题会在后续根据场景动态设置
     val reporter = rememberTaskReporter(msgTitle = "")
     var autoExtractStarted by remember { mutableStateOf(false) } // 标记是否已经开始自动提取
+    var isDownloading by remember { mutableStateOf(false) } // 标记是否正在下载
+    var downloadType by remember { mutableStateOf("") } // 当前下载类型: ubuntu, debian
     
     // 新增：用于显示重启提示对话框的状态
     var showRestartDialog by remember { mutableStateOf(false) }
@@ -159,14 +178,14 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     // 重置autoExtractStarted，以便后续可以从用户选择界面再次触发
                     autoExtractStarted = false
                 } else {
-                    // 未找到assets中的rootfs，回退到手动选择
-                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
+                    // 未找到assets中的rootfs，回退到下载选择
+                    reporter.msg("未在assets中找到rootfs压缩包", "请选择下载方式获取rootfs")
                     reporter.stage = ProgressStage.NOT_STARTED
                     autoExtractStarted = false
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
-                reporter.msg("自动提取rootfs过程中出现错误：${e.stackTraceToString()}", "自动提取失败，请手动选择rootfs压缩包。\n（日志可点击展开查看）")
+                reporter.msg("自动提取rootfs过程中出现错误：${e.stackTraceToString()}", "自动提取失败，请选择下载方式获取rootfs。\n（日志可点击展开查看）")
                 reporter.stage = ProgressStage.DONE_FAILURE
                 autoExtractStarted = false
             }
@@ -188,16 +207,177 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                     reporter.msg("提取rootfs成功：${extractedRootfs.name}", "提取成功！\n（日志可点击展开查看）")
                     reporter.stage = ProgressStage.DONE_SUCCESS
                 } else {
-                    reporter.msg("未在assets中找到rootfs压缩包", "请手动选择rootfs压缩包")
+                    reporter.msg("未在assets中找到rootfs压缩包", "请选择下载方式获取rootfs")
                     reporter.stage = ProgressStage.DONE_FAILURE
                     autoExtractStarted = false
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
-                reporter.msg("提取rootfs过程中出现错误：${e.stackTraceToString()}", "提取失败，请手动选择rootfs压缩包。\n（日志可点击展开查看）")
+                reporter.msg("提取rootfs过程中出现错误：${e.stackTraceToString()}", "提取失败，请选择下载方式获取rootfs。\n（日志可点击展开查看）")
                 reporter.stage = ProgressStage.DONE_FAILURE
                 autoExtractStarted = false
             }
+            reporter.progress = 100
+        }
+    }
+
+    // 处理下载rootfs的协程
+    fun downloadAndExtractRootfs(distroName: String) {
+        scope.launch(Dispatchers.IO) {
+            isDownloading = true
+            downloadType = distroName
+            reporter.msgTitle = "正在下载 $distroName rootfs..."
+            reporter.stage = ProgressStage.PROCESSING
+            reporter.progress = 0
+            reporter.msg = "日志："
+            
+            // 获取该发行版的所有下载链接
+            val downloadUrls = ROOTFS_DOWNLOAD_URLS[distroName] ?: emptyList()
+            if (downloadUrls.isEmpty()) {
+                reporter.msg("错误：未找到 $distroName 的下载链接", "下载失败，未找到下载链接。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+                isDownloading = false
+                downloadType = ""
+                reporter.progress = 100
+                return@launch
+            }
+            
+            var downloadSuccess = false
+            var lastException: Throwable? = null
+            
+            // 尝试每个下载链接
+            for ((index, downloadUrl) in downloadUrls.withIndex()) {
+                try {
+                    // 创建临时文件
+                    val tmpArchiveFile = File(Consts.tmpDir, "download-$distroName-rootfs.tar.xz")
+                    tmpArchiveFile.delete()
+                    
+                    // 下载文件
+                    if (index > 0) {
+                        reporter.msg("第${index + 1}个链接也失败了，尝试下一个链接...")
+                    }
+                    reporter.msg("尝试从第${index + 1}个链接下载 $distroName rootfs...")
+                    reporter.msg("下载地址: $downloadUrl")
+                    
+                    // 使用URLConnection进行下载，支持进度
+                    val url = URL(downloadUrl)
+                    val connection = url.openConnection()
+                    connection.connect()
+                    val contentLength = connection.contentLength.toLong()
+                    reporter.totalValue = contentLength
+                    
+                    // 在IO线程执行网络读写操作
+                    withContext(Dispatchers.IO) {
+                        connection.getInputStream().use { input ->
+                            FileOutputStream(tmpArchiveFile).use { output ->
+                                val buffer = ByteArray(8192)
+                                var bytesRead: Int
+                                var totalBytesRead = 0L
+                                
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalBytesRead += bytesRead
+                                    if (contentLength > 0) {
+                                        reporter.progress = (totalBytesRead * 100 / contentLength).toInt()
+                                    }
+                                    reporter.progressValue(totalBytesRead)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 下载成功，跳出循环
+                    downloadSuccess = true
+                    reporter.msg("从第${index + 1}个链接下载成功！")
+                    break
+                    
+                } catch (e: Throwable) {
+                    lastException = e
+                    reporter.msg("第${index + 1}个链接下载失败: ${e.message}")
+                    // 继续尝试下一个链接
+                    continue
+                }
+            }
+            
+            // 如果所有链接都下载失败
+            if (!downloadSuccess) {
+                reporter.msg("所有下载链接都失败了，最后的错误：${lastException?.stackTraceToString()}", "下载失败，请重试或手动选择。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+                isDownloading = false
+                downloadType = ""
+                reporter.progress = 100
+                return@launch
+            }
+            
+            // 下载成功后继续解压流程
+            try {
+                reporter.msg("下载完成，开始解压...")
+                reporter.progress = 0
+                
+                // 创建临时目录用于解压
+                val tmpArchiveFile = File(Consts.tmpDir, "download-$distroName-rootfs.tar.xz")
+                val tmpOutDir = File(Consts.tmpDir, "extracted-rootfs").also {
+                    if (it.exists()) {
+                        org.apache.commons.io.FileUtils.deleteDirectory(it)
+                    }
+                    it.mkdirs()
+                }
+                
+                // 解压tar.xz
+                reporter.msg("正在解压...")
+                val compressedInput = org.apache.commons.compress.compressors.xz.XZCompressorInputStream(tmpArchiveFile.inputStream())
+                Utils.Archive.decompressCompressedTarStream(compressedInput, tmpOutDir, reporter)
+                
+                // 寻找rootfs根目录
+                val confirmRootfsSubDirs = listOf("etc", "usr")
+                val searchDirs = mutableListOf(tmpOutDir)
+                var foundRootfsDir: File? = null
+                while (searchDirs.size > 0 && foundRootfsDir == null) {
+                    val nowDir = searchDirs.removeAt(0)
+                    foundRootfsDir = nowDir.takeIf { it.list()?.toList()?.containsAll(confirmRootfsSubDirs) == true }
+                    nowDir.listFiles()?.let { searchDirs.addAll(it) }
+                }
+                
+                if (foundRootfsDir == null) {
+                    throw RuntimeException("无法在解压内容中找到rootfs根目录（包含 etc usr 的文件夹）")
+                }
+                
+                // 固定使用 rootfs-1, rootfs-2... 格式命名
+                var num = 1
+                Consts.rootfsAllDir.list()?.let { while (it.contains("rootfs-$num")) num++ }
+                val targetOutDir = File(Consts.rootfsAllDir, "rootfs-$num")
+                reporter.msg("移动rootfs: $foundRootfsDir -> $targetOutDir")
+                
+                org.apache.commons.io.FileUtils.moveDirectory(foundRootfsDir, targetOutDir)
+                
+                // 清理临时文件
+                tmpArchiveFile.delete()
+                org.apache.commons.io.FileUtils.deleteDirectory(tmpOutDir)
+                
+                // 执行解压后处理
+                reporter.msg(null, "解压结束。正在做一些处理...")
+                Utils.Rootfs.postExtractRootfs(targetOutDir)
+                
+                // 设置别名
+                val aliasFile = File(targetOutDir, ".alias")
+                if (!aliasFile.exists()) {
+                    Utils.Rootfs.setAlias(targetOutDir, "$distroName-$num")
+                }
+                
+                reporter.msg("下载并解压 $distroName rootfs 成功：${targetOutDir.name}", "下载成功！\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_SUCCESS
+                
+                // 回调，让界面显示用户选择
+                prepareVm.onRootfsExtracted(targetOutDir.name)
+                
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                reporter.msg("解压rootfs过程中出现错误：${e.stackTraceToString()}", "下载失败，请重试或手动选择。\n（日志可点击展开查看）")
+                reporter.stage = ProgressStage.DONE_FAILURE
+            }
+            
+            isDownloading = false
+            downloadType = ""
             reporter.progress = 100
         }
     }
@@ -266,7 +446,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                      reporter.stage == ProgressStage.DONE_SUCCESS)) {
                     RootfsAutoExtractProgress(reporter)
                 }
-                // 其他情况（新建容器、自动提取失败、手动选择）显示手动选择界面
+                // 其他情况（新建容器、自动提取失败、手动选择）显示下载选择界面
                 else if (state.forceNoRootfs || !autoExtractStarted || reporter.stage == ProgressStage.DONE_FAILURE) {
                     RootfsSelect(
                         getAvailableUsers = { rootfs: String -> ProotRootfs.getUserInfos(File(Consts.rootfsAllDir, rootfs)).map { it.name } },
@@ -285,7 +465,12 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
                             }
                         },
                         onCancel = if (state.forceNoRootfs) { { prepareVm.onCancelForceNoRootfs() } } else null,
-                        defaultIsSetCurrent = !state.forceNoRootfs // 首次启动默认勾选，新建容器默认不勾选
+                        defaultIsSetCurrent = !state.forceNoRootfs, // 首次启动默认勾选，新建容器默认不勾选
+                        isDownloading = isDownloading,
+                        downloadType = downloadType,
+                        onDownloadUbuntu = { downloadAndExtractRootfs("ubuntu") },
+                        onDownloadDebian = { downloadAndExtractRootfs("debian") },
+                        onRootfsDownloaded = { rootfsName -> prepareVm.onRootfsExtracted(rootfsName) }
                     )
                 } else {
                     // 等待自动提取完成
@@ -300,7 +485,7 @@ fun PrepareScreenImpl(prepareVm: PrepareViewModel, settingVm: SettingViewModel, 
 
 /**
  * 显示用户应该授予的权限
- * @param onRequest 用户点击“授权按钮”的回调
+ * @param onRequest 用户点击"授权按钮"的回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -316,7 +501,7 @@ private fun PermissionGrant(
     )
     Spacer(Modifier.height(16.dp))
     Column(Modifier.padding(16.dp)) {
-        Text("为确保app正常运行，请授予以下权限。或者点击“跳过”，不授予权限。")
+        Text("为确保app正常运行，请授予以下权限。或者点击「跳过」，不授予权限。")
         Spacer(Modifier.height(32.dp))
         permissions.forEach { item ->
             Row(
@@ -347,6 +532,11 @@ private fun PermissionGrant(
  * @param onSetCurrentRootfs 设置当前rootfs的回调
  * @param onCancel 取消/返回的回调，用于新建容器时返回
  * @param defaultIsSetCurrent "下次启动app运行该容器"选项的默认勾选状态，首次启动时默认true，新建容器时默认false
+ * @param isDownloading 是否正在下载
+ * @param downloadType 当前下载类型
+ * @param onDownloadUbuntu 下载Ubuntu rootfs的回调
+ * @param onDownloadDebian 下载Debian rootfs的回调
+ * @param onRootfsDownloaded rootfs下载并解压完成后的回调
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -362,14 +552,31 @@ private fun RootfsSelect(
     onSetCurrentRootfs: (suspend (String) -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     defaultIsSetCurrent: Boolean = true,
+    isDownloading: Boolean = false,
+    downloadType: String = "",
+    onDownloadUbuntu: (() -> Unit)? = null,
+    onDownloadDebian: (() -> Unit)? = null,
+    onRootfsDownloaded: ((String) -> Unit)? = null,
 ) {
     val TAG = "RootfsSelectScreen"
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
-    val reporter = initReporter ?: rememberTaskReporter(msgTitle = "缺少Rootfs。请点击按钮选择一个包含Rootfs的 .tar.xz 或 .tar.gz 压缩包。")
+    val reporter = initReporter ?: rememberTaskReporter(msgTitle = "缺少Rootfs。请选择一个选项获取Rootfs。")
     var rootfsName by remember { mutableStateOf(initRootfsName) }
     var isSetCurrent by remember { mutableStateOf(defaultIsSetCurrent) }
     val dialogState = rememberConfirmDialogState()
+    
+    // 如果下载完成，更新rootfsName
+    LaunchedEffect(reporter.stage, reporter.msg) {
+        if (reporter.stage == ProgressStage.DONE_SUCCESS && rootfsName.isEmpty()) {
+            // 从消息中提取rootfs名称
+            val msg = reporter.msg
+            val match = Regex("rootfs-\\d+").find(msg)
+            if (match != null) {
+                rootfsName = match.value
+            }
+        }
+    }
 
     val readFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -424,16 +631,49 @@ private fun RootfsSelect(
 
             // 需要解压时显示选择按钮
             if (reporter.stage == ProgressStage.NOT_STARTED || reporter.stage == ProgressStage.DONE_FAILURE) {
-                // 如果有自动提取回调，提供自动提取选项
-                if (onAutoExtractStart != null) {
-                    Button({
-                        onAutoExtractStart()
-                        // 触发自动提取的逻辑已经在PrepareScreenImpl中处理
-                    }) { Text("从App内置提取") }
+                // 显示下载提示信息
+                Text(
+                    "请选择一种方式获取Rootfs：",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                // Ubuntu下载按钮
+                if (onDownloadUbuntu != null) {
+                    Button(
+                        onClick = onDownloadUbuntu,
+                        enabled = !isDownloading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isDownloading && downloadType == "ubuntu") "正在下载 Ubuntu..." else "下载 Ubuntu Rootfs")
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                Button({ readFileLauncher.launch(arrayOf("application/x-xz", "application/gzip", "*/*")) })
-                { Text("手动选择") }
+                
+                // Debian下载按钮
+                if (onDownloadDebian != null) {
+                    Button(
+                        onClick = onDownloadDebian,
+                        enabled = !isDownloading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isDownloading && downloadType == "debian") "正在下载 Debian..." else "下载 Debian Rootfs")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    "或手动选择已有的Rootfs压缩包：",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                
+                // 手动选择按钮
+                Button(
+                    onClick = { readFileLauncher.launch(arrayOf("application/x-xz", "application/gzip", "*/*")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("手动选择压缩包") }
             }
             // 解压成功后显示完成按钮
             else if (reporter.stage == ProgressStage.DONE_SUCCESS) {
