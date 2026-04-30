@@ -22,6 +22,9 @@ class ControlElement(
         const val TRACKPAD_MAX_SPEED = 20.0f
         const val TRACKPAD_ACCELERATION_THRESHOLD: Byte = 4
         const val BUTTON_MIN_TIME_TO_KEEP_PRESSED: Short = 300
+        // Long-press repeat delay constants
+        private const val INITIAL_REPEAT_DELAY = 300L    // Initial delay before first repeat
+        private const val REPEAT_INTERVAL = 100L         // Interval between repeats
     }
 
     enum class Type {
@@ -143,12 +146,6 @@ class ControlElement(
     private var repeatRunnable: Runnable? = null
     private var isKeyDownSent = false  // Track if key down event was sent
     private var longPressBindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE)  // Store bindings for repeat
-
-    companion object {
-        // Long-press repeat delay constants
-        private const val INITIAL_REPEAT_DELAY = 300L    // Initial delay before first repeat
-        private const val REPEAT_INTERVAL = 100L         // Interval between repeats
-    }
 
     private fun reset() {
         text = ""
