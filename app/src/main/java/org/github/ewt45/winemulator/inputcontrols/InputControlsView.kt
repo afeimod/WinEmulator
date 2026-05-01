@@ -484,24 +484,6 @@ class InputControlsView(
             // 如果有虚拟按键处理了，返回true
             return buttonPointers.isNotEmpty()
         }
-                        val pointerId = event.getPointerId(i)
-
-                        handled = false
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchUp(pointerId)) {
-                                handled = true
-                            }
-                        }
-
-                        if (!handled) {
-                            touchpadView?.onTouchEvent(event)
-                        }
-                    }
-                }
-            }
-
-            return handled
-        }
         // 当 showTouchscreenControls 为 false 或 profile 为 null 时，不处理触摸事件，让事件传递给下层
         return false
     }
