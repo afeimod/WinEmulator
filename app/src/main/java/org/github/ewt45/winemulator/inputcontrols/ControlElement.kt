@@ -854,8 +854,7 @@ class ControlElement(
                             inputControlsView.handleInputEvent(binding, false, value)
                         }
 
-                        // Update active states
-                        activeDpadStates[i] = state
+                        // Update states
                         states[i] = state
                     }
                 }
