@@ -434,7 +434,6 @@ class InputControlsView(
                         for (element in profile!!.getElements()) {
                             if (element.handleTouchMove(id, x, y)) {
                                 thisPointerHandled = true
-                                handledPointers.add(id)
                                 break
                             }
                         }

@@ -143,13 +143,7 @@ class ControlElement(
 
     // For long-press key repeat (all key types)
     private val repeatHandler = Handler(Looper.getMainLooper())
-    private var repeatRunnable: Runnable? = null
     private var isKeyDownSent = false  // Track if key down event was sent
-    private var longPressBindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE)  // Store bindings for repeat
-
-    // For D_PAD/STICK key repeat
-    private var dpadRepeatRunnable: Runnable? = null
-    private var activeDpadStates: BooleanArray = booleanArrayOf(false, false, false, false)  // Track active D_PAD states
 
     private fun reset() {
         text = ""
@@ -157,41 +151,7 @@ class ControlElement(
         range = null
         scroller = null
         stopKeyRepeat()
-        stopDpadRepeat()
         boundingBoxNeedsUpdate = true
-    }
-
-    /**
-     * Stop D_PAD repeat and reset states
-     */
-    private fun stopDpadRepeat() {
-        dpadRepeatRunnable?.let {
-            repeatHandler.removeCallbacks(it)
-            dpadRepeatRunnable = null
-        }
-        activeDpadStates.fill(false)
-    }
-
-    /**
-     * Start D_PAD key repeat for sustained key press
-     */
-    private fun startDpadRepeat() {
-        stopDpadRepeat()
-
-        dpadRepeatRunnable = object : Runnable {
-            override fun run() {
-                // Resend all active directions to maintain pressed state
-                for (i in 0..3) {
-                    if (activeDpadStates[i]) {
-                        inputControlsView.handleInputEvent(getBindingAt(i), true)
-                    }
-                }
-                // Continue repeating
-                repeatHandler.postDelayed(this, REPEAT_INTERVAL)
-            }
-        }
-        // Start immediately for D_PAD (no initial delay like BUTTON)
-        repeatHandler.post(dpadRepeatRunnable!!)
     }
 
     /**
@@ -731,20 +691,10 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        // Send initial key down event
-                        val binding0 = getBindingAt(0)
-                        val binding1 = getBindingAt(1)
-                        inputControlsView.handleInputEvent(binding0, true)
-                        inputControlsView.handleInputEvent(binding1, true)
+                        // Send key down event (no auto-repeat for BUTTON)
+                        inputControlsView.handleInputEvent(getBindingAt(0), true)
+                        inputControlsView.handleInputEvent(getBindingAt(1), true)
                         isKeyDownSent = true
-
-                        // Store bindings for repeat
-                        longPressBindings = arrayOf(binding0, binding1)
-
-                        // Start key repeat for keyboard keys (not gamepad buttons)
-                        if (!binding0.isGamepad && binding0 != Binding.NONE) {
-                            startKeyRepeat()
-                        }
                     }
                     return true
                 }
@@ -769,38 +719,11 @@ class ControlElement(
     }
 
     /**
-     * Start key repeat for keyboard keys (for long-press support)
-     * Sends periodic key press events to maintain the pressed state
-     */
-    private fun startKeyRepeat() {
-        stopKeyRepeat()
-
-        // Initial delay before starting repeat
-        repeatRunnable = object : Runnable {
-            override fun run() {
-                if (isKeyDownSent && longPressBindings[0] != Binding.NONE) {
-                    // Send key press event to maintain the pressed state
-                    // This keeps the key in "pressed" state without re-triggering key down
-                    if (longPressBindings[0].isKeyboard) {
-                        // For keyboard keys, we send key down again to refresh the held state
-                        inputControlsView.handleInputEvent(longPressBindings[0], true)
-                        inputControlsView.handleInputEvent(longPressBindings[1], true)
-                    }
-                    // Schedule next repeat
-                    repeatHandler.postDelayed(this, REPEAT_INTERVAL)
-                }
-            }
-        }
-        repeatHandler.postDelayed(repeatRunnable!!, INITIAL_REPEAT_DELAY)
-    }
-
-    /**
-     * Stop key repeat
+     * Stop key repeat (cleanup handler)
      */
     private fun stopKeyRepeat() {
-        repeatRunnable?.let {
-            repeatHandler.removeCallbacks(it)
-            repeatRunnable = null
+        repeatHandler?.let {
+            it.removeCallbacksAndMessages(null)
         }
     }
 
@@ -916,32 +839,24 @@ class ControlElement(
                         deltaX <= -DPAD_DEAD_ZONE
                     )
 
-                    // Check if any direction became active
-                    var hasActiveDirection = false
+                    // Continuously send key events for all active directions (every frame, not just on state change)
+                    // This ensures long-press works for WASD-mapped keys
                     for (i in 0..3) {
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
                         val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
 
-                        // Check for state change (new direction activated)
-                        if (state && !states[i]) {
-                            // New direction activated - send key down
-                            inputControlsView.handleInputEvent(binding, true)
-                            hasActiveDirection = true
-                        } else if (!state && states[i]) {
-                            // Direction deactivated - send key up
-                            inputControlsView.handleInputEvent(binding, false)
+                        // Always send key event to maintain pressed state (for long-press support)
+                        if (state) {
+                            inputControlsView.handleInputEvent(binding, true, value)
+                        } else if (states[i]) {
+                            // Only send key up when state changes from active to inactive
+                            inputControlsView.handleInputEvent(binding, false, value)
                         }
 
-                        // Update active states for repeat mechanism
+                        // Update active states
                         activeDpadStates[i] = state
                         states[i] = state
-                    }
-
-                    // Start repeat if any direction is active
-                    if (hasActiveDirection || activeDpadStates.any { it }) {
-                        isKeyDownSent = true
-                        startDpadRepeat()
                     }
                 }
                 else -> {}
@@ -985,13 +900,12 @@ class ControlElement(
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
                     // Stop any repeat timers
-                    stopDpadRepeat()
+                    stopKeyRepeat()
                     isKeyDownSent = false
 
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
-                        activeDpadStates[i] = false
                     }
 
                     if (type == Type.RANGE_BUTTON) {
