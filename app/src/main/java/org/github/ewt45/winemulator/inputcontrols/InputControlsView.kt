@@ -45,9 +45,6 @@ class InputControlsView(
     private val cursor = Point()
     private var pendingProfileReload = false  // 标记是否需要在新尺寸测量后重新加载配置
 
-    // 用于追踪哪些 pointer 被虚拟按键处理（持久化，跨多个触摸事件）
-    private val handledPointers = mutableSetOf<Int>()
-    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private var readyToDraw = false
@@ -399,95 +396,75 @@ class InputControlsView(
         // 非编辑模式下，只有当 showTouchscreenControls 为 true 时才处理触摸事件
         if (!editMode && profile != null && showTouchscreenControls) {
             val actionMasked = event.actionMasked
-            val actionIndex = event.actionIndex
-            val pointerId = event.getPointerId(actionIndex)
 
-            // 用于追踪是否至少有一个 pointer 被虚拟按键处理
-            var anyElementHandled = false
+            // 关键：参考termux项目的逻辑，不追踪pointer，而是让每个事件都被所有虚拟按键检查
+            var handled = false
 
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                    val actionIndex = event.actionIndex
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
+                    val pointerId = event.getPointerId(actionIndex)
 
-                    // 检查这个 pointer 是否已经在处理中（可能是从虚拟按键区域滑到touchpad）
-                    if (pointerId !in handledPointers) {
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchDown(pointerId, x, y)) {
-                                vibrator?.vibrate(vibrationEffect)
-                                handledPointers.add(pointerId)
-                                anyElementHandled = true
-                                break
+                    // 启用左键
+                    touchpadView?.setPointerButtonLeftEnabled(true)
+
+                    for (element in profile!!.getElements()) {
+                        if (element.handleTouchDown(pointerId, x, y)) {
+                            handled = true
+                            // 如果绑定的是鼠标左键，禁用touchpad的左键
+                            if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
+                                touchpadView?.setPointerButtonLeftEnabled(false)
                             }
                         }
                     }
 
-                    // 如果虚拟按键没有处理，让 touchpadView 处理这个 pointer
-                    if (pointerId !in handledPointers) {
+                    // 如果虚拟按键没有处理，让touchpad处理
+                    if (!handled) {
                         touchpadView?.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 处理所有 pointer 的移动事件
+                    // 参考termux：遍历所有pointers，分别处理
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
-                        val id = event.getPointerId(i)
+                        handled = false
 
-                        var thisPointerHandled = false
-                        // 只有已经被虚拟按键处理的 pointer 才传递给 ControlElement
-                        if (id in handledPointers) {
-                            for (element in profile!!.getElements()) {
-                                if (element.handleTouchMove(id, x, y)) {
-                                    thisPointerHandled = true
-                                    break
-                                }
-                            }
-                            // 如果虚拟按键不再处理这个 pointer，从集合中移除
-                            if (!thisPointerHandled) {
-                                handledPointers.remove(id)
+                        for (element in profile!!.getElements()) {
+                            if (element.handleTouchMove(i, x, y)) {
+                                handled = true
                             }
                         }
 
-                        // 如果虚拟按键没有处理，让 touchpadView 处理这个 pointer
-                        if (!thisPointerHandled) {
+                        // 如果虚拟按键没有处理，让touchpad处理
+                        if (!handled) {
                             touchpadView?.onTouchEvent(event)
                         }
                     }
-                    anyElementHandled = handledPointers.isNotEmpty()
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    // 处理所有需要处理的 pointer 的抬起事件
-                    // 对于 ACTION_POINTER_UP，只处理对应的 pointer
-                    // 对于 ACTION_UP 或 ACTION_CANCEL，处理所有 pointer
+                    for (i in 0 until event.pointerCount) {
+                        val x = event.getX(i)
+                        val y = event.getY(i)
+                        val pointerId = event.getPointerId(i)
 
-                    val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
-                        // 获取所有活动的 pointer
-                        (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
-                    } else {
-                        // 只处理当前抬起的 pointer
-                        setOf(pointerId)
-                    }
-
-                    for (id in pointersToHandle) {
+                        handled = false
                         for (element in profile!!.getElements()) {
-                            if (element.handleTouchUp(id)) {
-                                anyElementHandled = true
+                            if (element.handleTouchUp(pointerId)) {
+                                handled = true
                             }
                         }
-                        // 从 handledPointers 中移除
-                        handledPointers.remove(id)
-                    }
 
-                    // 如果虚拟按键没有处理，让 touchpadView 处理
-                    if (pointerId !in handledPointers) {
-                        touchpadView?.onTouchEvent(event)
+                        if (!handled) {
+                            touchpadView?.onTouchEvent(event)
+                        }
                     }
                 }
             }
 
-            // 返回是否至少有一个 pointer 被虚拟按键处理
-            return anyElementHandled
+            return handled
         }
         // 当 showTouchscreenControls 为 false 或 profile 为 null 时，不处理触摸事件，让事件传递给下层
         return false
