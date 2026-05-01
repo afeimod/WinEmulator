@@ -45,6 +45,9 @@ class InputControlsView(
     private val cursor = Point()
     private var pendingProfileReload = false  // 标记是否需要在新尺寸测量后重新加载配置
 
+    // 追踪哪些pointer被虚拟按键处理（跨事件持久化）
+    private val buttonPointers = mutableSetOf<Int>()
+    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private var readyToDraw = false
@@ -397,9 +400,6 @@ class InputControlsView(
         if (!editMode && profile != null && showTouchscreenControls) {
             val actionMasked = event.actionMasked
 
-            // 关键：参考termux项目的逻辑，不追踪pointer，而是让每个事件都被所有虚拟按键检查
-            var handled = false
-
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                     val actionIndex = event.actionIndex
@@ -410,9 +410,12 @@ class InputControlsView(
                     // 启用左键
                     touchpadView?.setPointerButtonLeftEnabled(true)
 
+                    // 遍历虚拟按键检查这个down位置
+                    var downHandled = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
-                            handled = true
+                            downHandled = true
+                            buttonPointers.add(pointerId)  // 追踪这个pointer
                             // 如果绑定的是鼠标左键，禁用touchpad的左键
                             if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
                                 touchpadView?.setPointerButtonLeftEnabled(false)
@@ -420,34 +423,67 @@ class InputControlsView(
                         }
                     }
 
-                    // 如果虚拟按键没有处理，让touchpad处理
-                    if (!handled) {
+                    // 如果没有被虚拟按键处理，传递给touchpad
+                    if (!downHandled) {
                         touchpadView?.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 参考termux：遍历所有pointers，分别处理
+                    // 遍历所有pointers，分别处理
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
-                        handled = false
+                        val pointerId = event.getPointerId(i)
+                        var thisHandled = false
 
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchMove(i, x, y)) {
-                                handled = true
+                        // 只有被追踪的pointer才传递给虚拟按键处理
+                        if (pointerId in buttonPointers) {
+                            for (element in profile!!.getElements()) {
+                                if (element.handleTouchMove(i, x, y)) {
+                                    thisHandled = true
+                                    break
+                                }
+                            }
+                            // 如果这个pointer不再被虚拟按键处理，从追踪中移除
+                            if (!thisHandled) {
+                                buttonPointers.remove(pointerId)
                             }
                         }
 
-                        // 如果虚拟按键没有处理，让touchpad处理
-                        if (!handled) {
+                        // 传递给touchpad（对于未追踪的，或者虚拟按键不处理的）
+                        if (!thisHandled) {
                             touchpadView?.onTouchEvent(event)
                         }
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    for (i in 0 until event.pointerCount) {
-                        val x = event.getX(i)
-                        val y = event.getY(i)
+                    // 处理所有pointers
+                    val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
+                        // 获取所有活动的pointer
+                        (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
+                    } else {
+                        setOf(event.getPointerId(event.actionIndex))
+                    }
+
+                    for (pointerId in pointersToHandle) {
+                        var upHandled = false
+                        for (element in profile!!.getElements()) {
+                            if (element.handleTouchUp(pointerId)) {
+                                upHandled = true
+                            }
+                        }
+                        // 从追踪中移除
+                        buttonPointers.remove(pointerId)
+                    }
+
+                    // 传递给touchpad
+                    touchpadView?.onTouchEvent(event)
+                }
+            }
+
+            // 如果有虚拟按键处理了，返回true
+            return buttonPointers.isNotEmpty()
+        }
                         val pointerId = event.getPointerId(i)
 
                         handled = false
