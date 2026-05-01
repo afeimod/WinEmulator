@@ -415,13 +415,13 @@ class InputControlsView(
                     }
 
                     if (!handled) {
-                        // 让 touchpadView 处理（如果存在），但不一定消费事件
-                        touchpadView?.onTouchEvent(event)
+                        // Register as touchpad pointer instead of forwarding full MotionEvent
+                        touchpadPointers.add(pointerId)
+                        touchpadLastPositions[pointerId] = PointF(x, y)
+                        handled = true
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    var hasUnhandledPointer = false
-
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
@@ -436,14 +436,18 @@ class InputControlsView(
                             }
                         }
 
-                        if (!pointerHandled) {
-                            hasUnhandledPointer = true
+                        if (!pointerHandled && touchpadPointers.contains(id)) {
+                            val last = touchpadLastPositions[id]
+                            if (last != null) {
+                                val dx = x - last.x
+                                val dy = y - last.y
+                                if (dx != 0f || dy != 0f) {
+                                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                                }
+                            }
+                            touchpadLastPositions[id] = PointF(x, y)
+                            handled = true
                         }
-                    }
-
-                    // Allow free-look / camera drag even while another finger holds buttons.
-                    if (hasUnhandledPointer) {
-                        touchpadView?.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
@@ -453,8 +457,10 @@ class InputControlsView(
                         }
                     }
 
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
+                    if (touchpadPointers.contains(pointerId)) {
+                        touchpadPointers.remove(pointerId)
+                        touchpadLastPositions.remove(pointerId)
+                        handled = true
                     }
                 }
             }
