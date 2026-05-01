@@ -1,6 +1,8 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
@@ -20,6 +22,9 @@ class ControlElement(
         const val TRACKPAD_MAX_SPEED = 20.0f
         const val TRACKPAD_ACCELERATION_THRESHOLD: Byte = 4
         const val BUTTON_MIN_TIME_TO_KEEP_PRESSED: Short = 300
+        // Long-press repeat delay constants
+        private const val INITIAL_REPEAT_DELAY = 300L    // Initial delay before first repeat
+        private const val REPEAT_INTERVAL = 100L         // Interval between repeats
     }
 
     enum class Type {
@@ -136,12 +141,57 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
+    // For long-press key repeat (all key types)
+    private val repeatHandler = Handler(Looper.getMainLooper())
+    private var repeatRunnable: Runnable? = null
+    private var isKeyDownSent = false  // Track if key down event was sent
+    private var longPressBindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE)  // Store bindings for repeat
+
+    // For D_PAD/STICK key repeat
+    private var dpadRepeatRunnable: Runnable? = null
+    private var activeDpadStates: BooleanArray = booleanArrayOf(false, false, false, false)  // Track active D_PAD states
+
     private fun reset() {
         text = ""
         iconId = 0
         range = null
         scroller = null
+        stopKeyRepeat()
+        stopDpadRepeat()
         boundingBoxNeedsUpdate = true
+    }
+
+    /**
+     * Stop D_PAD repeat and reset states
+     */
+    private fun stopDpadRepeat() {
+        dpadRepeatRunnable?.let {
+            repeatHandler.removeCallbacks(it)
+            dpadRepeatRunnable = null
+        }
+        activeDpadStates.fill(false)
+    }
+
+    /**
+     * Start D_PAD key repeat for sustained key press
+     */
+    private fun startDpadRepeat() {
+        stopDpadRepeat()
+
+        dpadRepeatRunnable = object : Runnable {
+            override fun run() {
+                // Resend all active directions to maintain pressed state
+                for (i in 0..3) {
+                    if (activeDpadStates[i]) {
+                        inputControlsView.handleInputEvent(getBindingAt(i), true)
+                    }
+                }
+                // Continue repeating
+                repeatHandler.postDelayed(this, REPEAT_INTERVAL)
+            }
+        }
+        // Start immediately for D_PAD (no initial delay like BUTTON)
+        repeatHandler.post(dpadRepeatRunnable!!)
     }
 
     /**
@@ -681,8 +731,20 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        inputControlsView.handleInputEvent(getBindingAt(0), true)
-                        inputControlsView.handleInputEvent(getBindingAt(1), true)
+                        // Send initial key down event
+                        val binding0 = getBindingAt(0)
+                        val binding1 = getBindingAt(1)
+                        inputControlsView.handleInputEvent(binding0, true)
+                        inputControlsView.handleInputEvent(binding1, true)
+                        isKeyDownSent = true
+
+                        // Store bindings for repeat
+                        longPressBindings = arrayOf(binding0, binding1)
+
+                        // Start key repeat for keyboard keys (not gamepad buttons)
+                        if (!binding0.isGamepad && binding0 != Binding.NONE) {
+                            startKeyRepeat()
+                        }
                     }
                     return true
                 }
@@ -704,6 +766,42 @@ class ControlElement(
             }
         }
         return false
+    }
+
+    /**
+     * Start key repeat for keyboard keys (for long-press support)
+     * Sends periodic key press events to maintain the pressed state
+     */
+    private fun startKeyRepeat() {
+        stopKeyRepeat()
+
+        // Initial delay before starting repeat
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                if (isKeyDownSent && longPressBindings[0] != Binding.NONE) {
+                    // Send key press event to maintain the pressed state
+                    // This keeps the key in "pressed" state without re-triggering key down
+                    if (longPressBindings[0].isKeyboard) {
+                        // For keyboard keys, we send key down again to refresh the held state
+                        inputControlsView.handleInputEvent(longPressBindings[0], true)
+                        inputControlsView.handleInputEvent(longPressBindings[1], true)
+                    }
+                    // Schedule next repeat
+                    repeatHandler.postDelayed(this, REPEAT_INTERVAL)
+                }
+            }
+        }
+        repeatHandler.postDelayed(repeatRunnable!!, INITIAL_REPEAT_DELAY)
+    }
+
+    /**
+     * Stop key repeat
+     */
+    private fun stopKeyRepeat() {
+        repeatRunnable?.let {
+            repeatHandler.removeCallbacks(it)
+            repeatRunnable = null
+        }
     }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
@@ -818,20 +916,32 @@ class ControlElement(
                         deltaX <= -DPAD_DEAD_ZONE
                     )
 
+                    // Check if any direction became active
+                    var hasActiveDirection = false
                     for (i in 0..3) {
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
                         val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
 
-                        // Only emit keyboard/button transitions once to preserve held-state.
-                        // Mouse movement bindings still stream continuously.
-                        if (binding.isMouseMove()) {
-                            inputControlsView.handleInputEvent(binding, state, value)
-                        } else if (states[i] != state) {
-                            inputControlsView.handleInputEvent(binding, state, value)
+                        // Check for state change (new direction activated)
+                        if (state && !states[i]) {
+                            // New direction activated - send key down
+                            inputControlsView.handleInputEvent(binding, true)
+                            hasActiveDirection = true
+                        } else if (!state && states[i]) {
+                            // Direction deactivated - send key up
+                            inputControlsView.handleInputEvent(binding, false)
                         }
 
+                        // Update active states for repeat mechanism
+                        activeDpadStates[i] = state
                         states[i] = state
+                    }
+
+                    // Start repeat if any direction is active
+                    if (hasActiveDirection || activeDpadStates.any { it }) {
+                        isKeyDownSent = true
+                        startDpadRepeat()
                     }
                 }
                 else -> {}
@@ -849,15 +959,21 @@ class ControlElement(
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
+                    // Stop key repeat first
+                    stopKeyRepeat()
+                    isKeyDownSent = false
+
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
+                            // Send key up event for both bindings
                             inputControlsView.handleInputEvent(getBindingAt(0), false)
                             inputControlsView.handleInputEvent(getBindingAt(1), false)
                         }
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
+                        // Send key up event for both bindings
                         inputControlsView.handleInputEvent(getBindingAt(0), false)
                         inputControlsView.handleInputEvent(getBindingAt(1), false)
                     }
@@ -868,9 +984,14 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
+                    // Stop any repeat timers
+                    stopDpadRepeat()
+                    isKeyDownSent = false
+
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
+                        activeDpadStates[i] = false
                     }
 
                     if (type == Type.RANGE_BUTTON) {
