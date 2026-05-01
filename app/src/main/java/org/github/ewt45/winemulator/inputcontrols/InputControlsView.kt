@@ -45,6 +45,9 @@ class InputControlsView(
     private val cursor = Point()
     private var pendingProfileReload = false  // 标记是否需要在新尺寸测量后重新加载配置
 
+    // 用于追踪哪些 pointer 被虚拟按键处理（持久化，跨多个触摸事件）
+    private val handledPointers = mutableSetOf<Int>()
+    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private var readyToDraw = false
@@ -399,22 +402,23 @@ class InputControlsView(
             val actionIndex = event.actionIndex
             val pointerId = event.getPointerId(actionIndex)
 
-            // 用于追踪是否所有 pointer 都被虚拟按键处理了
+            // 用于追踪是否至少有一个 pointer 被虚拟按键处理
             var anyElementHandled = false
-            // 用于追踪哪些 pointer 被虚拟按键处理了
-            val handledPointers = mutableSetOf<Int>()
 
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
 
-                    for (element in profile!!.getElements()) {
-                        if (element.handleTouchDown(pointerId, x, y)) {
-                            vibrator?.vibrate(vibrationEffect)
-                            handledPointers.add(pointerId)
-                            anyElementHandled = true
-                            break
+                    // 检查这个 pointer 是否已经在处理中（可能是从虚拟按键区域滑到touchpad）
+                    if (pointerId !in handledPointers) {
+                        for (element in profile!!.getElements()) {
+                            if (element.handleTouchDown(pointerId, x, y)) {
+                                vibrator?.vibrate(vibrationEffect)
+                                handledPointers.add(pointerId)
+                                anyElementHandled = true
+                                break
+                            }
                         }
                     }
 
@@ -431,10 +435,17 @@ class InputControlsView(
                         val id = event.getPointerId(i)
 
                         var thisPointerHandled = false
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchMove(id, x, y)) {
-                                thisPointerHandled = true
-                                break
+                        // 只有已经被虚拟按键处理的 pointer 才传递给 ControlElement
+                        if (id in handledPointers) {
+                            for (element in profile!!.getElements()) {
+                                if (element.handleTouchMove(id, x, y)) {
+                                    thisPointerHandled = true
+                                    break
+                                }
+                            }
+                            // 如果虚拟按键不再处理这个 pointer，从集合中移除
+                            if (!thisPointerHandled) {
+                                handledPointers.remove(id)
                             }
                         }
 
@@ -461,10 +472,11 @@ class InputControlsView(
                     for (id in pointersToHandle) {
                         for (element in profile!!.getElements()) {
                             if (element.handleTouchUp(id)) {
-                                handledPointers.add(id)
                                 anyElementHandled = true
                             }
                         }
+                        // 从 handledPointers 中移除
+                        handledPointers.remove(id)
                     }
 
                     // 如果虚拟按键没有处理，让 touchpadView 处理
