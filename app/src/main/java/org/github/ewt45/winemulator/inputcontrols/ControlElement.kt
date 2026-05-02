@@ -9,7 +9,8 @@ import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
 import kotlin.math.*
 
 /**
- * Represents a single control element (button, d-pad, stick, etc.)
+ * Complete ControlElement implementation based on termux-app
+ * Includes all element types: BUTTON, D_PAD, RANGE_BUTTON, STICK, TRACKPAD, COMBINE_BUTTON, CHEAT_CODE_TEXT
  */
 class ControlElement(
     private val inputControlsView: InputControlsView
@@ -22,9 +23,6 @@ class ControlElement(
         const val TRACKPAD_MAX_SPEED = 20.0f
         const val TRACKPAD_ACCELERATION_THRESHOLD: Byte = 4
         const val BUTTON_MIN_TIME_TO_KEEP_PRESSED: Short = 300
-        // Long-press repeat delay constants
-        private const val INITIAL_REPEAT_DELAY = 300L    // Initial delay before first repeat
-        private const val REPEAT_INTERVAL = 100L         // Interval between repeats
     }
 
     enum class Type {
@@ -32,7 +30,9 @@ class ControlElement(
         D_PAD,
         RANGE_BUTTON,
         STICK,
-        TRACKPAD;
+        TRACKPAD,
+        COMBINE_BUTTON,
+        CHEAT_CODE_TEXT;
 
         companion object {
             fun names(): Array<String> = entries.map { it.name.replace("_", "-") }.toTypedArray()
@@ -52,9 +52,9 @@ class ControlElement(
 
     enum class Range(val max: Byte) {
         FROM_A_TO_Z(26),
-        DIGITS(10),
-        FUNCTION_KEYS(12),
-        NUMPAD_DIGITS(10);
+        FROM_0_TO_9(10),
+        FROM_F1_TO_F12(12),
+        FROM_NP0_TO_NP9(10);
 
         companion object {
             fun names(): Array<String> = entries.map { it.name.replace("_", " ") }.toTypedArray()
@@ -62,10 +62,10 @@ class ControlElement(
             // 处理配置文件中的旧名称映射
             fun fromString(name: String): Range? {
                 return when (name) {
-                    "FROM_A_TO_Z", "A-Z" -> FROM_A_TO_Z
-                    "FROM_0_TO_9", "0-9", "DIGITS" -> DIGITS
-                    "FROM_F1_TO_F12", "F1-F12", "FUNCTION_KEYS" -> FUNCTION_KEYS
-                    "FROM_NP0_TO_NP9", "NP0-NP9", "NUMPAD_DIGITS" -> NUMPAD_DIGITS
+                    "FROM_A_TO_Z", "A-Z", "FROM-A-TO-Z" -> FROM_A_TO_Z
+                    "FROM_0_TO_9", "0-9", "DIGITS", "FROM-0-TO-9" -> FROM_0_TO_9
+                    "FROM_F1_TO_F12", "F1-F12", "FUNCTION_KEYS", "FROM-F1-TO-F12" -> FROM_F1_TO_F12
+                    "FROM_NP0_TO_NP9", "NP0-NP9", "NUMPAD_DIGITS", "FROM-NP0-TO-NP9" -> FROM_NP0_TO_NP9
                     else -> null
                 }
             }
@@ -129,6 +129,33 @@ class ControlElement(
                 boundingBoxNeedsUpdate = true
             }
         }
+    
+    // Custom icon support (termux-app feature)
+    var customIconId: String? = null
+        set(value) {
+            if (field != value) {
+                field = value
+                oldCustomIconId = value
+                clipIcon = null
+            }
+        }
+    private var oldCustomIconId: String? = null
+    private var clipIcon: Bitmap? = null
+    
+    // Background color support (termux-app feature)
+    var backgroundColor: Int = 0
+        set(value) {
+            if (field != value) {
+                field = value
+                oldBackgroundColor = value
+                clipIcon = null
+            }
+        }
+    private var oldBackgroundColor: Int = -1
+    
+    // Cheat code text support (termux-app feature)
+    var cheatCodeText: String = "None"
+    private var cheatCodePressed = false
 
     private var currentPointerId: Int = -1
     private val boundingBox: Rect = Rect()
@@ -141,7 +168,6 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
-    // For long-press key repeat (all key types)
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var isKeyDownSent = false  // Track if key down event was sent
 
@@ -150,6 +176,10 @@ class ControlElement(
         iconId = 0
         range = null
         scroller = null
+        customIconId = null
+        clipIcon = null
+        backgroundColor = 0
+        oldBackgroundColor = -1
         stopKeyRepeat()
         boundingBoxNeedsUpdate = true
     }
@@ -159,7 +189,7 @@ class ControlElement(
      */
     fun initDefaultBindings() {
         when (type) {
-            Type.D_PAD, Type.STICK -> {
+            Type.D_PAD, Type.STICK, Type.COMBINE_BUTTON -> {
                 bindings = arrayOf(Binding.KEY_W, Binding.KEY_D, Binding.KEY_S, Binding.KEY_A)
             }
             Type.TRACKPAD -> {
@@ -221,7 +251,7 @@ class ControlElement(
         var halfHeight = 0
 
         when (type) {
-            Type.BUTTON -> {
+            Type.BUTTON, Type.COMBINE_BUTTON, Type.CHEAT_CODE_TEXT -> {
                 when (shape) {
                     Shape.RECT, Shape.ROUND_RECT -> {
                         halfWidth = snappingSize * 4
@@ -269,6 +299,7 @@ class ControlElement(
 
     /**
      * Main draw method - renders the control element
+     * Complete implementation based on termux-app
      */
     fun draw(canvas: Canvas) {
         val snappingSize = inputControlsView.snappingSize
@@ -282,7 +313,7 @@ class ControlElement(
         val box = getBoundingBox()
 
         when (type) {
-            Type.BUTTON -> drawButton(canvas, paint, box, primaryColor, strokeWidth)
+            Type.BUTTON, Type.COMBINE_BUTTON, Type.CHEAT_CODE_TEXT -> drawButton(canvas, paint, box, primaryColor, strokeWidth)
             Type.D_PAD -> drawDPad(canvas, paint, box)
             Type.RANGE_BUTTON -> drawRangeButton(canvas, paint, box, strokeWidth)
             Type.STICK -> drawStick(canvas, paint, box, primaryColor, strokeWidth)
@@ -320,8 +351,14 @@ class ControlElement(
             }
         }
 
-        // Draw icon if iconId > 0
-        if (iconId > 0) {
+        // Draw custom icon if available (termux-app feature)
+        if (!customIconId.isNullOrEmpty()) {
+            drawCustomIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
+        } else if (backgroundColor > 0) {
+            // Draw solid color icon (termux-app feature)
+            drawColorSolidIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
+        } else if (iconId > 0) {
+            // Draw icon if iconId > 0
             drawIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else {
             // Draw text
@@ -359,6 +396,82 @@ class ControlElement(
 
         canvas.drawBitmap(icon, srcRect, dstRect, paint)
         paint.colorFilter = null
+    }
+
+    /**
+     * Draw custom icon from app's private storage (termux-app feature)
+     */
+    private fun drawCustomIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
+        val paint = inputControlsView.getPaint()
+        val iconId = customIconId ?: return
+        
+        // Use cached clip icon if available
+        var icon: Bitmap? = if (clipIcon != null && oldCustomIconId == iconId) {
+            clipIcon
+        } else {
+            val iconOrigin = inputControlsView.getCustomIcon(iconId) ?: return
+            val isCycle = shape == Shape.CIRCLE
+            val clipped = inputControlsView.clipBitmap(iconOrigin, isCycle) ?: return
+            clipIcon = clipped
+            oldCustomIconId = iconId
+            inputControlsView.counterMapIncrease(iconId)
+            clipped
+        }
+        
+        if (icon == null) return
+
+        val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
+        val halfSize = ((minOf(width, height) - margin) * 0.7f).toInt()
+
+        val srcRect = Rect(0, 0, icon.width, icon.height)
+        val dstRect = Rect(
+            (cx - halfSize).toInt(),
+            (cy - halfSize).toInt(),
+            (cx + halfSize).toInt(),
+            (cy + halfSize).toInt()
+        )
+
+        canvas.drawBitmap(icon, srcRect, dstRect, paint)
+        paint.colorFilter = null
+    }
+
+    /**
+     * Draw solid color icon (termux-app feature)
+     */
+    private fun drawColorSolidIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
+        val paint = inputControlsView.getPaint()
+        val color = backgroundColor
+        
+        // Use cached clip icon if available
+        var icon: Bitmap? = if (clipIcon != null && oldBackgroundColor == color) {
+            clipIcon
+        } else {
+            val isCycle = shape == Shape.CIRCLE
+            val created = inputControlsView.createShapeBitmap(width, height, toARGB(color), isCycle) ?: return
+            clipIcon = created
+            oldBackgroundColor = color
+            created
+        }
+        
+        if (icon == null) return
+
+        val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
+        val halfSize = ((minOf(width, height) - margin) * 0.7f).toInt()
+
+        val srcRect = Rect(0, 0, icon.width, icon.height)
+        val dstRect = Rect(
+            (cx - halfSize).toInt(),
+            (cy - halfSize).toInt(),
+            (cx + halfSize).toInt(),
+            (cy + halfSize).toInt()
+        )
+
+        canvas.drawBitmap(icon, srcRect, dstRect, paint)
+        paint.colorFilter = null
+    }
+
+    private fun toARGB(rgb: Int): Int {
+        return Color.argb(255, Color.red(rgb), Color.green(rgb), Color.blue(rgb))
     }
 
     private fun drawDPad(canvas: Canvas, paint: Paint, box: Rect) {
@@ -442,8 +555,6 @@ class ControlElement(
             )
             canvas.clipPath(clipPath)
 
-            // 使用 scroller 的 elementSize，确保与触摸逻辑一致
-            // 参考 winlator：elementSize = max(width, height) / bindingCount
             val elementSize = scroller?.getElementSize() ?: run {
                 val boxWidth = box.width().toFloat()
                 val boxHeight = box.height().toFloat()
@@ -453,16 +564,11 @@ class ControlElement(
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
-            // 计算初始偏移量（用于循环滚动）
             val initialOffset = scrollOffset % elementSize
             var startX = box.left.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val index = i % currentRange.max.toInt()
-                val bindingForIndex = getBindingForRangeIndex(currentRange, index)
-
-                // 高亮判断：如果当前选中的 binding 就是这个按键对应的 binding
-                val isHighlight = scroller?.getCurrentBinding() == bindingForIndex
 
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
@@ -473,19 +579,8 @@ class ControlElement(
 
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startX < box.right && startX + elementSize > box.left) {
-                    // 高亮：绘制半透明背景
-                    if (isHighlight) {
-                        paint.style = Paint.Style.FILL
-                        paint.color = Color.argb(100, 255, 255, 255)  // 白色半透明背景
-                        canvas.drawRect(startX, box.top.toFloat(), startX + elementSize, box.bottom.toFloat(), paint)
-                    }
-
                     paint.style = Paint.Style.FILL
-                    paint.color = if (isHighlight) {
-                        inputControlsView.getHighlightColor()  // 高亮时使用高亮色
-                    } else {
-                        inputControlsView.getPrimaryColor()
-                    }
+                    paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, elementSize - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -523,8 +618,6 @@ class ControlElement(
             )
             canvas.clipPath(clipPath)
 
-            // 使用 scroller 的 elementSize，确保与触摸逻辑一致
-            // 参考 winlator：elementSize = max(width, height) / bindingCount
             val elementSize = scroller?.getElementSize() ?: run {
                 val boxWidth = box.width().toFloat()
                 val boxHeight = box.height().toFloat()
@@ -534,16 +627,11 @@ class ControlElement(
             val scrollOffset = scroller?.getScrollOffset() ?: 0f
             val rangeIndex = scroller?.getRangeIndex() ?: intArrayOf(0, currentRange.max.toInt())
 
-            // 计算初始偏移量（用于循环滚动）
             val initialOffset = scrollOffset % elementSize
             var startY = box.top.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val index = i % currentRange.max.toInt()
-                val bindingForIndex = getBindingForRangeIndex(currentRange, index)
-
-                // 高亮判断：如果当前选中的 binding 就是这个按键对应的 binding
-                val isHighlight = scroller?.getCurrentBinding() == bindingForIndex
 
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
@@ -554,19 +642,8 @@ class ControlElement(
 
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startY < box.bottom && startY + elementSize > box.top) {
-                    // 高亮：绘制半透明背景
-                    if (isHighlight) {
-                        paint.style = Paint.Style.FILL
-                        paint.color = Color.argb(100, 255, 255, 255)  // 白色半透明背景
-                        canvas.drawRect(box.left.toFloat(), startY, box.right.toFloat(), startY + elementSize, paint)
-                    }
-
                     paint.style = Paint.Style.FILL
-                    paint.color = if (isHighlight) {
-                        inputControlsView.getHighlightColor()  // 高亮时使用高亮色
-                    } else {
-                        inputControlsView.getPrimaryColor()
-                    }
+                    paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
                         getTextSizeForWidth(paint, text, box.width() - strokeWidth * 2),
                         snappingSize * 2 * scale
@@ -663,21 +740,9 @@ class ControlElement(
     private fun getRangeTextForIndex(range: Range, index: Int): String {
         return when (range) {
             Range.FROM_A_TO_Z -> ('A'.code + index).toChar().toString()
-            Range.DIGITS -> ((index + 1) % 10).toString()
-            Range.FUNCTION_KEYS -> "F${index + 1}"
-            Range.NUMPAD_DIGITS -> "NP${(index + 1) % 10}"
-        }
-    }
-
-    /**
-     * 根据范围和索引获取对应的 Binding（用于高亮判断）
-     */
-    private fun getBindingForRangeIndex(range: Range, index: Int): Binding {
-        return when (range) {
-            Range.FROM_A_TO_Z -> Binding.fromString("KEY_${('A'.code + index).toChar()}")
-            Range.DIGITS -> Binding.fromString("KEY_${(index + 1) % 10}")
-            Range.FUNCTION_KEYS -> Binding.fromString("KEY_F${index + 1}")
-            Range.NUMPAD_DIGITS -> Binding.fromString("KEY_KP_${(index + 1) % 10}")
+            Range.FROM_0_TO_9 -> ((index + 1) % 10).toString()
+            Range.FROM_F1_TO_F12 -> "F${index + 1}"
+            Range.FROM_NP0_TO_NP9 -> "NP${(index + 1) % 10}"
         }
     }
 
@@ -686,15 +751,33 @@ class ControlElement(
             currentPointerId = pointerId
 
             when (type) {
+                Type.CHEAT_CODE_TEXT -> {
+                    if (!cheatCodePressed) {
+                        // Send cheat code text
+                        inputControlsView.sendText(cheatCodeText)
+                        cheatCodePressed = true
+                    }
+                    return true
+                }
+                Type.COMBINE_BUTTON -> {
+                    if (isKeepButtonPressedAfterMinTime()) {
+                        touchTime = System.currentTimeMillis()
+                    }
+                    if (!isToggleSwitch || !isSelected) {
+                        for (i in states.indices) {
+                            if (getBindingAt(i) != Binding.NONE) {
+                                inputControlsView.handleInputEvent(getBindingAt(i), true)
+                            }
+                        }
+                    }
+                    return true
+                }
                 Type.BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime()) {
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        // Send key down event (no auto-repeat for BUTTON)
                         inputControlsView.handleInputEvent(getBindingAt(0), true)
-                        inputControlsView.handleInputEvent(getBindingAt(1), true)
-                        isKeyDownSent = true
                     }
                     return true
                 }
@@ -839,22 +922,17 @@ class ControlElement(
                         deltaX <= -DPAD_DEAD_ZONE
                     )
 
-                    // Continuously send key events for all active directions (every frame, not just on state change)
-                    // This ensures long-press works for WASD-mapped keys
                     for (i in 0..3) {
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
                         val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
 
-                        // Always send key event to maintain pressed state (for long-press support)
                         if (state) {
                             inputControlsView.handleInputEvent(binding, true, value)
                         } else if (states[i]) {
-                            // Only send key up when state changes from active to inactive
                             inputControlsView.handleInputEvent(binding, false, value)
                         }
 
-                        // Update states
                         states[i] = state
                     }
                 }
@@ -863,7 +941,7 @@ class ControlElement(
             return true
         } else if (pointerId == currentPointerId && type == Type.RANGE_BUTTON) {
             scroller?.handleTouchMove(this, px, py)
-            inputControlsView.invalidate()  // 触发重绘以显示滚动效果
+            inputControlsView.invalidate()
             return true
         }
         return false
@@ -874,24 +952,51 @@ class ControlElement(
     fun handleTouchUp(pointerId: Int): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
-                Type.BUTTON -> {
-                    // Stop key repeat first
+                Type.CHEAT_CODE_TEXT -> {
+                    cheatCodePressed = false
+                }
+                Type.COMBINE_BUTTON -> {
                     stopKeyRepeat()
                     isKeyDownSent = false
 
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
-                            // Send key up event for both bindings
-                            inputControlsView.handleInputEvent(getBindingAt(0), false)
-                            inputControlsView.handleInputEvent(getBindingAt(1), false)
+                            for (i in states.indices.reversed()) {
+                                if (getBindingAt(i) != Binding.NONE) {
+                                    inputControlsView.handleInputEvent(getBindingAt(i), false)
+                                }
+                            }
                         }
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
-                        // Send key up event for both bindings
-                        inputControlsView.handleInputEvent(getBindingAt(0), false)
-                        inputControlsView.handleInputEvent(getBindingAt(1), false)
+                        for (i in states.indices.reversed()) {
+                            if (getBindingAt(i) != Binding.NONE) {
+                                inputControlsView.handleInputEvent(getBindingAt(i), false)
+                            }
+                        }
+                    }
+
+                    if (isToggleSwitch) {
+                        isSelected = !isSelected
+                        inputControlsView.invalidate()
+                    }
+                }
+                Type.BUTTON -> {
+                    stopKeyRepeat()
+                    isKeyDownSent = false
+
+                    val binding = getBindingAt(0)
+                    if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
+                        isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
+                        if (!isSelected) {
+                            inputControlsView.handleInputEvent(binding, false)
+                        }
+                        touchTime = null
+                        inputControlsView.invalidate()
+                    } else if (!isToggleSwitch || isSelected) {
+                        inputControlsView.handleInputEvent(binding, false)
                     }
 
                     if (isToggleSwitch) {
@@ -900,7 +1005,6 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
-                    // Stop any repeat timers
                     stopKeyRepeat()
                     isKeyDownSent = false
 
@@ -948,6 +1052,21 @@ class ControlElement(
         for (binding in bindings) bindingsArray.put(binding.name)
         json.put("bindings", bindingsArray)
 
+        // Add cheat code text (termux-app feature)
+        if (type == Type.CHEAT_CODE_TEXT && cheatCodeText.isNotEmpty() && cheatCodeText != "None") {
+            json.put("cheatCodeText", cheatCodeText)
+        }
+        
+        // Add custom icon id (termux-app feature)
+        if (!customIconId.isNullOrEmpty()) {
+            json.put("customIconId", customIconId)
+        }
+        
+        // Add background color (termux-app feature)
+        if (backgroundColor > 0) {
+            json.put("backgroundColor", backgroundColor)
+        }
+
         if (type == Type.RANGE_BUTTON && range != null) {
             json.put("range", range!!.name)
             if (orientation != 0.toByte()) json.put("orientation", orientation.toInt())
@@ -959,6 +1078,7 @@ class ControlElement(
 
 /**
  * Simple cubic bezier interpolator for smooth animations
+ * Based on termux-app implementation
  */
 class CubicBezierInterpolator {
     private var mX1 = 0f

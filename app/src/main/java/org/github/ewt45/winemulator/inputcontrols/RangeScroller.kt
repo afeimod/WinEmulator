@@ -1,10 +1,12 @@
 package org.github.ewt45.winemulator.inputcontrols
 
-import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
+import android.graphics.Rect
+import java.util.Timer
+import java.util.TimerTask
 
 /**
  * Handles scrolling for range button elements
- * 完全参考 winlator 实现，确保滚动和按键输出正确
+ * 完全从 termux-app 移植，确保滚动和按键输出正确
  */
 class RangeScroller(
     private val inputControlsView: InputControlsView,
@@ -17,20 +19,15 @@ class RangeScroller(
     private var binding: Binding = Binding.NONE
     private var isActionDown: Boolean = false
     private var isScrolling: Boolean = false
-
-    companion object {
-        // 参考 winlator TouchpadView 的常量定义
-        private const val MAX_TAP_MILLISECONDS: Long = 200
-        private const val MAX_TAP_TRAVEL_DISTANCE: Float = 10f
-    }
+    private var timer: Timer? = null
 
     /**
      * 获取单个元素的大小
-     * 完全参考 winlator 实现：基于 boundingBox 大小除以 bindingCount
+     * 基于 boundingBox 大小除以 bindingCount
      */
     fun getElementSize(): Float {
-        val boundingBox = element.getBoundingBox()
-        return maxOf(boundingBox.width(), boundingBox.height()).toFloat() / element.getBindingCount()
+        val boundingBox = element.boundingBox
+        return maxOf(boundingBox.width(), boundingBox.height()).toFloat() / element.bindingCount
     }
 
     /**
@@ -42,39 +39,28 @@ class RangeScroller(
 
     fun getScrollOffset(): Float = scrollOffset
 
-    fun setScrollOffset(offset: Float) {
-        scrollOffset = offset
-    }
-
-    /**
-     * 获取当前选中的按键（用于高亮显示）
-     */
-    fun getCurrentBinding(): Binding = binding
-
     /**
      * 获取可见范围索引 [from, to]
-     * 完全参考 winlator 实现
      */
     fun getRangeIndex(): IntArray {
-        val range = element.range ?: Range.FROM_A_TO_Z
+        val range = element.range ?: ControlElement.Range.FROM_A_TO_Z
         val elementSize = getElementSize()
         
         // 基于 scrollOffset 计算起始索引
         var from = kotlin.math.floor((scrollOffset / elementSize) % range.max).toInt()
         if (from < 0) from = range.max.toInt() + from
         
-        val to = from + element.getBindingCount() + 1
+        val to = from + element.bindingCount + 1
         
         return intArrayOf(from, to)
     }
 
     /**
      * 根据触摸位置获取对应的 Binding
-     * 完全参考 winlator 的 getBindingByPosition 实现
      */
     private fun getBindingByPosition(x: Float, y: Float): Binding {
-        val boundingBox = element.getBoundingBox()
-        val range = element.range ?: Range.FROM_A_TO_Z
+        val boundingBox = element.boundingBox
+        val range = element.range ?: ControlElement.Range.FROM_A_TO_Z
         val orientation = element.orientation.toInt()
 
         // 计算相对于元素左边/上边的偏移，减去 currentOffset（拖拽偏移）
@@ -91,28 +77,28 @@ class RangeScroller(
 
         // 根据范围返回对应的 Binding
         return when (range) {
-            Range.FROM_A_TO_Z -> {
+            ControlElement.Range.FROM_A_TO_Z -> {
                 if (index in 0..25) {
                     Binding.fromString("KEY_${('A'.code + index).toChar()}")
                 } else {
                     Binding.NONE
                 }
             }
-            Range.DIGITS -> {
+            ControlElement.Range.DIGITS -> {
                 if (index in 0..9) {
                     Binding.fromString("KEY_${(index + 1) % 10}")
                 } else {
                     Binding.NONE
                 }
             }
-            Range.FUNCTION_KEYS -> {
+            ControlElement.Range.FUNCTION_KEYS -> {
                 if (index in 0..11) {
                     Binding.fromString("KEY_F${index + 1}")
                 } else {
                     Binding.NONE
                 }
             }
-            Range.NUMPAD_DIGITS -> {
+            ControlElement.Range.NUMPAD_DIGITS -> {
                 if (index in 0..9) {
                     Binding.fromString("KEY_KP_${(index + 1) % 10}")
                 } else {
@@ -126,42 +112,58 @@ class RangeScroller(
      * 判断是否是点击（而非拖拽）
      */
     private fun isTap(): Boolean {
-        return System.currentTimeMillis() - touchTime < MAX_TAP_MILLISECONDS
+        return System.currentTimeMillis() - touchTime < inputControlsView.MAX_TAP_MILLISECONDS
+    }
+
+    /**
+     * 销毁计时器
+     */
+    private fun destroyTimer() {
+        timer?.cancel()
+        timer = null
     }
 
     /**
      * 处理触摸按下事件
-     * 完全参考 winlator 的 handleTouchDown
+     * 从 termux-app 移植
      */
-    fun handleTouchDown(element: ControlElement, x: Float, y: Float) {
+    fun handleTouchDown(x: Float, y: Float) {
+        destroyTimer()
+
         isScrolling = false
         isActionDown = true
-        binding = getBindingByPosition(x, y)  // 根据触摸位置获取当前绑定
+        binding = getBindingByPosition(x, y)
         touchTime = System.currentTimeMillis()
         lastPosition = if (element.orientation.toInt() == 0) x else y
-        this.element.setBinding(Binding.NONE)
+        element.setBinding(Binding.NONE)
         
-        // 延迟发送按键按下事件（如果 200ms 后还没有开始滚动）
-        inputControlsView.postDelayed({
-            if (isActionDown && !isScrolling && binding != Binding.NONE) {
-                inputControlsView.handleInputEvent(binding, true)
+        // 使用 Timer 延迟发送按键按下事件
+        timer = Timer(true)
+        timer?.schedule(object : TimerTask() {
+            override fun run() {
+                if (!isScrolling) {
+                    inputControlsView.post {
+                        inputControlsView.handleInputEvent(binding, true)
+                    }
+                }
             }
-        }, MAX_TAP_MILLISECONDS)
+        }, inputControlsView.MAX_TAP_MILLISECONDS)
     }
 
     /**
      * 处理触摸移动事件
-     * 完全参考 winlator 的 handleTouchMove
+     * 从 termux-app 移植
      */
-    fun handleTouchMove(element: ControlElement, x: Float, y: Float) {
+    fun handleTouchMove(x: Float, y: Float) {
         if (!isActionDown) return
 
         val position = if (element.orientation.toInt() == 0) x else y
         val deltaPosition = position - lastPosition
 
         // 如果移动距离超过阈值，切换到滚动模式
-        if (kotlin.math.abs(deltaPosition) >= MAX_TAP_TRAVEL_DISTANCE) {
+        if (kotlin.math.abs(deltaPosition) >= inputControlsView.MAX_TAP_TRAVEL_DISTANCE) {
             isScrolling = true
+            destroyTimer()
         }
 
         if (isScrolling) {
@@ -176,24 +178,26 @@ class RangeScroller(
             }
 
             lastPosition = position
+            // 触发视图重绘
+            inputControlsView.invalidate()
         }
     }
 
     /**
      * 处理触摸抬起事件
-     * 完全参考 winlator 的 handleTouchUp
+     * 从 termux-app 移植
      */
     fun handleTouchUp() {
         if (isActionDown) {
+            destroyTimer()
             if (isTap() && !isScrolling) {
-                // 点击：发送按下和释放事件
+                // 点击：发送按下事件
+                inputControlsView.handleInputEvent(binding, true)
+                // 延迟发送释放事件
                 val finalBinding = binding
-                if (finalBinding != Binding.NONE) {
-                    inputControlsView.handleInputEvent(finalBinding, true)
-                    inputControlsView.postDelayed({
-                        inputControlsView.handleInputEvent(finalBinding, false)
-                    }, 30)
-                }
+                inputControlsView.postDelayed({
+                    inputControlsView.handleInputEvent(finalBinding, false)
+                }, 30)
             } else {
                 // 滚动：只发送释放事件
                 if (binding != Binding.NONE) {
@@ -205,4 +209,16 @@ class RangeScroller(
     }
 
     fun isScrolling(): Boolean = isScrolling
+    
+    /**
+     * 重置状态
+     */
+    fun reset() {
+        destroyTimer()
+        isActionDown = false
+        isScrolling = false
+        scrollOffset = 0f
+        currentOffset = 0f
+        binding = Binding.NONE
+    }
 }

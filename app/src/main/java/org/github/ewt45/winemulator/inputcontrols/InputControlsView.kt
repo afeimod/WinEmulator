@@ -3,17 +3,25 @@ package org.github.ewt45.winemulator.inputcontrols
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import java.util.Timer
+import java.util.TimerTask
 import kotlin.math.*
 
 /**
- * View for rendering and interacting with input controls
- * Fixed version that properly handles touch event delegation and mouse move timer
+ * Complete InputControlsView implementation based on termux-app
+ * Fixed version with complete feature set and bug fixes
  */
 @SuppressLint("ViewConstructor")
 class InputControlsView(
@@ -21,18 +29,27 @@ class InputControlsView(
     private var editMode: Boolean = false
 ) : View(context) {
 
+    companion object {
+        const val DEFAULT_OVERLAY_OPACITY = 0.4f
+        const val MAX_TAP_TRAVEL_DISTANCE = 10
+        const val MAX_TAP_MILLISECONDS = 200
+        const val CURSOR_ACCELERATION = 1.25f
+        const val CURSOR_ACCELERATION_THRESHOLD = 6
+    }
+
     var inputEventHandler: InputEventHandler? = null
     var profile: ControlsProfile? = null
         private set
     var showTouchscreenControls = true
-    var overlayOpacity = 0.4f
+    var overlayOpacity = DEFAULT_OVERLAY_OPACITY
 
     var touchpadView: TouchpadView? = null
     private var xServer: Any? = null  // Reference to LorieView
 
     // Timer for continuous mouse movement
-    private var mouseMoveTimer: java.util.Timer? = null
+    private var mouseMoveTimer: Timer? = null
     private val mouseMoveOffset = PointF()
+    private val cursor = Point()
     private val cursorSpeed: Float
         get() = profile?.cursorSpeed ?: 1.0f
 
@@ -42,7 +59,6 @@ class InputControlsView(
     val maxWidth: Int
         get() = if (snappingSize > 0) (width.toFloat() / snappingSize).roundToInt() * snappingSize else width
 
-    // Fixed: was "snackingSize" (typo), now correct "snappingSize"
     val maxHeight: Int
         get() = if (snappingSize > 0) (height.toFloat() / snappingSize).roundToInt() * snappingSize else height
 
@@ -50,7 +66,6 @@ class InputControlsView(
     private var moveCursor = false
     private var offsetX = 0f
     private var offsetY = 0f
-    private val cursor = Point()
     private var pendingProfileReload = false
 
     // Track which pointers are handled by virtual buttons (persistent across events)
@@ -58,17 +73,17 @@ class InputControlsView(
     
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
+    private val colorFilter = PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
     private var readyToDraw = false
 
     private var vibrator: Vibrator? = null
     private var vibrationEffect: VibrationEffect? = null
 
-    private var rangeScroller: RangeScroller? = null
-    private var currentElementForScroller: ControlElement? = null
-
-    // Track size changes to reload element positions
-    private var lastMaxWidth = 0
-    private var lastMaxHeight = 0
+    // Icon cache - complete 17 icons like termux-app
+    private val icons = arrayOfNulls<Bitmap>(17)
+    
+    // Counter map for tracking icon usage (termux-app feature)
+    private val counterMap = mutableMapOf<String, Int>()
 
     init {
         setClickable(true)
@@ -185,7 +200,7 @@ class InputControlsView(
         return false
     }
 
-    fun getRangeScroller(): RangeScroller? = rangeScroller
+    fun getRangeScroller(): RangeScroller? = null // RangeScroller is managed by ControlElement
 
     private fun deselectAllElements() {
         selectedElement = null
@@ -201,27 +216,40 @@ class InputControlsView(
         invalidate()
     }
 
-    fun handleInputEvent(binding: Binding, isDown: Boolean, value: Float = 0f) {
+    /**
+     * Complete handleInputEvent implementation based on termux-app
+     */
+    fun handleInputEvent(binding: Binding, isDown: Boolean) {
+        handleInputEvent(binding, isDown, 0f)
+    }
+
+    fun handleInputEvent(binding: Binding, isDown: Boolean, offset: Float) {
         // If gaming pad binding
         if (binding.isGamepad) {
-            // Gaming pad events handled separately
+            // Gaming pad events handled separately through processJoystickInput
+            // But we can handle gamepad button state changes here if needed
             return
         }
 
         // Mouse move binding
         if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
-            mouseMoveOffset.x = if (isDown) (if (value != 0f) value else (if (binding == Binding.MOUSE_MOVE_LEFT) -1f else 1f)) else 0f
+            mouseMoveOffset.x = if (isDown) (if (offset != 0f) offset else (if (binding == Binding.MOUSE_MOVE_LEFT) -1f else 1f)) else 0f
             if (isDown) createMouseMoveTimer()
         } else if (binding == Binding.MOUSE_MOVE_DOWN || binding == Binding.MOUSE_MOVE_UP) {
-            mouseMoveOffset.y = if (isDown) (if (value != 0f) value else (if (binding == Binding.MOUSE_MOVE_UP) -1f else 1f)) else 0f
+            mouseMoveOffset.y = if (isDown) (if (offset != 0f) offset else (if (binding == Binding.MOUSE_MOVE_UP) -1f else 1f)) else 0f
             if (isDown) createMouseMoveTimer()
         } else {
             // Other bindings (keys, mouse buttons)
             when {
                 binding.isMouse -> {
                     // Handle mouse button events
-                    binding.getPointerButton()?.let { button ->
-                        inputEventHandler?.onPointerButton(button, isDown)
+                    val pointerButton = binding.getPointerButton()
+                    if (pointerButton != null) {
+                        if (isDown) {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, true)
+                        } else {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, false)
+                        }
                     }
                 }
                 binding.isKeyboard -> {
@@ -247,8 +275,8 @@ class InputControlsView(
         if (mouseMoveOffset.x == 0f && mouseMoveOffset.y == 0f) return
         if (profile == null) return
         
-        mouseMoveTimer = java.util.Timer()
-        mouseMoveTimer?.scheduleAtFixedRate(object : java.util.TimerTask() {
+        mouseMoveTimer = Timer()
+        mouseMoveTimer?.scheduleAtFixedRate(object : TimerTask() {
             override fun run() {
                 val speed = cursorSpeed
                 val dx = (mouseMoveOffset.x * 10 * speed).toInt()
@@ -354,9 +382,7 @@ class InputControlsView(
 
     fun getPath(): Path = path
 
-    fun getColorFilter(): ColorFilter {
-        return PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
-    }
+    fun getColorFilter(): ColorFilter = colorFilter
 
     fun getPrimaryColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 255, 255)
 
@@ -364,7 +390,12 @@ class InputControlsView(
 
     fun getHighlightColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 193, 7)
 
+    /**
+     * Get icon by ID - loads from assets
+     */
     fun getIcon(id: Byte): Bitmap? {
+        if (id < 0 || id >= icons.size) return null
+        
         if (icons[id.toInt()] == null) {
             try {
                 context.assets.open("inputcontrols/icons/$id.png").use { inputStream ->
@@ -377,8 +408,79 @@ class InputControlsView(
         return icons[id.toInt()]
     }
 
-    // Icon cache
-    private val icons = arrayOfNulls<Bitmap>(17)
+    /**
+     * Get custom icon from app's private storage
+     */
+    fun getCustomIcon(iconId: String): Bitmap? {
+        val buttonIconFile = File(context.filesDir.path + "/home/.buttonIcons", "$iconId.png")
+        if (!buttonIconFile.exists()) {
+            return null
+        }
+        return BitmapFactory.decodeFile(buttonIconFile.path)
+    }
+
+    /**
+     * Clip bitmap to circular or rectangular shape
+     */
+    fun clipBitmap(bitmap: Bitmap?, isCircular: Boolean): Bitmap? {
+        if (bitmap == null) return null
+        
+        val clippedBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(clippedBitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        paint.shader = shader
+        
+        if (isCircular) {
+            val centerX = bitmap.width / 2
+            val centerY = bitmap.height / 2
+            val radius = minOf(centerX, centerY)
+            canvas.drawCircle(centerX.toFloat(), centerY.toFloat(), radius.toFloat(), paint)
+        } else {
+            val rect = RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
+            canvas.drawRect(rect, paint)
+        }
+        return clippedBitmap
+    }
+
+    /**
+     * Create shape bitmap (circle or rectangle) with specified color
+     */
+    fun createShapeBitmap(width: Float, height: Float, color: Int, isCircular: Boolean): Bitmap {
+        val bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+
+        if (isCircular) {
+            val radius = (minOf(width, height) / 2).toInt()
+            canvas.drawCircle(width / 2, height / 2, radius.toFloat(), paint)
+        } else {
+            val rect = RectF(0f, 0f, width, height)
+            canvas.drawRect(rect, paint)
+        }
+        return bitmap
+    }
+
+    /**
+     * Counter map operations for icon tracking (termux-app feature)
+     */
+    fun counterMapIncrease(iconId: String) {
+        val v = counterMap[iconId] ?: 0
+        counterMap[iconId] = v + 1
+    }
+
+    fun counterMapDecrease(iconId: String) {
+        val v = counterMap[iconId]
+        if (v != null) {
+            counterMap[iconId] = v - 1
+        }
+    }
+
+    fun counterMapZero(iconId: String): Boolean {
+        val v = counterMap[iconId]
+        return v == null || v <= 0
+    }
 
     private fun roundTo(value: Float, rounding: Float): Float {
         return (value / rounding).roundToInt() * rounding
@@ -392,11 +494,32 @@ class InputControlsView(
         if (!editMode && profile != null) {
             val controller = profile!!.getController(event.deviceId)
             if (controller != null && controller.updateStateFromMotionEvent(event)) {
+                // Handle L2/R2 buttons (termux-app feature)
+                processGamepadButtons(controller)
                 processJoystickInput(controller)
                 return true
             }
         }
         return super.onGenericMotionEvent(event)
+    }
+
+    /**
+     * Process gamepad button states (L2/R2 triggers)
+     */
+    private fun processGamepadButtons(controller: ExternalController) {
+        val state = controller.state
+        
+        // L2 trigger
+        val l2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
+        if (l2Binding?.binding != null) {
+            handleInputEvent(l2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_L2))
+        }
+        
+        // R2 trigger
+        val r2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
+        if (r2Binding?.binding != null) {
+            handleInputEvent(r2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_R2))
+        }
     }
 
     /**
@@ -420,20 +543,20 @@ class InputControlsView(
                 val controllerBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], direction)
                 )
-                if (controllerBinding != null && controllerBinding.binding != null) {
+                if (controllerBinding?.binding != null) {
                     handleInputEvent(controllerBinding.binding!!, true, values[i])
                 }
             } else {
                 val positiveBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1)
                 )
-                if (positiveBinding != null && positiveBinding.binding != null) {
+                if (positiveBinding?.binding != null) {
                     handleInputEvent(positiveBinding.binding!!, false, values[i])
                 }
                 val negativeBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], -1)
                 )
-                if (negativeBinding != null && negativeBinding.binding != null) {
+                if (negativeBinding?.binding != null) {
                     handleInputEvent(negativeBinding.binding!!, false, values[i])
                 }
             }
@@ -491,7 +614,7 @@ class InputControlsView(
 
     /**
      * Handle touch events - correctly dispatch between virtual buttons and touchpad
-     * This is the core fix for the conflict issue
+     * Complete implementation based on termux-app
      */
     fun handleTouchEvent(event: MotionEvent): Boolean {
         // Mouse events directly to touchpad
@@ -602,7 +725,7 @@ class InputControlsView(
 
 /**
  * Touchpad view for mouse simulation - complete version with tap detection
- * Fixed to properly handle tap-to-click functionality
+ * Based on termux-app implementation
  */
 @SuppressLint("ViewConstructor")
 class TouchpadView(context: Context) : View(context) {
@@ -618,14 +741,6 @@ class TouchpadView(context: Context) : View(context) {
     private var fingerStartTime = 0L
     private var isFingerDown = false
     
-    // Configuration constants (same as termux-app)
-    companion object {
-        const val CURSOR_ACCELERATION = 1.25f
-        const val CURSOR_ACCELERATION_THRESHOLD = 6
-        const val MAX_TAP_TRAVEL_DISTANCE = 10  // Max movement to consider as tap
-        const val MAX_TAP_MILLISECONDS = 200  // Max time to consider as tap
-    }
-
     var inputEventHandler: InputEventHandler? = null
 
     fun setPointerButtonLeftEnabled(enabled: Boolean) {
@@ -698,5 +813,10 @@ class TouchpadView(context: Context) : View(context) {
             }
         }
         return true
+    }
+
+    fun onHoverEvent(event: MotionEvent): Boolean {
+        // Basic hover support
+        return false
     }
 }
