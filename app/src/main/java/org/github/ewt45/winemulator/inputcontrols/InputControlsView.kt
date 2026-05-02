@@ -512,13 +512,13 @@ class InputControlsView(
         // L2 trigger
         val l2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
         if (l2Binding?.binding != null) {
-            handleInputEvent(l2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_L2))
+            handleInputEvent(l2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_L2.toInt()))
         }
         
         // R2 trigger
         val r2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
         if (r2Binding?.binding != null) {
-            handleInputEvent(r2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_R2))
+            handleInputEvent(r2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_R2.toInt()))
         }
     }
 
@@ -763,7 +763,7 @@ class TouchpadView(context: Context) : View(context) {
             (lastY - fingerStartY) * (lastY - fingerStartY)
         )
         
-        return touchDuration < MAX_TAP_MILLISECONDS * 5 && travelDistance < MAX_TAP_TRAVEL_DISTANCE * 5
+        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -787,10 +787,10 @@ class TouchpadView(context: Context) : View(context) {
                 lastX = event.x
                 lastY = event.y
                 
-                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+                if (abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
                     inputEventHandler?.onPointerMove(
-                        (dx * CURSOR_ACCELERATION).toInt(),
-                        (dy * CURSOR_ACCELERATION).toInt()
+                        (dx * InputControlsView.CURSOR_ACCELERATION).toInt(),
+                        (dy * InputControlsView.CURSOR_ACCELERATION).toInt()
                     )
                 } else {
                     inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
@@ -815,7 +815,7 @@ class TouchpadView(context: Context) : View(context) {
         return true
     }
 
-    fun onHoverEvent(event: MotionEvent): Boolean {
+    override fun onHoverEvent(event: MotionEvent): Boolean {
         // Basic hover support
         return false
     }
