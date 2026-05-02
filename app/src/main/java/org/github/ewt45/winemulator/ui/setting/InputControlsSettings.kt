@@ -448,7 +448,7 @@ fun ControlsEditorDialog(
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.RANGE_BUTTON -> Icons.AutoMirrored.Filled.List
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.TRACKPAD -> Icons.Default.Menu
                                         org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.COMBINE_BUTTON -> Icons.Default.Add
-                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.CHEAT_CODE_TEXT -> Icons.Default.TextFields
+                                        org.github.ewt45.winemulator.inputcontrols.ControlElement.Type.CHEAT_CODE_TEXT -> Icons.Default.Edit
                                     },
                                     contentDescription = null
                                 )
