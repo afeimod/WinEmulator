@@ -35,6 +35,8 @@ class InputControlsView(
         const val MAX_TAP_MILLISECONDS = 200
         const val CURSOR_ACCELERATION = 1.25f
         const val CURSOR_ACCELERATION_THRESHOLD = 6
+        const val CLICK_MAX_DISTANCE = 10f
+        const val CLICK_MAX_TIME = 200L
     }
 
     var inputEventHandler: InputEventHandler? = null
@@ -81,11 +83,6 @@ class InputControlsView(
         var isUp: Boolean = false
     )
     private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
-    
-    companion object {
-        const val CLICK_MAX_DISTANCE = 10f
-        const val CLICK_MAX_TIME = 200L
-    }
     
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
