@@ -64,7 +64,8 @@ class InputControlsView(
     // 跟踪触点的按下时间和位置，用于检测点击
     private data class TouchDownInfo(
         val downTime: Long,
-        val downPosition: PointF
+        val downPosition: PointF,
+        var isUp: Boolean = false  // 标记该触点是否已抬起
     )
     private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
     
@@ -506,7 +507,8 @@ class InputControlsView(
                         val downInfo = touchDownInfos[pointerId]
                         val lastPos = touchpadPointers[pointerId]
                         
-                        if (downInfo != null && lastPos != null && actionMasked == MotionEvent.ACTION_UP) {
+                        var isClick = false
+                        if (downInfo != null && lastPos != null) {
                             val elapsed = System.currentTimeMillis() - downInfo.downTime
                             val distance = sqrt(
                                 (lastPos.x - downInfo.downPosition.x).let { it * it } +
@@ -514,16 +516,57 @@ class InputControlsView(
                             )
                             
                             // 如果移动距离很小且时间很短，视为点击
-                            if (distance < CLICK_MAX_DISTANCE && elapsed < CLICK_MAX_TIME) {
-                                // 发送鼠标左键点击事件（button 1 = 左键）
-                                inputEventHandler?.onPointerButton(1, true)  // 按下
-                                inputEventHandler?.onPointerButton(1, false) // 释放
+                            isClick = (distance < CLICK_MAX_DISTANCE && elapsed < CLICK_MAX_TIME)
+                        }
+                        
+                        if (isClick && actionMasked == MotionEvent.ACTION_UP) {
+                            // 这是最后一个手指抬起，检查是否有其他触点也是点击
+                            val otherClicks = touchDownInfos.filterKeys { it != pointerId }
+                            
+                            if (otherClicks.isNotEmpty()) {
+                                // 有其他触点，检查它们是否也是点击
+                                val allAreClicks = otherClicks.all { (id, info) ->
+                                    val otherLastPos = touchpadPointers[id]
+                                    if (otherLastPos != null) {
+                                        val otherElapsed = System.currentTimeMillis() - info.downTime
+                                        val otherDistance = sqrt(
+                                            (otherLastPos.x - info.downPosition.x).let { it * it } +
+                                            (otherLastPos.y - info.downPosition.y).let { it * it }
+                                        )
+                                        otherDistance < CLICK_MAX_DISTANCE && otherElapsed < CLICK_MAX_TIME
+                                    } else {
+                                        false
+                                    }
+                                }
+                                
+                                if (allAreClicks && otherClicks.size == 1) {
+                                    // 双指点击，发送鼠标右键事件（button 3 = 右键）
+                                    inputEventHandler?.onPointerButton(3, true)
+                                    inputEventHandler?.onPointerButton(3, false)
+                                } else {
+                                    // 多个手指或其他情况，发送左键
+                                    inputEventHandler?.onPointerButton(1, true)
+                                    inputEventHandler?.onPointerButton(1, false)
+                                }
+                            } else {
+                                // 单指点击，发送鼠标左键事件（button 1 = 左键）
+                                inputEventHandler?.onPointerButton(1, true)
+                                inputEventHandler?.onPointerButton(1, false)
                             }
                         }
                         
-                        // 移除触控板记录
-                        touchpadPointers.remove(pointerId)
-                        touchDownInfos.remove(pointerId)
+                        // 移除触控板记录（如果是最后一个手指，清除所有记录）
+                        if (actionMasked == MotionEvent.ACTION_UP) {
+                            touchpadPointers.clear()
+                            touchDownInfos.clear()
+                        } else {
+                            // ACTION_POINTER_UP: 标记为已抬起，但不移除记录
+                            val info = touchDownInfos[pointerId]
+                            if (info != null) {
+                                info.isUp = true
+                            }
+                            // 不移除 touchpadPointers，保留最后位置用于点击检测
+                        }
                     }
                     // UP/CANCEL 事件总是被处理
                     handled = true
