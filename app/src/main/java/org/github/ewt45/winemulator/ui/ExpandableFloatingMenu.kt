@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -96,11 +97,12 @@ fun ExpandableFloatingMenu(
         }
 
         if (isExpanded) {
+            // 重新定义悬浮菜单图标，使其更具代表性和美观性
             val menuItems = listOf(
-                Triple(Icons.Default.Dashboard, "主菜单", onMainMenuClick),
-                Triple(Icons.Filled.Tune, "一般设置", onGeneralSettingsClick),
-                Triple(Icons.Default.SportsEsports, "虚拟按键设置", onVirtualKeysClick),
-                Triple(Icons.Default.DesktopWindows, "X11显示设置", onX11SettingsClick)
+                Triple(Icons.Outlined.ExitToApp, "主菜单", onMainMenuClick),
+                Triple(Icons.Outlined.Settings, "一般设置", onGeneralSettingsClick),
+                Triple(Icons.Outlined.Keyboard, "虚拟按键设置", onVirtualKeysClick),
+                Triple(Icons.Outlined.Monitor, "X11显示设置", onX11SettingsClick)
             )
 
             val arcRadius = with(density) { 60.dp.toPx() }
@@ -203,7 +205,7 @@ fun ExpandableFloatingMenu(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.Close else Icons.Filled.Widgets,
+                    imageVector = if (isExpanded) Icons.Filled.Close else Icons.Filled.Add,
                     contentDescription = if (isExpanded) "收起菜单" else "展开菜单",
                     modifier = Modifier
                         .size(36.dp)
