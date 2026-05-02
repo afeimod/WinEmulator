@@ -97,12 +97,12 @@ fun ExpandableFloatingMenu(
         }
 
         if (isExpanded) {
-            // 重新定义悬浮菜单图标，使其更具代表性和美观性
+            // 使用可用的图标
             val menuItems = listOf(
-                Triple(Icons.Outlined.ExitToApp, "主菜单", onMainMenuClick),
-                Triple(Icons.Outlined.Settings, "一般设置", onGeneralSettingsClick),
-                Triple(Icons.Outlined.Keyboard, "虚拟按键设置", onVirtualKeysClick),
-                Triple(Icons.Outlined.Monitor, "X11显示设置", onX11SettingsClick)
+                Triple(Icons.Filled.Home, "主菜单", onMainMenuClick),
+                Triple(Icons.Filled.Settings, "一般设置", onGeneralSettingsClick),
+                Triple(Icons.Filled.Info, "虚拟按键设置", onVirtualKeysClick),
+                Triple(Icons.Filled.List, "X11显示设置", onX11SettingsClick)
             )
 
             val arcRadius = with(density) { 60.dp.toPx() }
