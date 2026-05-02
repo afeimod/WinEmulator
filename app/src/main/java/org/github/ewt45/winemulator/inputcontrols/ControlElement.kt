@@ -780,6 +780,7 @@ class ControlElement(
                     }
                     if (!isToggleSwitch || !isSelected) {
                         inputControlsView.handleInputEvent(getBindingAt(0), true)
+                        inputControlsView.handleInputEvent(getBindingAt(1), true)
                     }
                     return true
                 }
@@ -994,11 +995,13 @@ class ControlElement(
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
                             inputControlsView.handleInputEvent(binding, false)
+                            inputControlsView.handleInputEvent(getBindingAt(1), false)
                         }
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
                         inputControlsView.handleInputEvent(binding, false)
+                        inputControlsView.handleInputEvent(getBindingAt(1), false)
                     }
 
                     if (isToggleSwitch) {
