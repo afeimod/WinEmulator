@@ -71,6 +71,22 @@ class InputControlsView(
     // Track which pointers are handled by virtual buttons (persistent across events)
     private val buttonPointers = mutableSetOf<Int>()
     
+    // 跟踪触控板使用的触点ID及其最后位置
+    private val touchpadPointers = mutableMapOf<Int, PointF>()
+    
+    // 跟踪触点的按下时间和位置，用于检测点击
+    private data class TouchDownInfo(
+        val downTime: Long,
+        val downPosition: PointF,
+        var isUp: Boolean = false
+    )
+    private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
+    
+    companion object {
+        const val CLICK_MAX_DISTANCE = 10f
+        const val CLICK_MAX_TIME = 200L
+    }
+    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val colorFilter = PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
@@ -101,12 +117,23 @@ class InputControlsView(
         }
     }
 
-    /**
-     * Set X server reference (for calling injectPointerMoveDelta, etc.)
-     */
     fun setXServer(server: Any) {
         this.xServer = server
         createMouseMoveTimer()
+    }
+    
+    // 获取触控板指针的最后位置
+    fun getTouchpadLastPosition(pointerId: Int): PointF? = touchpadPointers[pointerId]
+    
+    // 更新触控板指针的最后位置
+    fun updateTouchpadLastPosition(pointerId: Int, x: Float, y: Float) {
+        touchpadPointers[pointerId] = PointF(x, y)
+    }
+    
+    // 移除触控板指针
+    fun removeTouchpadPointer(pointerId: Int) {
+        touchpadPointers.remove(pointerId)
+        touchDownInfos.remove(pointerId)
     }
 
     /**
@@ -637,71 +664,94 @@ class InputControlsView(
                     // Enable left button
                     touchpadView?.setPointerButtonLeftEnabled(true)
 
+                    var handledByControl = false
                     // Check virtual buttons for this down position
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
-                            handled = true
+                            vibrator?.vibrate(vibrationEffect)
+                            // 记录该触点已被占用
                             buttonPointers.add(pointerId)
+                            handledByControl = true
                             // If bound to mouse left button, disable touchpad's left button
                             if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
                                 touchpadView?.setPointerButtonLeftEnabled(false)
                             }
+                            break
                         }
                     }
 
-                    // If not handled by virtual button, pass to touchpad
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
+                    if (!handledByControl) {
+                        // 这个触点没有被控件占用，可以用于触控板
+                        touchpadPointers[pointerId] = PointF(x, y)
+                        // 记录按下时间和位置，用于检测点击
+                        touchDownInfos[pointerId] = TouchDownInfo(System.currentTimeMillis(), PointF(x, y))
                     }
+                    // DOWN 事件总是被处理
+                    handled = true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // Iterate all pointers
+                    // 遍历所有触点，独立处理每个触点的移动
                     for (i in 0 until event.pointerCount) {
-                        val pointerIdI = event.getPointerId(i)
                         val x = event.getX(i)
                         val y = event.getY(i)
-                        var thisHandled = false
+                        val id = event.getPointerId(i)
 
-                        // Check if this pointer is tracked by virtual buttons
-                        if (buttonPointers.contains(pointerIdI)) {
+                        // 如果该触点已被某个控件占用，则交给控件处理
+                        if (buttonPointers.contains(id)) {
+                            var thisHandled = false
                             for (element in profile!!.getElements()) {
-                                if (element.handleTouchMove(pointerIdI, x, y)) {
+                                if (element.handleTouchMove(id, x, y)) {
                                     thisHandled = true
+                                    handled = true
                                     break
                                 }
                             }
-                            // If button no longer handles, remove from tracking
-                            if (!thisHandled) {
-                                buttonPointers.remove(pointerIdI)
+                            // 对于按钮等不处理MOVE的控件，保持追踪，不移除
+                        } else {
+                            // 这个触点没有被控件占用，作为触控板处理
+                            val lastPos = touchpadPointers[id]
+                            
+                            if (lastPos != null) {
+                                // 计算相对于上次位置的增量移动
+                                val dx = x - lastPos.x
+                                val dy = y - lastPos.y
+                                
+                                // 直接调用输入事件处理器
+                                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+                                    inputEventHandler?.onPointerMove(
+                                        (dx * CURSOR_ACCELERATION).toInt(),
+                                        (dy * CURSOR_ACCELERATION).toInt()
+                                    )
+                                } else {
+                                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                                }
+                                
+                                // 更新最后位置
+                                lastPos.set(x, y)
+                                handled = true
+                            } else {
+                                // 第一次看到这个未占用的触点，记录初始位置但不产生移动
+                                touchpadPointers[id] = PointF(x, y)
                             }
-                        }
-
-                        // If virtual buttons don't handle, pass to touchpad
-                        if (!thisHandled && !buttonPointers.contains(pointerIdI)) {
-                            touchpadView?.onTouchEvent(event)
                         }
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
-                        // Get all active pointers
-                        (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
-                    } else {
-                        setOf(event.getPointerId(event.actionIndex))
-                    }
-
-                    for (pointerIdUp in pointersToHandle) {
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchUp(pointerIdUp)) {
-                                handled = true
-                            }
+                    var handledByControl = false
+                    for (element in profile!!.getElements()) {
+                        if (element.handleTouchUp(pointerId)) {
+                            handledByControl = true
                         }
-                        // Remove from tracking
-                        buttonPointers.remove(pointerIdUp)
                     }
 
-                    // Pass to touchpad
-                    touchpadView?.onTouchEvent(event)
+                    if (handledByControl) {
+                        // 释放该触点的占用状态
+                        buttonPointers.remove(pointerId)
+                    } else {
+                        // 这个触点是用于触控板的，移除它
+                        touchpadPointers.remove(pointerId)
+                        touchDownInfos.remove(pointerId)
+                    }
                 }
             }
 
