@@ -21,6 +21,9 @@ class ControlsProfile(
     var isVirtualGamepad = false
         private set
 
+    // Gamepad controller support - added for compilation
+    private val controllers = ArrayList<ExternalController>()
+
     fun getElements(): List<ControlElement> = immutableElements
 
     fun addElement(element: ControlElement) {
@@ -36,6 +39,19 @@ class ControlsProfile(
     fun isElementsLoaded(): Boolean = elementsLoaded
 
     fun isTemplate(): Boolean = name.lowercase().contains("template")
+
+    /**
+     * Get gamepad controller by device ID
+     * Added to support gamepad input in InputControlsView
+     */
+    fun getController(deviceId: Int): ExternalController? {
+        return controllers.find { it.deviceId == deviceId }
+    }
+
+    /**
+     * Get all gamepad controllers
+     */
+    fun getControllers(): List<ExternalController> = controllers
 
     fun save() {
         val file = getProfileFile(context, id)

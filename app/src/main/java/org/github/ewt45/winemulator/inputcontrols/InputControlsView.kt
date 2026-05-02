@@ -384,10 +384,59 @@ class InputControlsView(
         return (value / rounding).roundToInt() * rounding
     }
 
-    // Removed gaming pad specific code - these classes don't exist in Linbox project
+    /**
+     * Handle external gamepad events
+     */
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        // Gamepad event handling removed
+        // Process external gamepad/controller events
+        if (!editMode && profile != null) {
+            val controller = profile!!.getController(event.deviceId)
+            if (controller != null && controller.updateStateFromMotionEvent(event)) {
+                processJoystickInput(controller)
+                return true
+            }
+        }
         return super.onGenericMotionEvent(event)
+    }
+
+    /**
+     * Process joystick input and send key events
+     */
+    private fun processJoystickInput(controller: ExternalController) {
+        val axes = intArrayOf(
+            MotionEvent.AXIS_X, MotionEvent.AXIS_Y, 
+            MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ,
+            MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y
+        )
+        val values = floatArrayOf(
+            controller.state.thumbLX, controller.state.thumbLY,
+            controller.state.thumbRX, controller.state.thumbRY,
+            controller.state.getDPadX().toFloat(), controller.state.getDPadY().toFloat()
+        )
+
+        for (i in axes.indices) {
+            if (abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
+                val controllerBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], sign(values[i]).toByte())
+                )
+                if (controllerBinding != null && controllerBinding.binding != null) {
+                    handleInputEvent(controllerBinding.binding!!, true, values[i])
+                }
+            } else {
+                val positiveBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
+                )
+                if (positiveBinding != null && positiveBinding.binding != null) {
+                    handleInputEvent(positiveBinding.binding!!, false, values[i])
+                }
+                val negativeBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], (-1).toByte())
+                )
+                if (negativeBinding != null && negativeBinding.binding != null) {
+                    handleInputEvent(negativeBinding.binding!!, false, values[i])
+                }
+            }
+        }
     }
 
     override fun onHoverEvent(event: MotionEvent): Boolean {
