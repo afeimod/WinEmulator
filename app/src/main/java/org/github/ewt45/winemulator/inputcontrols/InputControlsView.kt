@@ -745,9 +745,60 @@ class InputControlsView(
                         // 释放该触点的占用状态
                         buttonPointers.remove(pointerId)
                     } else {
-                        // 这个触点是用于触控板的，移除它
-                        touchpadPointers.remove(pointerId)
-                        touchDownInfos.remove(pointerId)
+                        // 这个触点是用于触控板的，检测点击后再移除
+                        // 当最后一个手指抬起时（ACTION_UP），检测点击
+                        if (actionMasked == MotionEvent.ACTION_UP) {
+                            // 先计算当前的触摸数量
+                            val touchCount = touchpadPointers.size
+                            
+                            if (touchCount >= 1) {
+                                // 检查所有触点是否都是点击（没有移动）
+                                var allAreClicks = true
+                                
+                                for ((id, info) in touchDownInfos) {
+                                    val lastPos = touchpadPointers[id]
+                                    if (lastPos != null) {
+                                        val elapsed = System.currentTimeMillis() - info.downTime
+                                        val distance = kotlin.math.sqrt(
+                                            (lastPos.x - info.downPosition.x) * (lastPos.x - info.downPosition.x) +
+                                            (lastPos.y - info.downPosition.y) * (lastPos.y - info.downPosition.y)
+                                        )
+                                        if (distance > CLICK_MAX_DISTANCE || elapsed > CLICK_MAX_TIME) {
+                                            allAreClicks = false
+                                            break
+                                        }
+                                    }
+                                }
+                                
+                                // 点击检测
+                                if (allAreClicks) {
+                                    if (touchCount == 2) {
+                                        // 双指点击，发送鼠标右键
+                                        inputEventHandler?.onPointerButton(3, true)
+                                        inputEventHandler?.onPointerButton(3, false)
+                                    } else if (touchCount == 1) {
+                                        // 单指点击，发送鼠标左键
+                                        inputEventHandler?.onPointerButton(1, true)
+                                        inputEventHandler?.onPointerButton(1, false)
+                                    } else {
+                                        // 多个手指，发送左键
+                                        inputEventHandler?.onPointerButton(1, true)
+                                        inputEventHandler?.onPointerButton(1, false)
+                                    }
+                                }
+                            }
+                            
+                            // 清除所有触控板记录
+                            touchpadPointers.clear()
+                            touchDownInfos.clear()
+                        } else {
+                            // ACTION_POINTER_UP: 标记为已抬起，但不移除记录
+                            val info = touchDownInfos[pointerId]
+                            if (info != null) {
+                                info.isUp = true
+                            }
+                            // 不移除 touchpadPointers，保留最后位置用于点击检测
+                        }
                     }
                 }
             }
