@@ -1,7 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import org.json.JSONObject
-import kotlin.math.sign
 
 /**
  * External game controller binding
@@ -30,7 +29,7 @@ class ExternalControllerBinding {
     }
 
     companion object {
-        fun getKeyCodeForAxis(axis: Int, direction: Byte): Int {
+        fun getKeyCodeForAxis(axis: Int, direction: Int): Int {
             // Map axis + direction to key code
             // This is a simplified version
             return axis * 2 + if (direction > 0) 1 else 0

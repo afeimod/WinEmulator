@@ -416,21 +416,22 @@ class InputControlsView(
 
         for (i in axes.indices) {
             if (abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
+                val direction: Byte = if (values[i] > 0) 1.toByte() else (-1).toByte()
                 val controllerBinding = controller.getControllerBinding(
-                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], sign(values[i]).toByte())
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], direction)
                 )
                 if (controllerBinding != null && controllerBinding.binding != null) {
                     handleInputEvent(controllerBinding.binding!!, true, values[i])
                 }
             } else {
                 val positiveBinding = controller.getControllerBinding(
-                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1)
                 )
                 if (positiveBinding != null && positiveBinding.binding != null) {
                     handleInputEvent(positiveBinding.binding!!, false, values[i])
                 }
                 val negativeBinding = controller.getControllerBinding(
-                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], (-1).toByte())
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], -1)
                 )
                 if (negativeBinding != null && negativeBinding.binding != null) {
                     handleInputEvent(negativeBinding.binding!!, false, values[i])
