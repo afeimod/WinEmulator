@@ -505,7 +505,6 @@ class InputControlsView(
             val pointerId = event.getPointerId(actionIndex)
             val actionMasked = event.actionMasked
             var handled = false
-            var touchpadHandled = false
 
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -529,7 +528,7 @@ class InputControlsView(
 
                     // If not handled by virtual button, pass to touchpad
                     if (!handled) {
-                        touchpadHandled = touchpadView?.onTouchEvent(event) == true
+                        touchpadView?.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -556,7 +555,7 @@ class InputControlsView(
 
                         // If virtual buttons don't handle, pass to touchpad
                         if (!thisHandled && !buttonPointers.contains(pointerIdI)) {
-                            touchpadHandled = touchpadView?.onTouchEvent(event) == true || touchpadHandled
+                            touchpadView?.onTouchEvent(event)
                         }
                     }
                 }
@@ -583,7 +582,7 @@ class InputControlsView(
                 }
             }
 
-            return handled || touchpadHandled
+            return handled
         }
         return false
     }
@@ -653,39 +652,49 @@ class TouchpadView(context: Context) : View(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val actionIndex = event.actionIndex
-        when (event.actionMasked) {
+        val actionMasked = event.actionMasked
+        
+        when (actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                if (activePointerId == -1) {
-                    activePointerId = event.getPointerId(actionIndex)
-                    lastX = event.getX(actionIndex)
-                    lastY = event.getY(actionIndex)
-                }
+                // Mark finger as down and record start position/time
+                isFingerDown = true
+                fingerStartX = event.x
+                fingerStartY = event.y
+                lastX = fingerStartX
+                lastY = fingerStartY
+                fingerStartTime = System.currentTimeMillis()
             }
             MotionEvent.ACTION_MOVE -> {
-                if (activePointerId != -1) {
-                    val idx = event.findPointerIndex(activePointerId)
-                    if (idx >= 0) {
-                        val x = event.getX(idx)
-                        val y = event.getY(idx)
-                        val dx = x - lastX
-                        val dy = y - lastY
-
-                        if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
-                            inputEventHandler?.onPointerMove((dx * CURSOR_ACCELERATION).toInt(), (dy * CURSOR_ACCELERATION).toInt())
-                        } else {
-                            inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
-                        }
-
-                        lastX = x
-                        lastY = y
-                    }
+                val dx = event.x - lastX
+                val dy = event.y - lastY
+                
+                // Update position
+                lastX = event.x
+                lastY = event.y
+                
+                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+                    inputEventHandler?.onPointerMove(
+                        (dx * CURSOR_ACCELERATION).toInt(),
+                        (dy * CURSOR_ACCELERATION).toInt()
+                    )
+                } else {
+                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                if (event.getPointerId(actionIndex) == activePointerId) {
-                    activePointerId = -1
+                // On finger up, check if it was a tap and send mouse click
+                if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
+                    // Send mouse button press (left click down)
+                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                    
+                    // Send mouse button release after a short delay
+                    postDelayed({
+                        inputEventHandler?.onPointerButton(0, false)
+                    }, 30)
                 }
+                
+                // Reset finger state
+                isFingerDown = false
             }
         }
         return true
