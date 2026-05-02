@@ -416,7 +416,7 @@ class InputControlsView(
 
         for (i in axes.indices) {
             if (abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
-                val direction: Byte = if (values[i] > 0) 1.toByte() else (-1).toByte()
+                val direction: Int = if (values[i] > 0) 1 else -1
                 val controllerBinding = controller.getControllerBinding(
                     ExternalControllerBinding.getKeyCodeForAxis(axes[i], direction)
                 )
