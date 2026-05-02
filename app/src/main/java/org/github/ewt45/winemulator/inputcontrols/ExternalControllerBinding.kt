@@ -7,20 +7,21 @@ import org.json.JSONObject
  * Added to support gamepad input in InputControlsView
  */
 class ExternalControllerBinding {
-    var keyCodeForAxis: Int = 0
+    // Use different name to avoid clash
+    var keyCodeForAxisVal: Int = 0
     var binding: Binding? = null
 
     constructor(keyCodeForAxis: Int, binding: Binding) {
-        this.keyCodeForAxis = keyCodeForAxis
+        this.keyCodeForAxisVal = keyCodeForAxis
         this.binding = binding
     }
 
-    fun getKeyCodeForAxis(): Int = keyCodeForAxis
+    fun getKeyCodeForAxisValue(): Int = keyCodeForAxisVal
 
     fun toJSONObject(): JSONObject? {
         return try {
             val jsonObject = JSONObject()
-            jsonObject.put("keyCodeForAxis", keyCodeForAxis)
+            jsonObject.put("keyCodeForAxis", keyCodeForAxisVal)
             jsonObject.put("binding", binding?.toString())
             jsonObject
         } catch (e: Exception) {
@@ -31,7 +32,6 @@ class ExternalControllerBinding {
     companion object {
         fun getKeyCodeForAxis(axis: Int, direction: Int): Int {
             // Map axis + direction to key code
-            // This is a simplified version
             return axis * 2 + if (direction > 0) 1 else 0
         }
     }

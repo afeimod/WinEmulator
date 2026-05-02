@@ -13,77 +13,21 @@ import java.util.ArrayList
  * Added to support gamepad input in InputControlsView
  */
 class ExternalController {
-    companion object {
-        const val IDX_BUTTON_A: Byte = 0
-        const val IDX_BUTTON_B: Byte = 1
-        const val IDX_BUTTON_X: Byte = 2
-        const val IDX_BUTTON_Y: Byte = 3
-        const val IDX_BUTTON_L1: Byte = 4
-        const val IDX_BUTTON_R1: Byte = 5
-        const val IDX_BUTTON_SELECT: Byte = 6
-        const val IDX_BUTTON_START: Byte = 7
-        const val IDX_BUTTON_L3: Byte = 8
-        const val IDX_BUTTON_R3: Byte = 9
-        const val IDX_BUTTON_L2: Byte = 10
-        const val IDX_BUTTON_R2: Byte = 11
-
-        fun getControllers(): ArrayList<ExternalController> {
-            val deviceIds = InputDevice.getDeviceIds()
-            val controllers = ArrayList<ExternalController>()
-            for (i in deviceIds.indices.reversed()) {
-                val device = InputDevice.getDevice(deviceIds[i])
-                if (isGameController(device)) {
-                    val controller = ExternalController()
-                    controller.setId(device!!.descriptor)
-                    controller.setName(device.name)
-                    controllers.add(controller)
-                }
-            }
-            return controllers
-        }
-
-        fun getController(id: String): ExternalController? {
-            return getControllers().find { it.id == id }
-        }
-
-        fun getController(deviceId: Int): ExternalController? {
-            val deviceIds = InputDevice.getDeviceIds()
-            for (i in deviceIds.indices.reversed()) {
-                if (deviceIds[i] == deviceId || deviceId == 0) {
-                    val device = InputDevice.getDevice(deviceIds[i])
-                    if (isGameController(device)) {
-                        val controller = ExternalController()
-                        controller.setId(device!!.descriptor)
-                        controller.setName(device.name)
-                        controller.deviceId = deviceIds[i]
-                        return controller
-                    }
-                }
-            }
-            return null
-        }
-
-        fun isGameController(device: InputDevice?): Boolean {
-            if (device == null) return false
-            val sources = device.sources
-            return !device.isVirtual() && ((sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                    (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK)
-        }
-    }
-
+    // Use var with private setter to avoid JVM signature clash
     var name: String = ""
+        private set
     var id: String = ""
+        private set
     var deviceId: Int = -1
+        private set
     val state = GamepadState()
     private val controllerBindings = ArrayList<ExternalControllerBinding>()
 
-    fun getName(): String = name
-    fun setName(name: String) { this.name = name }
+    // Use different method names to avoid clash with property getter/setter
+    fun setControllerName(name: String) { this.name = name }
+    fun setControllerId(id: String) { this.id = id }
 
-    fun getId(): String = id
-    fun setId(id: String) { this.id = id }
-
-    fun getDeviceId(): Int {
+    fun getControllerDeviceId(): Int {
         if (deviceId == -1) {
             for (dId in InputDevice.getDeviceIds()) {
                 val device = InputDevice.getDevice(dId)
@@ -105,7 +49,7 @@ class ExternalController {
     }
 
     fun getControllerBinding(keyCode: Int): ExternalControllerBinding? {
-        return controllerBindings.find { it.getKeyCodeForAxis() == keyCode }
+        return controllerBindings.find { it.keyCodeForAxis == keyCode }
     }
 
     fun getControllerBindingAt(index: Int): ExternalControllerBinding? {
@@ -113,7 +57,7 @@ class ExternalController {
     }
 
     fun addControllerBinding(controllerBinding: ExternalControllerBinding) {
-        if (getControllerBinding(controllerBinding.getKeyCodeForAxis()) == null) {
+        if (getControllerBinding(controllerBinding.keyCodeForAxis) == null) {
             controllerBindings.add(controllerBinding)
         }
     }
@@ -214,5 +158,63 @@ class ExternalController {
 
     override fun equals(other: Any?): Boolean {
         return other is ExternalController && other.id == id
+    }
+
+    companion object {
+        const val IDX_BUTTON_A: Byte = 0
+        const val IDX_BUTTON_B: Byte = 1
+        const val IDX_BUTTON_X: Byte = 2
+        const val IDX_BUTTON_Y: Byte = 3
+        const val IDX_BUTTON_L1: Byte = 4
+        const val IDX_BUTTON_R1: Byte = 5
+        const val IDX_BUTTON_SELECT: Byte = 6
+        const val IDX_BUTTON_START: Byte = 7
+        const val IDX_BUTTON_L3: Byte = 8
+        const val IDX_BUTTON_R3: Byte = 9
+        const val IDX_BUTTON_L2: Byte = 10
+        const val IDX_BUTTON_R2: Byte = 11
+
+        fun getControllers(): ArrayList<ExternalController> {
+            val deviceIds = InputDevice.getDeviceIds()
+            val controllers = ArrayList<ExternalController>()
+            for (i in deviceIds.indices.reversed()) {
+                val device = InputDevice.getDevice(deviceIds[i])
+                if (isGameController(device)) {
+                    val controller = ExternalController()
+                    controller.setControllerId(device!!.descriptor)
+                    controller.setControllerName(device.name)
+                    controllers.add(controller)
+                }
+            }
+            return controllers
+        }
+
+        fun getController(id: String): ExternalController? {
+            return getControllers().find { it.id == id }
+        }
+
+        fun getController(deviceId: Int): ExternalController? {
+            val deviceIds = InputDevice.getDeviceIds()
+            for (i in deviceIds.indices.reversed()) {
+                if (deviceIds[i] == deviceId || deviceId == 0) {
+                    val device = InputDevice.getDevice(deviceIds[i])
+                    if (isGameController(device)) {
+                        val controller = ExternalController()
+                        controller.setControllerId(device!!.descriptor)
+                        controller.setControllerName(device.name)
+                        controller.deviceId = deviceIds[i]
+                        return controller
+                    }
+                }
+            }
+            return null
+        }
+
+        fun isGameController(device: InputDevice?): Boolean {
+            if (device == null) return false
+            val sources = device.sources
+            return !device.isVirtual() && ((sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                    (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK)
+        }
     }
 }
