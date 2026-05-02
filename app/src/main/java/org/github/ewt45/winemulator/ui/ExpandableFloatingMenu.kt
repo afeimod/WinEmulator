@@ -97,10 +97,10 @@ fun ExpandableFloatingMenu(
 
         if (isExpanded) {
             val menuItems = listOf(
-                Triple(Icons.Default.Home, "主菜单", onMainMenuClick),
-                Triple(Icons.Filled.Settings, "一般设置", onGeneralSettingsClick),
-                Triple(Icons.Default.Menu, "虚拟按键设置", onVirtualKeysClick),
-                Triple(Icons.Default.Info, "X11显示设置", onX11SettingsClick)
+                Triple(Icons.Default.Dashboard, "主菜单", onMainMenuClick),
+                Triple(Icons.Filled.Tune, "一般设置", onGeneralSettingsClick),
+                Triple(Icons.Default.SportsEsports, "虚拟按键设置", onVirtualKeysClick),
+                Triple(Icons.Default.DesktopWindows, "X11显示设置", onX11SettingsClick)
             )
 
             val arcRadius = with(density) { 60.dp.toPx() }
@@ -203,7 +203,7 @@ fun ExpandableFloatingMenu(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isExpanded) Icons.Filled.Close else Icons.Filled.Add,
+                    imageVector = if (isExpanded) Icons.Filled.Close else Icons.Filled.Widgets,
                     contentDescription = if (isExpanded) "收起菜单" else "展开菜单",
                     modifier = Modifier
                         .size(36.dp)
