@@ -3,19 +3,12 @@ package org.github.ewt45.winemulator.inputcontrols
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.FrameLayout
-import com.termux.x11.controller.inputcontrols.GamepadState
-import com.termux.x11.controller.xserver.Pointer
-import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
-import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
 import kotlin.math.*
 
 /**
@@ -49,8 +42,9 @@ class InputControlsView(
     val maxWidth: Int
         get() = if (snappingSize > 0) (width.toFloat() / snappingSize).roundToInt() * snappingSize else width
 
+    // Fixed: was "snackingSize" (typo), now correct "snappingSize"
     val maxHeight: Int
-        get() = if (snappingSize > 0) (height.toFloat() / snappingSize).roundToInt() * snackingSize else height
+        get() = if (snappingSize > 0) (height.toFloat() / snappingSize).roundToInt() * snappingSize else height
 
     private var selectedElement: ControlElement? = null
     private var moveCursor = false
@@ -59,7 +53,7 @@ class InputControlsView(
     private val cursor = Point()
     private var pendingProfileReload = false
 
-    // 追踪哪些pointer被虚拟按键处理（跨事件持久化）
+    // Track which pointers are handled by virtual buttons (persistent across events)
     private val buttonPointers = mutableSetOf<Int>()
     
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -72,7 +66,7 @@ class InputControlsView(
     private var rangeScroller: RangeScroller? = null
     private var currentElementForScroller: ControlElement? = null
 
-    // 用于检测尺寸变化，重新加载元素坐标
+    // Track size changes to reload element positions
     private var lastMaxWidth = 0
     private var lastMaxHeight = 0
 
@@ -93,7 +87,7 @@ class InputControlsView(
     }
 
     /**
-     * 设置X服务器引用（用于调用injectPointerMoveDelta等方法）
+     * Set X server reference (for calling injectPointerMoveDelta, etc.)
      */
     fun setXServer(server: Any) {
         this.xServer = server
@@ -101,12 +95,12 @@ class InputControlsView(
     }
 
     /**
-     * 获取X服务器引用
+     * Get X server reference
      */
     fun getXServer(): Any? = xServer
 
     /**
-     * 设置是否显示虚拟按键，同时调整视图的点击和聚焦状态
+     * Set whether to show virtual controls, and adjust view's click/focus state
      */
     @JvmName("setControlsVisible")
     fun setControlsVisible(show: Boolean) {
@@ -208,13 +202,13 @@ class InputControlsView(
     }
 
     fun handleInputEvent(binding: Binding, isDown: Boolean, value: Float = 0f) {
-        // 如果绑定了游戏手柄
+        // If gaming pad binding
         if (binding.isGamepad) {
-            // Gamepad events handled separately - would need winHandler integration
+            // Gaming pad events handled separately
             return
         }
 
-        // 鼠标移动绑定
+        // Mouse move binding
         if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
             mouseMoveOffset.x = if (isDown) (if (value != 0f) value else (if (binding == Binding.MOUSE_MOVE_LEFT) -1f else 1f)) else 0f
             if (isDown) createMouseMoveTimer()
@@ -222,10 +216,10 @@ class InputControlsView(
             mouseMoveOffset.y = if (isDown) (if (value != 0f) value else (if (binding == Binding.MOUSE_MOVE_UP) -1f else 1f)) else 0f
             if (isDown) createMouseMoveTimer()
         } else {
-            // 其他绑定（按键、鼠标按钮）
+            // Other bindings (keys, mouse buttons)
             when {
                 binding.isMouse -> {
-                    // 处理鼠标按钮事件
+                    // Handle mouse button events
                     binding.getPointerButton()?.let { button ->
                         inputEventHandler?.onPointerButton(button, isDown)
                     }
@@ -242,14 +236,14 @@ class InputControlsView(
     }
 
     /**
-     * 创建鼠标移动定时器 - 使用定时器持续发送鼠标移动事件
-     * 这解决了虚拟按键长按时持续移动的问题
+     * Create mouse move timer - use timer to continuously send mouse move events
+     * This solves the continuous movement issue when pressing and holding virtual buttons
      */
     private fun createMouseMoveTimer() {
-        // 停止已有的定时器
+        // Stop existing timer
         stopMouseMoveTimer()
         
-        // 只有在有偏移量时才创建定时器
+        // Only create timer when there's offset
         if (mouseMoveOffset.x == 0f && mouseMoveOffset.y == 0f) return
         if (profile == null) return
         
@@ -267,7 +261,7 @@ class InputControlsView(
     }
 
     /**
-     * 停止鼠标移动定时器
+     * Stop mouse move timer
      */
     private fun stopMouseMoveTimer() {
         mouseMoveTimer?.cancel()
@@ -390,25 +384,19 @@ class InputControlsView(
         return (value / rounding).roundToInt() * rounding
     }
 
+    // Removed gaming pad specific code - these classes don't exist in Linbox project
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        // 处理外部游戏手柄事件
-        if (!editMode && profile != null) {
-            val controller = profile!!.getController(event.deviceId)
-            if (controller != null && controller.updateStateFromMotionEvent(event)) {
-                processJoystickInput(controller)
-                return true
-            }
-        }
+        // Gamepad event handling removed
         return super.onGenericMotionEvent(event)
     }
 
     override fun onHoverEvent(event: MotionEvent): Boolean {
-        // 将悬停事件传递给touchpad
+        // Pass hover events to touchpad
         return touchpadView?.onHoverEvent(event) ?: false
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // 编辑模式下，由父类处理触摸事件
+        // In edit mode, parent handles touch events
         if (editMode && readyToDraw) {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -447,21 +435,21 @@ class InputControlsView(
             return true
         }
 
-        // 非编辑模式，使用handleTouchEvent处理
+        // In non-edit mode, use handleTouchEvent
         return handleTouchEvent(event)
     }
 
     /**
-     * 处理触摸事件 - 这是与termux-x11保持一致的核心方法
-     * 正确处理虚拟按键和touchpad之间的触摸分发
+     * Handle touch events - correctly dispatch between virtual buttons and touchpad
+     * This is the core fix for the conflict issue
      */
     fun handleTouchEvent(event: MotionEvent): Boolean {
-        // 鼠标事件直接传递给touchpad
+        // Mouse events directly to touchpad
         if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
             return touchpadView?.onTouchEvent(event) ?: false
         }
 
-        // 非编辑模式且有profile时处理触摸
+        // Non-edit mode with profile, handle touch
         if (!editMode && profile != null) {
             val actionIndex = event.actionIndex
             val pointerId = event.getPointerId(actionIndex)
@@ -473,35 +461,35 @@ class InputControlsView(
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
                     
-                    // 启用左键
+                    // Enable left button
                     touchpadView?.setPointerButtonLeftEnabled(true)
 
-                    // 遍历虚拟按键检查这个down位置
+                    // Check virtual buttons for this down position
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
                             handled = true
                             buttonPointers.add(pointerId)
-                            // 如果绑定的是鼠标左键，禁用touchpad的左键
+                            // If bound to mouse left button, disable touchpad's left button
                             if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
                                 touchpadView?.setPointerButtonLeftEnabled(false)
                             }
                         }
                     }
 
-                    // 如果没有被虚拟按键处理，传递给touchpad
+                    // If not handled by virtual button, pass to touchpad
                     if (!handled) {
                         touchpadView?.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 遍历所有pointers
+                    // Iterate all pointers
                     for (i in 0 until event.pointerCount) {
                         val pointerIdI = event.getPointerId(i)
                         val x = event.getX(i)
                         val y = event.getY(i)
                         var thisHandled = false
 
-                        // 检查这个pointer是否被虚拟按键追踪
+                        // Check if this pointer is tracked by virtual buttons
                         if (buttonPointers.contains(pointerIdI)) {
                             for (element in profile!!.getElements()) {
                                 if (element.handleTouchMove(pointerIdI, x, y)) {
@@ -509,13 +497,13 @@ class InputControlsView(
                                     break
                                 }
                             }
-                            // 如果虚拟按键不再处理，从追踪中移除
+                            // If button no longer handles, remove from tracking
                             if (!thisHandled) {
                                 buttonPointers.remove(pointerIdI)
                             }
                         }
 
-                        // 如果虚拟按键没有处理，传递给touchpad
+                        // If virtual buttons don't handle, pass to touchpad
                         if (!thisHandled && !buttonPointers.contains(pointerIdI)) {
                             touchpadView?.onTouchEvent(event)
                         }
@@ -523,7 +511,7 @@ class InputControlsView(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
                     val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
-                        // 获取所有活动的pointer
+                        // Get all active pointers
                         (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
                     } else {
                         setOf(event.getPointerId(event.actionIndex))
@@ -535,11 +523,11 @@ class InputControlsView(
                                 handled = true
                             }
                         }
-                        // 从追踪中移除
+                        // Remove from tracking
                         buttonPointers.remove(pointerIdUp)
                     }
 
-                    // 传递给touchpad
+                    // Pass to touchpad
                     touchpadView?.onTouchEvent(event)
                 }
             }
@@ -547,46 +535,6 @@ class InputControlsView(
             return handled
         }
         return false
-    }
-
-    /**
-     * 处理游戏手柄输入
-     */
-    private fun processJoystickInput(controller: com.termux.x11.controller.inputcontrols.ExternalController) {
-        val axes = intArrayOf(
-            MotionEvent.AXIS_X, MotionEvent.AXIS_Y, 
-            MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ,
-            MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y
-        )
-        val values = floatArrayOf(
-            controller.state.thumbLX, controller.state.thumbLY,
-            controller.state.thumbRX, controller.state.thumbRY,
-            controller.state.getDPadX(), controller.state.getDPadY()
-        )
-
-        for (i in axes.indices) {
-            if (abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
-                val controllerBinding = controller.getControllerBinding(
-                    com.termux.x11.controller.inputcontrols.ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]))
-                )
-                if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding, true, values[i])
-                }
-            } else {
-                val positiveBinding = controller.getControllerBinding(
-                    com.termux.x11.controller.inputcontrols.ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
-                )
-                if (positiveBinding != null) {
-                    handleInputEvent(positiveBinding.binding, false, values[i])
-                }
-                val negativeBinding = controller.getControllerBinding(
-                    com.termux.x11.controller.inputcontrols.ExternalControllerBinding.getKeyCodeForAxis(axes[i], (-1).toByte())
-                )
-                if (negativeBinding != null) {
-                    handleInputEvent(negativeBinding.binding, false, values[i])
-                }
-            }
-        }
     }
 
     private fun intersectElement(x: Float, y: Float): ControlElement? {
