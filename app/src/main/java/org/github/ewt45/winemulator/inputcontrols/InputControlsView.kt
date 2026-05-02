@@ -601,7 +601,8 @@ class InputControlsView(
 }
 
 /**
- * Touchpad view for mouse simulation - simplified version for Android
+ * Touchpad view for mouse simulation - complete version with tap detection
+ * Fixed to properly handle tap-to-click functionality
  */
 @SuppressLint("ViewConstructor")
 class TouchpadView(context: Context) : View(context) {
@@ -611,12 +612,21 @@ class TouchpadView(context: Context) : View(context) {
     private var lastX = 0f
     private var lastY = 0f
 
-    var inputEventHandler: InputEventHandler? = null
-
+    // Finger tracking for tap detection
+    private var fingerStartX = 0f
+    private var fingerStartY = 0f
+    private var fingerStartTime = 0L
+    private var isFingerDown = false
+    
+    // Configuration constants (same as termux-app)
     companion object {
-        const val CURSOR_ACCELERATION = 2f
-        const val CURSOR_ACCELERATION_THRESHOLD = 4f
+        const val CURSOR_ACCELERATION = 1.25f
+        const val CURSOR_ACCELERATION_THRESHOLD = 6
+        const val MAX_TAP_TRAVEL_DISTANCE = 10  // Max movement to consider as tap
+        const val MAX_TAP_MILLISECONDS = 200  // Max time to consider as tap
     }
+
+    var inputEventHandler: InputEventHandler? = null
 
     fun setPointerButtonLeftEnabled(enabled: Boolean) {
         isPointerButtonLeftEnabled = enabled
@@ -626,16 +636,42 @@ class TouchpadView(context: Context) : View(context) {
         return floatArrayOf(newX - oldX, newY - oldY)
     }
 
+    /**
+     * Check if the finger movement qualifies as a tap (quick light touch)
+     */
+    private fun isTap(): Boolean {
+        if (!isFingerDown) return false
+        
+        val touchDuration = System.currentTimeMillis() - fingerStartTime
+        val travelDistance = kotlin.math.sqrt(
+            (lastX - fingerStartX) * (lastX - fingerStartX) + 
+            (lastY - fingerStartY) * (lastY - fingerStartY)
+        )
+        
+        return touchDuration < MAX_TAP_MILLISECONDS * 5 && travelDistance < MAX_TAP_TRAVEL_DISTANCE * 5
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                lastX = event.x
-                lastY = event.y
+        val actionMasked = event.actionMasked
+        
+        when (actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                // Mark finger as down and record start position/time
+                isFingerDown = true
+                fingerStartX = event.x
+                fingerStartY = event.y
+                lastX = fingerStartX
+                lastY = fingerStartY
+                fingerStartTime = System.currentTimeMillis()
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - lastX
                 val dy = event.y - lastY
-
+                
+                // Update position
+                lastX = event.x
+                lastY = event.y
+                
                 if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
                     inputEventHandler?.onPointerMove(
                         (dx * CURSOR_ACCELERATION).toInt(),
@@ -644,9 +680,21 @@ class TouchpadView(context: Context) : View(context) {
                 } else {
                     inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
                 }
-
-                lastX = event.x
-                lastY = event.y
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                // On finger up, check if it was a tap and send mouse click
+                if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
+                    // Send mouse button press (left click down)
+                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                    
+                    // Send mouse button release after a short delay
+                    postDelayed({
+                        inputEventHandler?.onPointerButton(0, false)
+                    }, 30)
+                }
+                
+                // Reset finger state
+                isFingerDown = false
             }
         }
         return true
