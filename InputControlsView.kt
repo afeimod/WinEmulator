@@ -55,6 +55,11 @@ class InputControlsView(
     private var rangeScroller: RangeScroller? = null
     private var currentElementForScroller: ControlElement? = null
 
+    // 跟踪已被控件占用的触点ID集合
+    private val occupiedPointerIds = mutableSetOf<Int>()
+    
+    // 跟踪触控板使用的触点ID及其最后位置
+    private val touchpadPointers = mutableMapOf<Int, PointF>()
 
 
     // Icon cache
@@ -401,46 +406,88 @@ class InputControlsView(
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
 
+                    android.util.Log.d("InputControlsView", "DOWN event: pointer=$pointerId, x=$x, y=$y")
+
+                    var handledByControl = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
                             vibrator?.vibrate(vibrationEffect)
-                            handled = true
+                            // 记录该触点已被占用
+                            occupiedPointerIds.add(pointerId)
+                            handledByControl = true
+                            android.util.Log.d("InputControlsView", "Handled by control: pointer=$pointerId")
                             break
                         }
                     }
 
-                    if (!handled) {
-                        // 让 touchpadView 处理（如果存在），但不一定消费事件
-                        touchpadView?.onTouchEvent(event)
+                    if (!handledByControl) {
+                        // 这个触点没有被控件占用，可以用于触控板
+                        touchpadPointers[pointerId] = PointF(x, y)
+                        android.util.Log.d("InputControlsView", "Added to touchpad: pointer=$pointerId")
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    // 遍历所有触点，独立处理每个触点的移动
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
                         val id = event.getPointerId(i)
 
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchMove(id, x, y)) {
+                        // 如果该触点已被某个控件占用，则交给控件处理
+                        if (occupiedPointerIds.contains(id)) {
+                            for (element in profile!!.getElements()) {
+                                if (element.handleTouchMove(id, x, y)) {
+                                    handled = true
+                                    break
+                                }
+                            }
+                        } else {
+                            // 这个触点没有被控件占用，作为触控板处理
+                            val lastPos = touchpadPointers[id]
+                            
+                            if (lastPos != null) {
+                                // 已经有记录的位置，计算位移
+                                val dx = x - lastPos.x
+                                val dy = y - lastPos.y
+                                
+                                android.util.Log.d("InputControlsView", "Touchpad move: pointer=$id, dx=$dx, dy=$dy")
+                                
+                                // 直接调用输入事件处理器，而不是通过 TouchpadView
+                                if (abs(dx) > TouchpadView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > TouchpadView.CURSOR_ACCELERATION_THRESHOLD) {
+                                    inputEventHandler?.onPointerMove(
+                                        (dx * TouchpadView.CURSOR_ACCELERATION).toInt(),
+                                        (dy * TouchpadView.CURSOR_ACCELERATION).toInt()
+                                    )
+                                } else {
+                                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                                }
+                                
+                                // 更新最后位置
+                                lastPos.set(x, y)
+                                // 标记事件已被处理
                                 handled = true
-                                break
+                            } else {
+                                // 第一次看到这个未占用的触点，记录初始位置但不产生移动
+                                touchpadPointers[id] = PointF(x, y)
+                                android.util.Log.d("InputControlsView", "Touchpad init: pointer=$id, x=$x, y=$y")
                             }
                         }
                     }
-
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
-                    }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                    var handledByControl = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchUp(pointerId)) {
-                            handled = true
+                            handledByControl = true
                         }
                     }
 
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
+                    if (handledByControl) {
+                        // 释放该触点的占用状态
+                        occupiedPointerIds.remove(pointerId)
+                    } else {
+                        // 这个触点是用于触控板的，移除它
+                        touchpadPointers.remove(pointerId)
                     }
                 }
             }
@@ -493,6 +540,11 @@ class TouchpadView(context: Context) : View(context) {
 
     fun computeDeltaPoint(oldX: Float, oldY: Float, newX: Float, newY: Float): FloatArray {
         return floatArrayOf(newX - oldX, newY - oldY)
+    }
+
+    fun setInitialPosition(x: Float, y: Float, pointerId: Int) {
+        // 这个方法现在由 InputControlsView 直接处理，这里保留作为兼容
+        // 实际的位置跟踪在 InputControlsView 的 touchpadPointers 中完成
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

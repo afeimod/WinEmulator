@@ -128,7 +128,8 @@ class ControlElement(
     private var currentPointerId: Int = -1
     private val boundingBox: Rect = Rect()
     private var boundingBoxNeedsUpdate: Boolean = true
-    private val states: BooleanArray = booleanArrayOf(false, false, false, false)
+    // 使用 Map 来跟踪多个触点的状态，key 为 pointerId，value 为对应的 states 数组
+    private val pointerStatesMap = mutableMapOf<Int, BooleanArray>()
     private var currentPosition: PointF? = null
     private var touchTime: Long? = null
 
@@ -172,7 +173,8 @@ class ControlElement(
 
     fun setBindingCount(count: Int) {
         bindings = Array(count) { Binding.NONE }
-        states.fill(false)
+        // 清空所有触点的状态
+        pointerStatesMap.clear()
         boundingBoxNeedsUpdate = true
     }
 
@@ -190,7 +192,18 @@ class ControlElement(
                 newBindings[i] = Binding.NONE
             }
             bindings = newBindings
-            states.fill(false)
+            // 更新所有触点的状态数组大小
+            val entriesToUpdate = pointerStatesMap.entries.toList()
+            for (entry in entriesToUpdate) {
+                val states = entry.value
+                if (index >= states.size) {
+                    val newStates = BooleanArray(index + 1)
+                    for (i in states.indices) {
+                        newStates[i] = states[i]
+                    }
+                    pointerStatesMap[entry.key] = newStates
+                }
+            }
             boundingBoxNeedsUpdate = true
         }
         bindings[index] = binding
@@ -672,8 +685,17 @@ class ControlElement(
     }
 
     fun handleTouchDown(pointerId: Int, px: Float, py: Float): Boolean {
-        if (currentPointerId == -1 && containsPoint(px, py)) {
-            currentPointerId = pointerId
+        // 允许多个触点同时按下，但每个控件类型有自己的处理方式
+        if (containsPoint(px, py)) {
+            // 如果该触点ID尚未被此控件跟踪，则初始化其状态
+            if (!pointerStatesMap.containsKey(pointerId)) {
+                pointerStatesMap[pointerId] = BooleanArray(bindings.size) { false }
+            }
+            
+            // 对于某些类型的控件，我们仍然需要跟踪主要的触点ID
+            if (currentPointerId == -1) {
+                currentPointerId = pointerId
+            }
 
             when (type) {
                 Type.BUTTON -> {
@@ -707,7 +729,8 @@ class ControlElement(
     }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
-        if (pointerId == currentPointerId && (type == Type.D_PAD || type == Type.STICK || type == Type.TRACKPAD)) {
+        // 检查该触点是否被此控件跟踪
+        if (pointerStatesMap.containsKey(pointerId) && (type == Type.D_PAD || type == Type.STICK || type == Type.TRACKPAD)) {
             var deltaX: Float
             var deltaY: Float
             val box = getBoundingBox()
@@ -741,6 +764,9 @@ class ControlElement(
                 }
             }
 
+            // 获取该触点的状态数组
+            val states = pointerStatesMap[pointerId] ?: BooleanArray(bindings.size) { false }
+
             when (type) {
                 Type.STICK -> {
                     if (currentPosition == null) currentPosition = PointF()
@@ -771,6 +797,8 @@ class ControlElement(
                             states[i] = state
                         }
                     }
+                    // 更新该触点的状态
+                    pointerStatesMap[pointerId] = states
                     inputControlsView.invalidate()
                 }
                 Type.TRACKPAD -> {
@@ -809,6 +837,8 @@ class ControlElement(
                     if (cursorDx != 0 || cursorDy != 0) {
                         inputControlsView.injectPointerMove(cursorDx, cursorDy)
                     }
+                    // 更新该触点的状态
+                    pointerStatesMap[pointerId] = states
                 }
                 Type.D_PAD -> {
                     val newStates = booleanArrayOf(
@@ -825,11 +855,13 @@ class ControlElement(
                         inputControlsView.handleInputEvent(binding, state, value)
                         states[i] = state
                     }
+                    // 更新该触点的状态
+                    pointerStatesMap[pointerId] = states
                 }
                 else -> {}
             }
             return true
-        } else if (pointerId == currentPointerId && type == Type.RANGE_BUTTON) {
+        } else if (pointerStatesMap.containsKey(pointerId) && type == Type.RANGE_BUTTON) {
             scroller?.handleTouchMove(this, px, py)
             inputControlsView.invalidate()  // 触发重绘以显示滚动效果
             return true
@@ -838,7 +870,8 @@ class ControlElement(
     }
 
     fun handleTouchUp(pointerId: Int): Boolean {
-        if (pointerId == currentPointerId) {
+        // 检查该触点是否被此控件跟踪
+        if (pointerStatesMap.containsKey(pointerId)) {
             when (type) {
                 Type.BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
@@ -860,10 +893,15 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
-                    for (i in states.indices) {
-                        if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
-                        states[i] = false
+                    // 获取该触点的状态数组
+                    val states = pointerStatesMap[pointerId]
+                    if (states != null) {
+                        for (i in states.indices) {
+                            if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
+                        }
                     }
+                    // 移除该触点的状态
+                    pointerStatesMap.remove(pointerId)
 
                     if (type == Type.RANGE_BUTTON) {
                         scroller?.handleTouchUp()
@@ -871,10 +909,17 @@ class ControlElement(
                         inputControlsView.invalidate()
                     }
 
-                    currentPosition = null
+                    // 如果这是主要触点，清除当前位置
+                    if (pointerId == currentPointerId) {
+                        currentPosition = null
+                        currentPointerId = -1
+                        // 如果有其他触点仍在使用，选择其中一个作为新的主要触点
+                        if (pointerStatesMap.isNotEmpty()) {
+                            currentPointerId = pointerStatesMap.keys.first()
+                        }
+                    }
                 }
             }
-            currentPointerId = -1
             return true
         }
         return false
