@@ -761,37 +761,39 @@ class InputControlsView(
                         // 释放该触点的占用状态
                         buttonPointers.remove(pointerId)
                     } else {
-                        // 触控板点击检测 - 简化逻辑，更可靠
-                        if (actionMasked == MotionEvent.ACTION_UP && touchpadPointers.isNotEmpty()) {
+                        // 触控板点击检测 - 更简化的逻辑
+                        if (actionMasked == MotionEvent.ACTION_UP) {
                             val touchCount = touchpadPointers.size
                             
-                            // 检查是否都是点击（没有大幅移动且时间较短）
-                            var allAreClicks = true
-                            for ((id, info) in touchDownInfos) {
-                                val lastPos = touchpadPointers[id]
-                                if (lastPos != null) {
-                                    val elapsed = System.currentTimeMillis() - info.downTime
-                                    val distance = kotlin.math.sqrt(
-                                        (lastPos.x - info.downPosition.x) * (lastPos.x - info.downPosition.x) +
-                                        (lastPos.y - info.downPosition.y) * (lastPos.y - info.downPosition.y)
-                                    )
-                                    if (distance > CLICK_MAX_DISTANCE || elapsed > CLICK_MAX_TIME) {
-                                        allAreClicks = false
-                                        break
+                            if (touchCount >= 1) {
+                                // 检查是否移动距离很小（基本可以视为点击）
+                                var isClick = true
+                                for ((id, info) in touchDownInfos) {
+                                    val lastPos = touchpadPointers[id]
+                                    if (lastPos != null) {
+                                        val distance = kotlin.math.sqrt(
+                                            (lastPos.x - info.downPosition.x) * (lastPos.x - info.downPosition.x) +
+                                            (lastPos.y - info.downPosition.y) * (lastPos.y - info.downPosition.y)
+                                        )
+                                        // 只要移动距离不太大，就视为点击
+                                        if (distance > 50f) {
+                                            isClick = false
+                                            break
+                                        }
                                     }
                                 }
-                            }
-                            
-                            // 发送点击事件
-                            if (allAreClicks && touchCount >= 1) {
-                                if (touchCount == 2) {
-                                    // 双指点击 -> 右键
-                                    inputEventHandler?.onPointerButton(3, true)
-                                    inputEventHandler?.onPointerButton(3, false)
-                                } else {
-                                    // 单指/多指点击 -> 左键
-                                    inputEventHandler?.onPointerButton(1, true)
-                                    inputEventHandler?.onPointerButton(1, false)
+                                
+                                // 发送点击事件
+                                if (isClick) {
+                                    if (touchCount == 2) {
+                                        // 双指点击 -> 右键
+                                        inputEventHandler?.onPointerButton(3, true)
+                                        inputEventHandler?.onPointerButton(3, false)
+                                    } else {
+                                        // 单指/多指点击 -> 左键
+                                        inputEventHandler?.onPointerButton(1, true)
+                                        inputEventHandler?.onPointerButton(1, false)
+                                    }
                                 }
                             }
                         }
