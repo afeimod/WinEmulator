@@ -869,6 +869,8 @@ class ControlElement(
         return false
     }
 
+    fun ownsPointer(pointerId: Int): Boolean = currentPointerId == pointerId
+
     fun handleTouchUp(pointerId: Int): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {

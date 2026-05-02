@@ -398,91 +398,45 @@ class InputControlsView(
 
         // 非编辑模式下，只有当 showTouchscreenControls 为 true 时才处理触摸事件
         if (!editMode && profile != null && showTouchscreenControls) {
+            val actionIndex = event.actionIndex
+            val pointerId = event.getPointerId(actionIndex)
             val actionMasked = event.actionMasked
 
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                    val actionIndex = event.actionIndex
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
-                    val pointerId = event.getPointerId(actionIndex)
-
-                    // 启用左键
-                    touchpadView?.setPointerButtonLeftEnabled(true)
-
-                    // 遍历虚拟按键检查这个down位置
-                    var downHandled = false
+                    var handled = false
                     for (element in profile!!.getElements()) {
-                        if (element.handleTouchDown(pointerId, x, y)) {
-                            downHandled = true
-                            buttonPointers.add(pointerId)  // 追踪这个pointer
-                            // 如果绑定的是鼠标左键，禁用touchpad的左键
-                            if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
-                                touchpadView?.setPointerButtonLeftEnabled(false)
-                            }
-                        }
+                        if (element.handleTouchDown(pointerId, x, y)) { handled = true; break }
                     }
-
-                    // 如果没有被虚拟按键处理，传递给touchpad
-                    if (!downHandled) {
-                        touchpadView?.onTouchEvent(event)
-                    }
+                    if (!handled) touchpadView?.handleExternalPointerDown(pointerId, x, y)
+                    return handled || touchpadView != null
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 遍历所有pointers，分别处理
+                    var anyHandled = false
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
-                        val pointerId = event.getPointerId(i)
-                        var thisHandled = false
-
-                        // 只有被追踪的pointer才传递给虚拟按键处理
-                        if (pointerId in buttonPointers) {
-                            for (element in profile!!.getElements()) {
-                                if (element.handleTouchMove(i, x, y)) {
-                                    thisHandled = true
-                                    break
-                                }
-                            }
-                            // 如果这个pointer不再被虚拟按键处理，从追踪中移除
-                            if (!thisHandled) {
-                                buttonPointers.remove(pointerId)
-                            }
+                        val id = event.getPointerId(i)
+                        var handled = false
+                        for (element in profile!!.getElements()) {
+                            if (element.handleTouchMove(id, x, y)) { handled = true; break }
                         }
-
-                        // 传递给touchpad（对于未追踪的，或者虚拟按键不处理的）
-                        if (!thisHandled) {
-                            touchpadView?.onTouchEvent(event)
-                        }
+                        if (!handled) handled = touchpadView?.handleExternalPointerMove(id, x, y) == true
+                        anyHandled = anyHandled || handled
                     }
+                    return anyHandled
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    // 处理所有pointers
-                    val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
-                        // 获取所有活动的pointer
-                        (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
-                    } else {
-                        setOf(event.getPointerId(event.actionIndex))
+                    var handled = false
+                    for (element in profile!!.getElements()) {
+                        if (element.handleTouchUp(pointerId)) handled = true
                     }
-
-                    for (pointerId in pointersToHandle) {
-                        var upHandled = false
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchUp(pointerId)) {
-                                upHandled = true
-                            }
-                        }
-                        // 从追踪中移除
-                        buttonPointers.remove(pointerId)
-                    }
-
-                    // 传递给touchpad
-                    touchpadView?.onTouchEvent(event)
+                    if (!handled) handled = touchpadView?.handleExternalPointerUp(pointerId) == true
+                    return handled
                 }
             }
-
-            // 如果有虚拟按键处理了，返回true
-            return buttonPointers.isNotEmpty()
         }
         // 当 showTouchscreenControls 为 false 或 profile 为 null 时，不处理触摸事件，让事件传递给下层
         return false
@@ -531,6 +485,30 @@ class TouchpadView(context: Context) : View(context) {
 
     fun computeDeltaPoint(oldX: Float, oldY: Float, newX: Float, newY: Float): FloatArray {
         return floatArrayOf(newX - oldX, newY - oldY)
+    }
+
+    private val pointerPositions = mutableMapOf<Int, PointF>()
+
+    fun handleExternalPointerDown(pointerId: Int, x: Float, y: Float): Boolean {
+        pointerPositions[pointerId] = PointF(x, y)
+        return true
+    }
+
+    fun handleExternalPointerMove(pointerId: Int, x: Float, y: Float): Boolean {
+        val last = pointerPositions[pointerId] ?: return false
+        val dx = x - last.x
+        val dy = y - last.y
+        if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+            inputEventHandler?.onPointerMove((dx * CURSOR_ACCELERATION).toInt(), (dy * CURSOR_ACCELERATION).toInt())
+        } else {
+            inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+        }
+        last.set(x, y)
+        return true
+    }
+
+    fun handleExternalPointerUp(pointerId: Int): Boolean {
+        return pointerPositions.remove(pointerId) != null
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
