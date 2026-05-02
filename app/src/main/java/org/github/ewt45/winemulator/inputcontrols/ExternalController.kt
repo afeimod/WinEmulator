@@ -49,7 +49,7 @@ class ExternalController {
     }
 
     fun getControllerBinding(keyCode: Int): ExternalControllerBinding? {
-        return controllerBindings.find { it.keyCodeForAxis == keyCode }
+        return controllerBindings.find { it.keyCodeForAxisVal == keyCode }
     }
 
     fun getControllerBindingAt(index: Int): ExternalControllerBinding? {
@@ -57,7 +57,7 @@ class ExternalController {
     }
 
     fun addControllerBinding(controllerBinding: ExternalControllerBinding) {
-        if (getControllerBinding(controllerBinding.keyCodeForAxis) == null) {
+        if (getControllerBinding(controllerBinding.keyCodeForAxisVal) == null) {
             controllerBindings.add(controllerBinding)
         }
     }
