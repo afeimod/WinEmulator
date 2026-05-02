@@ -269,7 +269,11 @@ class InputControlsView(
                     // Handle mouse button events
                     val pointerButton = binding.getPointerButton()
                     if (pointerButton != null) {
-                        inputEventHandler?.onPointerButton(pointerButton, isDown)
+                        if (isDown) {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, true)
+                        } else {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, false)
+                        }
                     }
                 }
                 binding.isKeyboard -> {
