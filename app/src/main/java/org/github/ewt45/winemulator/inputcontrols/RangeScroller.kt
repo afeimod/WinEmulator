@@ -6,7 +6,7 @@ import java.util.TimerTask
 
 /**
  * Handles scrolling for range button elements
- * 完全从 termux-app 移植，确保滚动和按键输出正确
+ * 完全从 termux-app 移植确保滚动和按键输出正确
  */
 class RangeScroller(
     private val inputControlsView: InputControlsView,
@@ -21,13 +21,17 @@ class RangeScroller(
     private var isScrolling: Boolean = false
     private var timer: Timer? = null
 
+    // Constants (hardcoded from InputControlsView)
+    private val MAX_TAP_MILLISECONDS: Long = 200
+    private val MAX_TAP_TRAVEL_DISTANCE: Float = 10f
+
     /**
      * 获取单个元素的大小
      * 基于 boundingBox 大小除以 bindingCount
      */
     fun getElementSize(): Float {
-        val boundingBox = element.boundingBox
-        return maxOf(boundingBox.width(), boundingBox.height()).toFloat() / element.bindingCount
+        val boundingBox = element.getBoundingBox()
+        return maxOf(boundingBox.width(), boundingBox.height()).toFloat() / element.getBindingCount()
     }
 
     /**
@@ -50,7 +54,7 @@ class RangeScroller(
         var from = kotlin.math.floor((scrollOffset / elementSize) % range.max).toInt()
         if (from < 0) from = range.max.toInt() + from
         
-        val to = from + element.bindingCount + 1
+        val to = from + element.getBindingCount() + 1
         
         return intArrayOf(from, to)
     }
@@ -59,7 +63,7 @@ class RangeScroller(
      * 根据触摸位置获取对应的 Binding
      */
     private fun getBindingByPosition(x: Float, y: Float): Binding {
-        val boundingBox = element.boundingBox
+        val boundingBox = element.getBoundingBox()
         val range = element.range ?: ControlElement.Range.FROM_A_TO_Z
         val orientation = element.orientation.toInt()
 
@@ -84,21 +88,21 @@ class RangeScroller(
                     Binding.NONE
                 }
             }
-            ControlElement.Range.DIGITS -> {
+            ControlElement.Range.FROM_0_TO_9 -> {
                 if (index in 0..9) {
                     Binding.fromString("KEY_${(index + 1) % 10}")
                 } else {
                     Binding.NONE
                 }
             }
-            ControlElement.Range.FUNCTION_KEYS -> {
+            ControlElement.Range.FROM_F1_TO_F12 -> {
                 if (index in 0..11) {
                     Binding.fromString("KEY_F${index + 1}")
                 } else {
                     Binding.NONE
                 }
             }
-            ControlElement.Range.NUMPAD_DIGITS -> {
+            ControlElement.Range.FROM_NP0_TO_NP9 -> {
                 if (index in 0..9) {
                     Binding.fromString("KEY_KP_${(index + 1) % 10}")
                 } else {
@@ -112,7 +116,7 @@ class RangeScroller(
      * 判断是否是点击（而非拖拽）
      */
     private fun isTap(): Boolean {
-        return System.currentTimeMillis() - touchTime < inputControlsView.MAX_TAP_MILLISECONDS
+        return System.currentTimeMillis() - touchTime < MAX_TAP_MILLISECONDS
     }
 
     /**
@@ -147,7 +151,7 @@ class RangeScroller(
                     }
                 }
             }
-        }, inputControlsView.MAX_TAP_MILLISECONDS)
+        }, MAX_TAP_MILLISECONDS)
     }
 
     /**
@@ -161,7 +165,7 @@ class RangeScroller(
         val deltaPosition = position - lastPosition
 
         // 如果移动距离超过阈值，切换到滚动模式
-        if (kotlin.math.abs(deltaPosition) >= inputControlsView.MAX_TAP_TRAVEL_DISTANCE) {
+        if (kotlin.math.abs(deltaPosition) >= MAX_TAP_TRAVEL_DISTANCE) {
             isScrolling = true
             destroyTimer()
         }

@@ -753,8 +753,10 @@ class ControlElement(
             when (type) {
                 Type.CHEAT_CODE_TEXT -> {
                     if (!cheatCodePressed) {
-                        // Send cheat code text
-                        inputControlsView.sendText(cheatCodeText)
+                        // Send cheat code text via input event handler
+                        for (c in cheatCodeText) {
+                            inputControlsView.handleInputEvent(Binding.NONE, true)
+                        }
                         cheatCodePressed = true
                     }
                     return true
@@ -785,7 +787,7 @@ class ControlElement(
                     if (scroller == null) {
                         scroller = RangeScroller(inputControlsView, this)
                     }
-                    scroller?.handleTouchDown(this, px, py)
+                    scroller?.handleTouchDown(px, py)
                     return true
                 }
                 Type.TRACKPAD -> {
@@ -940,7 +942,7 @@ class ControlElement(
             }
             return true
         } else if (pointerId == currentPointerId && type == Type.RANGE_BUTTON) {
-            scroller?.handleTouchMove(this, px, py)
+            scroller?.handleTouchMove(px, py)
             inputControlsView.invalidate()
             return true
         }
