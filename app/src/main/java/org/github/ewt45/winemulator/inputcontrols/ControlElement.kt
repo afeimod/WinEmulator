@@ -6,6 +6,8 @@ import android.os.Looper
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
+import java.util.Timer
+import java.util.TimerTask
 import kotlin.math.*
 
 class ControlElement(
@@ -148,6 +150,8 @@ class ControlElement(
     private var currentPointerId: Int = -1
     // 标记BUTTON是否处于持续按下状态（像方向键一样）
     private var isButtonHeldDown: Boolean = false
+    // 保存当前按住按键的binding，用于Timer持续发送
+    private var heldDownBinding: Binding? = null
     private val boundingBox: Rect = Rect()
     private var boundingBoxNeedsUpdate: Boolean = true
     private val states: BooleanArray = booleanArrayOf(false, false, false, false)
@@ -162,6 +166,11 @@ class ControlElement(
     private var repeatRunnable: Runnable? = null
     private val keyRepeatDelayMs = 50L
     private val keyRepeatIntervalMs = 16L
+    
+    // 持续按下Timer（像D_PAD一样持续发送）
+    private var holdTimer: Timer? = null
+    private var holdTimerTask: TimerTask? = null
+    private val holdIntervalMs = 16L  // 约60fps，持续发送
 
     private fun reset() {
         text = ""
@@ -741,12 +750,12 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        // 直接发送按键按下事件，不再使用Handler重复机制
-                        // 在handleTouchMove中保持按键按下状态
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
                         // 标记为持续按下状态
                         isButtonHeldDown = true
+                        // 立即启动持续发送机制
+                        startButtonHoldTimer(binding)
                     }
                     return true
                 }
@@ -792,36 +801,43 @@ class ControlElement(
             repeatRunnable = null
         }
     }
+    
+    /**
+     * 启动持续按键Timer - 像D_PAD一样持续发送按键按下事件
+     */
+    private fun startButtonHoldTimer(binding: Binding) {
+        stopButtonHoldTimer()
+        heldDownBinding = binding
+        
+        holdTimer = Timer()
+        holdTimerTask = object : TimerTask() {
+            override fun run() {
+                if (currentPointerId != -1 && heldDownBinding != null) {
+                    // 持续发送keyDown事件（跟D_PAD一样）
+                    inputControlsView.handleInputEvent(heldDownBinding!!, true)
+                }
+            }
+        }
+        // 立即开始，每16ms发送一次（约60fps）
+        holdTimer?.scheduleAtFixedRate(holdTimerTask, 0, holdIntervalMs)
+    }
+    
+    /**
+     * 停止持续按键Timer
+     */
+    private fun stopButtonHoldTimer() {
+        holdTimer?.cancel()
+        holdTimer = null
+        holdTimerTask = null
+        heldDownBinding = null
+    }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 像D_PAD一样，保持按键按下状态
-                    // 只要手指还在按钮区域内，就持续发送keyDown事件
-                    val box = getBoundingBox()
-                    val expandedRadius = maxOf(box.width(), box.height()) * 0.5f
-                    val centerX = box.centerX().toFloat()
-                    val centerY = box.centerY().toFloat()
-                    val dx = px - centerX
-                    val dy = py - centerY
-                    val distance = sqrt(dx * dx + dy * dy)
-                    
-                    if (distance > expandedRadius) {
-                        // 手指移出按钮区域，释放按键
-                        currentPointerId = -1
-                        val binding = getBindingAt(0)
-                        if (isButtonHeldDown) {
-                            inputControlsView.handleInputEvent(binding, false)
-                            isButtonHeldDown = false
-                        }
-                        return false
-                    }
-                    // 手指仍在按钮区域内，持续发送keyDown事件（就像方向键一样）
-                    if (isButtonHeldDown) {
-                        val binding = getBindingAt(0)
-                        inputControlsView.handleInputEvent(binding, true)
-                    }
+                    // BUTTON类型不需要在MOVE时做任何事情
+                    // 持续按下状态通过Timer维持
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -1008,6 +1024,8 @@ class ControlElement(
                         inputControlsView.handleInputEvent(binding, false)
                         isButtonHeldDown = false
                     }
+                    // 停止持续按键Timer
+                    stopButtonHoldTimer()
 
                     if (isToggleSwitch) {
                         isSelected = !isSelected
