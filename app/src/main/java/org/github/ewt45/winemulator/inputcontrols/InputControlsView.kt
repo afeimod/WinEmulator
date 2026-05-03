@@ -51,6 +51,11 @@ class InputControlsView(
     // Timer for continuous mouse movement
     private var mouseMoveTimer: Timer? = null
     private val mouseMoveOffset = PointF()
+    
+    // Timer for continuous key press (for keyboard repeat)
+    private var keyRepeatTimer: Timer? = null
+    private var keyRepeatBinding: Binding? = null
+    
     private val cursor = Point()
     private val cursorSpeed: Float
         get() = profile?.cursorSpeed ?: 1.0f
@@ -294,7 +299,14 @@ class InputControlsView(
                     }
                 }
                 binding.isKeyboard -> {
-                    inputEventHandler?.onKeyEvent(binding.keycode, isDown)
+                    // 对于键盘按键，如果是按下则启动重复
+                    if (isDown) {
+                        inputEventHandler?.onKeyEvent(binding.keycode, true)
+                        startKeyRepeatTimer(binding)
+                    } else {
+                        stopKeyRepeatTimer(binding)
+                        inputEventHandler?.onKeyEvent(binding.keycode, false)
+                    }
                 }
             }
         }
@@ -335,6 +347,36 @@ class InputControlsView(
     private fun stopMouseMoveTimer() {
         mouseMoveTimer?.cancel()
         mouseMoveTimer = null
+    }
+    
+    /**
+     * Start key repeat timer for continuous key press
+     */
+    private fun startKeyRepeatTimer(binding: Binding) {
+        // Stop any existing key repeat timer
+        stopKeyRepeatTimer(null)
+        
+        keyRepeatBinding = binding
+        keyRepeatTimer = Timer()
+        keyRepeatTimer?.scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                keyRepeatBinding?.let { b ->
+                    inputEventHandler?.onKeyEvent(b.keycode, true)
+                }
+            }
+        }, 150, 50) // 初始延迟150ms，每50ms重复一次
+    }
+    
+    /**
+     * Stop key repeat timer
+     * @param binding The binding to stop, or null to stop all
+     */
+    private fun stopKeyRepeatTimer(binding: Binding?) {
+        if (binding == null || keyRepeatBinding == binding) {
+            keyRepeatTimer?.cancel()
+            keyRepeatTimer = null
+            keyRepeatBinding = null
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -823,7 +865,7 @@ class InputControlsView(
 }
 
 /**
- * Touchpad view for mouse simulation - complete version with tap detection
+ * Touchpad view for mouse simulation - complete version with tap detection and drag support
  * Based on termux-app implementation
  */
 @SuppressLint("ViewConstructor")
@@ -839,6 +881,13 @@ class TouchpadView(context: Context) : View(context) {
     private var fingerStartY = 0f
     private var fingerStartTime = 0L
     private var isFingerDown = false
+    
+    // Long press and drag tracking
+    private var isLongPressActive = false
+    private var longPressStartTime = 0L
+    private val longPressThresholdMs = 500L  // 500ms to activate long press
+    private var isDragging = false
+    private var dragStarted = false
     
     var inputEventHandler: InputEventHandler? = null
 
@@ -865,6 +914,22 @@ class TouchpadView(context: Context) : View(context) {
         return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
     }
 
+    /**
+     * Check if long press should be activated (finger held without much movement)
+     */
+    private fun checkLongPress(): Boolean {
+        if (!isFingerDown) return false
+        
+        val touchDuration = System.currentTimeMillis() - longPressStartTime
+        val travelDistance = kotlin.math.sqrt(
+            (lastX - fingerStartX) * (lastX - fingerStartX) + 
+            (lastY - fingerStartY) * (lastY - fingerStartY)
+        )
+        
+        // Long press activates if finger held for threshold time and hasn't moved too much
+        return touchDuration >= longPressThresholdMs && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 3
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         parent?.requestDisallowInterceptTouchEvent(true)
         val actionMasked = event.actionMasked
@@ -873,11 +938,15 @@ class TouchpadView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 // Mark finger as down and record start position/time
                 isFingerDown = true
+                isLongPressActive = false
+                isDragging = false
+                dragStarted = false
                 fingerStartX = event.x
                 fingerStartY = event.y
                 lastX = fingerStartX
                 lastY = fingerStartY
                 fingerStartTime = System.currentTimeMillis()
+                longPressStartTime = fingerStartTime
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - lastX
@@ -887,29 +956,60 @@ class TouchpadView(context: Context) : View(context) {
                 lastX = event.x
                 lastY = event.y
                 
-                if (abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
-                    inputEventHandler?.onPointerMove(
-                        (dx * InputControlsView.CURSOR_ACCELERATION).toInt(),
-                        (dy * InputControlsView.CURSOR_ACCELERATION).toInt()
-                    )
-                } else {
+                // Check for long press activation
+                if (!isLongPressActive && !isDragging) {
+                    if (checkLongPress()) {
+                        // Long press activated - start drag
+                        isLongPressActive = true
+                        isDragging = true
+                        dragStarted = true
+                        // Send mouse button down event
+                        if (isPointerButtonLeftEnabled) {
+                            inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                        }
+                    }
+                }
+                
+                // If dragging, send cursor movement during drag (drag with pointer)
+                if (isDragging && dragStarted) {
+                    // Drag is active - send movement while dragging
                     inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                } else {
+                    // Normal cursor movement when not dragging
+                    if (abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
+                        inputEventHandler?.onPointerMove(
+                            (dx * InputControlsView.CURSOR_ACCELERATION).toInt(),
+                            (dy * InputControlsView.CURSOR_ACCELERATION).toInt()
+                        )
+                    } else {
+                        inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                    }
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
                 // On finger up, check if it was a tap and send mouse click
-                if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
-                    // Send mouse button press (left click down)
-                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
-                    
-                    // Send mouse button release after a short delay
-                    postDelayed({
+                if (isFingerDown) {
+                    // If long press was active and we were dragging, release the button
+                    if (isLongPressActive && isDragging) {
+                        // Send mouse button release after drag
                         inputEventHandler?.onPointerButton(0, false)
-                    }, 30)
+                    } else if (isTap() && isPointerButtonLeftEnabled) {
+                        // Regular tap - send click
+                        // Send mouse button press (left click down)
+                        inputEventHandler?.onPointerButton(0, true)
+                        
+                        // Send mouse button release after a short delay
+                        postDelayed({
+                            inputEventHandler?.onPointerButton(0, false)
+                        }, 30)
+                    }
                 }
                 
                 // Reset finger state
                 isFingerDown = false
+                isLongPressActive = false
+                isDragging = false
+                dragStarted = false
             }
         }
         return true

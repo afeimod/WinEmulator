@@ -770,6 +770,8 @@ class ControlElement(
 
     private fun startKeyRepeat(binding: Binding) {
         stopKeyRepeat()
+        // 对于键盘按键，按下时立即发送一次，然后启动重复
+        // 不要在这里重复发送，因为 handleInputEvent 已经发送了第一次
         repeatRunnable = object : Runnable {
             override fun run() {
                 if (currentPointerId != -1) {
@@ -778,6 +780,7 @@ class ControlElement(
                 }
             }
         }
+        // 延迟后开始重复，而不是立即重复
         repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
     }
 
