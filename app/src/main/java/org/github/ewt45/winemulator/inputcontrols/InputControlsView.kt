@@ -758,49 +758,28 @@ class InputControlsView(
                     }
 
                     if (handledByControl) {
-                        // 释放该触点的占用状态
                         buttonPointers.remove(pointerId)
                     } else {
-                        // 触控板点击检测 - 更简化的逻辑
-                        if (actionMasked == MotionEvent.ACTION_UP) {
-                            val touchCount = touchpadPointers.size
-                            
-                            if (touchCount >= 1) {
-                                // 检查是否移动距离很小（基本可以视为点击）
-                                var isClick = true
-                                for ((id, info) in touchDownInfos) {
-                                    val lastPos = touchpadPointers[id]
-                                    if (lastPos != null) {
-                                        val distance = kotlin.math.sqrt(
-                                            (lastPos.x - info.downPosition.x) * (lastPos.x - info.downPosition.x) +
-                                            (lastPos.y - info.downPosition.y) * (lastPos.y - info.downPosition.y)
-                                        )
-                                        // 只要移动距离不太大，就视为点击
-                                        if (distance > 50f) {
-                                            isClick = false
-                                            break
-                                        }
-                                    }
-                                }
-                                
-                                // 发送点击事件
-                                if (isClick) {
-                                    if (touchCount == 2) {
-                                        // 双指点击 -> 右键
-                                        inputEventHandler?.onPointerButton(3, true)
-                                        inputEventHandler?.onPointerButton(3, false)
-                                    } else {
-                                        // 单指/多指点击 -> 左键
-                                        inputEventHandler?.onPointerButton(1, true)
-                                        inputEventHandler?.onPointerButton(1, false)
-                                    }
-                                }
+                        val trackedCount = touchpadPointers.size
+                        val lastPos = touchpadPointers[pointerId]
+                        val downInfo = touchDownInfos[pointerId]
+
+                        if (actionMasked != MotionEvent.ACTION_CANCEL &&
+                            lastPos != null && downInfo != null) {
+                            val distance = kotlin.math.sqrt(
+                                (lastPos.x - downInfo.downPosition.x) * (lastPos.x - downInfo.downPosition.x) +
+                                (lastPos.y - downInfo.downPosition.y) * (lastPos.y - downInfo.downPosition.y)
+                            )
+
+                            if (distance <= 50f) {
+                                val button = if (trackedCount >= 2) 3 else 1
+                                inputEventHandler?.onPointerButton(button, true)
+                                inputEventHandler?.onPointerButton(button, false)
                             }
                         }
-                        
-                        // 清除触控板记录
-                        touchpadPointers.clear()
-                        touchDownInfos.clear()
+
+                        touchpadPointers.remove(pointerId)
+                        touchDownInfos.remove(pointerId)
                     }
                 }
             }
