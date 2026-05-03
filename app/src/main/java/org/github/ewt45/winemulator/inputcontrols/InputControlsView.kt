@@ -35,8 +35,6 @@ class InputControlsView(
         const val MAX_TAP_MILLISECONDS = 200
         const val CURSOR_ACCELERATION = 1.25f
         const val CURSOR_ACCELERATION_THRESHOLD = 6
-        const val CLICK_MAX_DISTANCE = 30f
-        const val CLICK_MAX_TIME = 300L
     }
 
     var inputEventHandler: InputEventHandler? = null
@@ -73,17 +71,6 @@ class InputControlsView(
     // Track which pointers are handled by virtual buttons (persistent across events)
     private val buttonPointers = mutableSetOf<Int>()
     
-    // 跟踪触控板使用的触点ID及其最后位置
-    private val touchpadPointers = mutableMapOf<Int, PointF>()
-    
-    // 跟踪触点的按下时间和位置，用于检测点击
-    private data class TouchDownInfo(
-        val downTime: Long,
-        val downPosition: PointF,
-        var isUp: Boolean = false
-    )
-    private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
-    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val colorFilter = PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
@@ -114,23 +101,12 @@ class InputControlsView(
         }
     }
 
+    /**
+     * Set X server reference (for calling injectPointerMoveDelta, etc.)
+     */
     fun setXServer(server: Any) {
         this.xServer = server
         createMouseMoveTimer()
-    }
-    
-    // 获取触控板指针的最后位置
-    fun getTouchpadLastPosition(pointerId: Int): PointF? = touchpadPointers[pointerId]
-    
-    // 更新触控板指针的最后位置
-    fun updateTouchpadLastPosition(pointerId: Int, x: Float, y: Float) {
-        touchpadPointers[pointerId] = PointF(x, y)
-    }
-    
-    // 移除触控板指针
-    fun removeTouchpadPointer(pointerId: Int) {
-        touchpadPointers.remove(pointerId)
-        touchDownInfos.remove(pointerId)
     }
 
     /**
@@ -266,29 +242,13 @@ class InputControlsView(
             // Other bindings (keys, mouse buttons)
             when {
                 binding.isMouse -> {
-                    // Handle mouse button events - use master logic (no -1)
-                    when {
-                        binding.isMouseMove() -> {
-                            // 处理鼠标移动
-                            val dx = when (binding) {
-                                Binding.MOUSE_MOVE_LEFT -> -10
-                                Binding.MOUSE_MOVE_RIGHT -> 10
-                                else -> 0
-                            }
-                            val dy = when (binding) {
-                                Binding.MOUSE_MOVE_UP -> -10
-                                Binding.MOUSE_MOVE_DOWN -> 10
-                                else -> 0
-                            }
-                            if (isDown && (dx != 0 || dy != 0)) {
-                                inputEventHandler?.onPointerMove(dx, dy)
-                            }
-                        }
-                        else -> {
-                            // 处理鼠标按钮事件 - 使用 getPointerButton 方法（不减1）
-                            binding.getPointerButton()?.let { button ->
-                                inputEventHandler?.onPointerButton(button, isDown)
-                            }
+                    // Handle mouse button events
+                    val pointerButton = binding.getPointerButton()
+                    if (pointerButton != null) {
+                        if (isDown) {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, true)
+                        } else {
+                            inputEventHandler?.onPointerButton(pointerButton - 1, false)
                         }
                     }
                 }
@@ -677,152 +637,71 @@ class InputControlsView(
                     // Enable left button
                     touchpadView?.setPointerButtonLeftEnabled(true)
 
-                    var handledByControl = false
                     // Check virtual buttons for this down position
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
-                            vibrator?.vibrate(vibrationEffect)
-                            // 记录该触点已被占用
+                            handled = true
                             buttonPointers.add(pointerId)
-                            handledByControl = true
                             // If bound to mouse left button, disable touchpad's left button
                             if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
                                 touchpadView?.setPointerButtonLeftEnabled(false)
                             }
-                            break
                         }
                     }
 
-                    if (!handledByControl) {
-                        // 这个触点没有被控件占用，可以用于触控板
-                        touchpadPointers[pointerId] = PointF(x, y)
-                        // 记录按下时间和位置，用于检测点击
-                        touchDownInfos[pointerId] = TouchDownInfo(System.currentTimeMillis(), PointF(x, y))
+                    // If not handled by virtual button, pass to touchpad
+                    if (!handled) {
+                        touchpadView?.onTouchEvent(event)
                     }
-                    // DOWN 事件总是被处理
-                    handled = true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // 遍历所有触点，独立处理每个触点的移动
+                    // Iterate all pointers
                     for (i in 0 until event.pointerCount) {
+                        val pointerIdI = event.getPointerId(i)
                         val x = event.getX(i)
                         val y = event.getY(i)
-                        val id = event.getPointerId(i)
+                        var thisHandled = false
 
-                        // 如果该触点已被某个控件占用，则交给控件处理
-                        if (buttonPointers.contains(id)) {
-                            var thisHandled = false
+                        // Check if this pointer is tracked by virtual buttons
+                        if (buttonPointers.contains(pointerIdI)) {
                             for (element in profile!!.getElements()) {
-                                if (element.handleTouchMove(id, x, y)) {
+                                if (element.handleTouchMove(pointerIdI, x, y)) {
                                     thisHandled = true
-                                    handled = true
                                     break
                                 }
                             }
-                            // 对于按钮等不处理MOVE的控件，保持追踪，不移除
-                        } else {
-                            // 这个触点没有被控件占用，作为触控板处理
-                            val lastPos = touchpadPointers[id]
-                            
-                            if (lastPos != null) {
-                                // 计算相对于上次位置的增量移动
-                                val dx = x - lastPos.x
-                                val dy = y - lastPos.y
-                                
-                                // 直接调用输入事件处理器
-                                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
-                                    inputEventHandler?.onPointerMove(
-                                        (dx * CURSOR_ACCELERATION).toInt(),
-                                        (dy * CURSOR_ACCELERATION).toInt()
-                                    )
-                                } else {
-                                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
-                                }
-                                
-                                // 更新最后位置
-                                lastPos.set(x, y)
-                                handled = true
-                            } else {
-                                // 第一次看到这个未占用的触点，记录初始位置但不产生移动
-                                touchpadPointers[id] = PointF(x, y)
+                            // If button no longer handles, remove from tracking
+                            if (!thisHandled) {
+                                buttonPointers.remove(pointerIdI)
                             }
+                        }
+
+                        // If virtual buttons don't handle, pass to touchpad
+                        if (!thisHandled && !buttonPointers.contains(pointerIdI)) {
+                            touchpadView?.onTouchEvent(event)
                         }
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    var handledByControl = false
-                    for (element in profile!!.getElements()) {
-                        if (element.handleTouchUp(pointerId)) {
-                            handledByControl = true
-                        }
+                    val pointersToHandle = if (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_CANCEL) {
+                        // Get all active pointers
+                        (0 until event.pointerCount).map { event.getPointerId(it) }.toSet()
+                    } else {
+                        setOf(event.getPointerId(event.actionIndex))
                     }
 
-                    if (handledByControl) {
-                        // 释放该触点的占用状态
-                        buttonPointers.remove(pointerId)
-                    } else {
-                        // 触控板点击检测 - 使用test源码的逻辑
-                        val downInfo = touchDownInfos[pointerId]
-                        val lastPos = touchpadPointers[pointerId]
-                        
-                        var isClick = false
-                        if (downInfo != null && lastPos != null) {
-                            val elapsed = System.currentTimeMillis() - downInfo.downTime
-                            val distance = kotlin.math.sqrt(
-                                (lastPos.x - downInfo.downPosition.x) * (lastPos.x - downInfo.downPosition.x) +
-                                (lastPos.y - downInfo.downPosition.y) * (lastPos.y - downInfo.downPosition.y)
-                            )
-                            
-                            // 使用更灵敏的阈值：距离小于30像素且时间少于300毫秒视为点击
-                            isClick = (distance < 30f && elapsed < 300L)
-                        }
-                        
-                        // 只有当最后一个手指抬起时才检测点击
-                        if (isClick && actionMasked == MotionEvent.ACTION_UP) {
-                            // 检查是否有其他触点也是点击
-                            val otherClicks = touchDownInfos.filterKeys { it != pointerId }
-                            
-                            if (otherClicks.isNotEmpty()) {
-                                // 有其他触点，检查它们是否也是点击
-                                val allAreClicks = otherClicks.all { (id, info) ->
-                                    val otherLastPos = touchpadPointers[id]
-                                    if (otherLastPos != null) {
-                                        val otherElapsed = System.currentTimeMillis() - info.downTime
-                                        val otherDistance = kotlin.math.sqrt(
-                                            (otherLastPos.x - info.downPosition.x) * (otherLastPos.x - info.downPosition.x) +
-                                            (otherLastPos.y - info.downPosition.y) * (otherLastPos.y - info.downPosition.y)
-                                        )
-                                        otherDistance < 30f && otherElapsed < 300L
-                                    } else {
-                                        false
-                                    }
-                                }
-                                
-                                if (allAreClicks && otherClicks.size == 1) {
-                                    // 双指点击，发送鼠标右键
-                                    inputEventHandler?.onPointerButton(3, true)
-                                    inputEventHandler?.onPointerButton(3, false)
-                                } else {
-                                    // 多个手指或其他情况，发送左键
-                                    inputEventHandler?.onPointerButton(1, true)
-                                    inputEventHandler?.onPointerButton(1, false)
-                                }
-                            } else {
-                                // 单指点击，发送鼠标左键
-                                inputEventHandler?.onPointerButton(1, true)
-                                inputEventHandler?.onPointerButton(1, false)
+                    for (pointerIdUp in pointersToHandle) {
+                        for (element in profile!!.getElements()) {
+                            if (element.handleTouchUp(pointerIdUp)) {
+                                handled = true
                             }
                         }
-                        
-                        // 移除触控板记录
-                        if (actionMasked == MotionEvent.ACTION_UP) {
-                            touchpadPointers.clear()
-                            touchDownInfos.clear()
-                        } else {
-                            touchpadPointers.remove(pointerId)
-                            touchDownInfos.remove(pointerId)
-                        }
+                        // Remove from tracking
+                        buttonPointers.remove(pointerIdUp)
                     }
+
+                    // Pass to touchpad
+                    touchpadView?.onTouchEvent(event)
                 }
             }
 
@@ -884,8 +763,7 @@ class TouchpadView(context: Context) : View(context) {
             (lastY - fingerStartY) * (lastY - fingerStartY)
         )
         
-        // 使用更灵敏的阈值来检测点击（基于termux-app的优化）
-        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 3 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 3
+        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -922,11 +800,11 @@ class TouchpadView(context: Context) : View(context) {
                 // On finger up, check if it was a tap and send mouse click
                 if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
                     // Send mouse button press (left click down)
-                    inputEventHandler?.onPointerButton(1, true)  // 1 = left button
+                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
                     
                     // Send mouse button release after a short delay
                     postDelayed({
-                        inputEventHandler?.onPointerButton(1, false)
+                        inputEventHandler?.onPointerButton(0, false)
                     }, 30)
                 }
                 
