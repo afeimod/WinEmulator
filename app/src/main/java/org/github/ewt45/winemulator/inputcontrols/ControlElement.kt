@@ -795,26 +795,12 @@ class ControlElement(
         }
     }
 
+    // 修复：移除 BUTTON 的移出检测，直接返回 true 即可
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    if (!containsPoint(px, py)) {
-                        stopKeyRepeat()
-                        val binding0 = getBindingAt(0)
-                        val binding1 = getBindingAt(1)
-                        inputControlsView.handleInputEvent(binding0, false)
-                        if (binding1 != Binding.NONE && binding1 != binding0) {
-                            inputControlsView.handleInputEvent(binding1, false)
-                        }
-                        currentPointerId = -1
-                        activePointerIds.remove(pointerId)
-                        if (isKeepButtonPressedAfterMinTime()) {
-                            touchTime = null
-                            isSelected = false
-                        }
-                        return true
-                    }
+                    // 按钮不需要处理移动事件，直接消费事件即可，不影响长按重复
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -952,7 +938,7 @@ class ControlElement(
                     return true
                 }
                 else -> {
-                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动
+                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动事件
                     return false
                 }
             }
