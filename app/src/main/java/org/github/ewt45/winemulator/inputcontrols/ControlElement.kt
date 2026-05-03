@@ -812,7 +812,6 @@ class ControlElement(
     /**
      * Stop key repeat (cleanup handler)
      */
-    private 
     private fun startKeyRepeat(binding: Binding) {
         stopKeyRepeat()
         repeatRunnable = object : Runnable {
