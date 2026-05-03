@@ -155,8 +155,8 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
+    // 长按重复相关
     private val repeatHandler = Handler(Looper.getMainLooper())
-    private var isKeyDownSent = false
     private var repeatRunnable: Runnable? = null
     private val activePointerIds = mutableSetOf<Int>()
     private val keyRepeatDelayMs = 350L
@@ -741,16 +741,11 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        val binding0 = getBindingAt(0)
-                        val binding1 = getBindingAt(1)
-
-                        inputControlsView.handleInputEvent(binding0, true)
-                        if (binding1 != Binding.NONE && binding1 != binding0) {
-                            inputControlsView.handleInputEvent(binding1, true)
-                        }
-
-                        if (!isToggleSwitch && binding0.isKeyboard) {
-                            startKeyRepeat(binding0)
+                        val binding = getBindingAt(0)
+                        inputControlsView.handleInputEvent(binding, true)
+                        // 长按重复发送（仅对非 toggle 的键盘按键启用）
+                        if (!isToggleSwitch && binding.isKeyboard) {
+                            startKeyRepeat(binding)
                         }
                     }
                     return true
@@ -795,12 +790,11 @@ class ControlElement(
         }
     }
 
-    // 修复：移除 BUTTON 的移出检测，直接返回 true 即可
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 按钮不需要处理移动事件，直接消费事件即可，不影响长按重复
+                    // 按钮无需处理移动，保持按下状态即可
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -938,7 +932,7 @@ class ControlElement(
                     return true
                 }
                 else -> {
-                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动事件
+                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动
                     return false
                 }
             }
@@ -956,8 +950,6 @@ class ControlElement(
                 }
                 Type.COMBINE_BUTTON -> {
                     stopKeyRepeat()
-                    isKeyDownSent = false
-
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
@@ -984,20 +976,16 @@ class ControlElement(
                 }
                 Type.BUTTON -> {
                     stopKeyRepeat()
-                    isKeyDownSent = false
-
                     val binding = getBindingAt(0)
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
                             inputControlsView.handleInputEvent(binding, false)
-                            inputControlsView.handleInputEvent(getBindingAt(1), false)
                         }
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
                         inputControlsView.handleInputEvent(binding, false)
-                        inputControlsView.handleInputEvent(getBindingAt(1), false)
                     }
 
                     if (isToggleSwitch) {
@@ -1007,8 +995,6 @@ class ControlElement(
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
                     stopKeyRepeat()
-                    isKeyDownSent = false
-
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
