@@ -59,7 +59,6 @@ class ControlElement(
         companion object {
             fun names(): Array<String> = entries.map { it.name.replace("_", " ") }.toTypedArray()
             
-            // 处理配置文件中的旧名称映射
             fun fromString(name: String): Range? {
                 return when (name) {
                     "FROM_A_TO_Z", "A-Z", "FROM-A-TO-Z" -> FROM_A_TO_Z
@@ -122,7 +121,7 @@ class ControlElement(
         set(value) {
             field = value
         }
-    var orientation: Byte = 0 // 0 = horizontal, 1 = vertical
+    var orientation: Byte = 0
         set(value) {
             if (field != value) {
                 field = value
@@ -130,7 +129,6 @@ class ControlElement(
             }
         }
     
-    // Custom icon support (termux-app feature)
     var customIconId: String? = null
         set(value) {
             if (field != value) {
@@ -142,7 +140,6 @@ class ControlElement(
     private var oldCustomIconId: String? = null
     private var clipIcon: Bitmap? = null
     
-    // Background color support (termux-app feature)
     var backgroundColor: Int = 0
         set(value) {
             if (field != value) {
@@ -153,7 +150,6 @@ class ControlElement(
         }
     private var oldBackgroundColor: Int = -1
     
-    // Cheat code text support (termux-app feature)
     var cheatCodeText: String = "None"
     private var cheatCodePressed = false
 
@@ -164,12 +160,11 @@ class ControlElement(
     private var currentPosition: PointF? = null
     private var touchTime: Long? = null
 
-    // For range button scroller
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
     private val repeatHandler = Handler(Looper.getMainLooper())
-    private var isKeyDownSent = false  // Track if key down event was sent
+    private var isKeyDownSent = false
     private var repeatRunnable: Runnable? = null
     private val activePointerIds = mutableSetOf<Int>()
     private val keyRepeatDelayMs = 350L
@@ -188,9 +183,6 @@ class ControlElement(
         boundingBoxNeedsUpdate = true
     }
 
-    /**
-     * Called when creating a new element to initialize default bindings
-     */
     fun initDefaultBindings() {
         when (type) {
             Type.D_PAD, Type.STICK, Type.COMBINE_BUTTON -> {
@@ -205,7 +197,6 @@ class ControlElement(
                 )
             }
             Type.RANGE_BUTTON -> {
-                // Range buttons have their own scroller
                 scroller = RangeScroller(inputControlsView, this)
             }
             else -> {}
@@ -301,10 +292,6 @@ class ControlElement(
         return getBoundingBox().contains((px + 0.5f).toInt(), (py + 0.5f).toInt())
     }
 
-    /**
-     * Main draw method - renders the control element
-     * Complete implementation based on termux-app
-     */
     fun draw(canvas: Canvas) {
         val snappingSize = inputControlsView.snappingSize
         val paint = inputControlsView.getPaint()
@@ -355,17 +342,13 @@ class ControlElement(
             }
         }
 
-        // Draw custom icon if available (termux-app feature)
         if (!customIconId.isNullOrEmpty()) {
             drawCustomIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else if (backgroundColor > 0) {
-            // Draw solid color icon (termux-app feature)
             drawColorSolidIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else if (iconId > 0) {
-            // Draw icon if iconId > 0
             drawIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else {
-            // Draw text
             val displayText = getDisplayText()
             paint.textSize = minOf(
                 getTextSizeForWidth(paint, displayText, box.width() - strokeWidth * 2),
@@ -402,14 +385,10 @@ class ControlElement(
         paint.colorFilter = null
     }
 
-    /**
-     * Draw custom icon from app's private storage (termux-app feature)
-     */
     private fun drawCustomIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
         val paint = inputControlsView.getPaint()
         val iconId = customIconId ?: return
         
-        // Use cached clip icon if available
         var icon: Bitmap? = if (clipIcon != null && oldCustomIconId == iconId) {
             clipIcon
         } else {
@@ -439,14 +418,10 @@ class ControlElement(
         paint.colorFilter = null
     }
 
-    /**
-     * Draw solid color icon (termux-app feature)
-     */
     private fun drawColorSolidIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
         val paint = inputControlsView.getPaint()
         val color = backgroundColor
         
-        // Use cached clip icon if available
         var icon: Bitmap? = if (clipIcon != null && oldBackgroundColor == color) {
             clipIcon
         } else {
@@ -489,7 +464,6 @@ class ControlElement(
         val path = inputControlsView.getPath()
         path.reset()
 
-        // Up
         path.moveTo(cx, cy - start)
         path.lineTo(cx - offsetX, cy - offsetY)
         path.lineTo(cx - offsetX, box.top.toFloat())
@@ -497,7 +471,6 @@ class ControlElement(
         path.lineTo(cx + offsetX, cy - offsetY)
         path.close()
 
-        // Left
         path.moveTo(cx - start, cy)
         path.lineTo(cx - offsetY, cy - offsetX)
         path.lineTo(box.left.toFloat(), cy - offsetX)
@@ -505,7 +478,6 @@ class ControlElement(
         path.lineTo(cx - offsetY, cy + offsetX)
         path.close()
 
-        // Down
         path.moveTo(cx, cy + start)
         path.lineTo(cx - offsetX, cy + offsetY)
         path.lineTo(cx - offsetX, box.bottom.toFloat())
@@ -513,7 +485,6 @@ class ControlElement(
         path.lineTo(cx + offsetX, cy + offsetY)
         path.close()
 
-        // Right
         path.moveTo(cx + start, cy)
         path.lineTo(cx + offsetY, cy - offsetX)
         path.lineTo(box.right.toFloat(), cy - offsetX)
@@ -523,7 +494,6 @@ class ControlElement(
 
         canvas.drawPath(path, paint)
 
-        // Draw center indicator (diamond shape)
         val indicatorSize = snappingSize * 0.75f * scale
         path.reset()
         path.moveTo(cx, cy - indicatorSize)
@@ -539,7 +509,6 @@ class ControlElement(
         val radius = snappingSize * 0.75f * scale
 
         if (orientation == 0.toByte()) {
-            // Horizontal
             val lineTop = box.top + strokeWidth * 0.5f
             val lineBottom = box.bottom - strokeWidth * 0.5f
 
@@ -602,7 +571,6 @@ class ControlElement(
 
             canvas.restore()
         } else {
-            // Vertical
             val lineLeft = box.left + strokeWidth * 0.5f
             val lineRight = box.right - strokeWidth * 0.5f
 
@@ -673,10 +641,8 @@ class ControlElement(
         val snappingSize = inputControlsView.snappingSize
         val oldColor = paint.color
 
-        // Draw outer circle
         canvas.drawCircle(cx, cy, box.height() * 0.5f, paint)
 
-        // Draw thumbstick position
         val thumbX = currentPosition?.x ?: cx
         val thumbY = currentPosition?.y ?: cy
         val thumbRadius = snappingSize * 3.5f * scale
@@ -758,7 +724,6 @@ class ControlElement(
             when (type) {
                 Type.CHEAT_CODE_TEXT -> {
                     if (!cheatCodePressed) {
-                        // Send cheat code text via input event handler
                         for (c in cheatCodeText) {
                             inputControlsView.handleInputEvent(Binding.NONE, true)
                         }
@@ -779,13 +744,25 @@ class ControlElement(
                     }
                     return true
                 }
+                // ========== 修复 BUTTON 长按重复发送 ==========
                 Type.BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime()) {
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
-                        inputControlsView.handleInputEvent(getBindingAt(0), true)
-                        inputControlsView.handleInputEvent(getBindingAt(1), true)
+                        val binding0 = getBindingAt(0)
+                        val binding1 = getBindingAt(1)
+
+                        // 发送初始按下事件
+                        inputControlsView.handleInputEvent(binding0, true)
+                        if (binding1 != Binding.NONE && binding1 != binding0) {
+                            inputControlsView.handleInputEvent(binding1, true)
+                        }
+
+                        // 对于非 toggle 的键盘按键，启动长按重复
+                        if (!isToggleSwitch && binding0.isKeyboard) {
+                            startKeyRepeat(binding0)
+                        }
                     }
                     return true
                 }
@@ -809,9 +786,6 @@ class ControlElement(
         return false
     }
 
-    /**
-     * Stop key repeat (cleanup handler)
-     */
     private fun startKeyRepeat(binding: Binding) {
         stopKeyRepeat()
         repeatRunnable = object : Runnable {
@@ -825,146 +799,175 @@ class ControlElement(
         repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
     }
 
-fun stopKeyRepeat() {
+    fun stopKeyRepeat() {
         repeatHandler?.let {
             repeatRunnable?.let { task -> it.removeCallbacks(task) }
             repeatRunnable = null
         }
     }
 
+    // ========== 修复：为 BUTTON 添加移出区域自动弹起 ==========
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
-        if (pointerId == currentPointerId && (type == Type.D_PAD || type == Type.STICK || type == Type.TRACKPAD)) {
-            var deltaX: Float
-            var deltaY: Float
-            val box = getBoundingBox()
-            val radius = box.width() * 0.5f
-
+        if (pointerId == currentPointerId) {
             when (type) {
-                Type.TRACKPAD -> {
-                    val touchpadView = inputControlsView.touchpadView
-                    if (currentPosition == null) currentPosition = PointF()
-                    val deltaPoint = touchpadView?.computeDeltaPoint(currentPosition!!.x, currentPosition!!.y, px, py)
-                        ?: floatArrayOf(0f, 0f)
-                    deltaX = deltaPoint[0]
-                    deltaY = deltaPoint[1]
-                    currentPosition?.set(px, py)
-                }
-                else -> {
-                    val localX = px - box.left
-                    val localY = py - box.top
-                    var offsetX = localX - radius
-                    var offsetY = localY - radius
-
-                    val distance = kotlin.math.sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
-                    if (distance > radius) {
-                        val angle = atan2(offsetY, offsetX)
-                        offsetX = (cos(angle) * radius).toFloat()
-                        offsetY = (sin(angle) * radius).toFloat()
+                // 新增 BUTTON 类型的移出检测
+                Type.BUTTON -> {
+                    if (!containsPoint(px, py)) {
+                        // 手指移出按钮区域 → 停止重复并弹起按键
+                        stopKeyRepeat()
+                        val binding0 = getBindingAt(0)
+                        val binding1 = getBindingAt(1)
+                        inputControlsView.handleInputEvent(binding0, false)
+                        if (binding1 != Binding.NONE && binding1 != binding0) {
+                            inputControlsView.handleInputEvent(binding1, false)
+                        }
+                        // 清除当前触控状态
+                        currentPointerId = -1
+                        activePointerIds.remove(pointerId)
+                        // 重置 toggle 长按记录（如果有）
+                        if (isKeepButtonPressedAfterMinTime()) {
+                            touchTime = null
+                            isSelected = false
+                        }
+                        return true
                     }
-
-                    deltaX = clamp(offsetX / radius, -1f, 1f)
-                    deltaY = clamp(offsetY / radius, -1f, 1f)
+                    return true
                 }
-            }
+                Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
+                    var deltaX: Float
+                    var deltaY: Float
+                    val box = getBoundingBox()
+                    val radius = box.width() * 0.5f
 
-            when (type) {
-                Type.STICK -> {
-                    if (currentPosition == null) currentPosition = PointF()
-                    currentPosition?.x = box.left + deltaX * radius + radius
-                    currentPosition?.y = box.top + deltaY * radius + radius
+                    when (type) {
+                        Type.TRACKPAD -> {
+                            val touchpadView = inputControlsView.touchpadView
+                            if (currentPosition == null) currentPosition = PointF()
+                            val deltaPoint = touchpadView?.computeDeltaPoint(currentPosition!!.x, currentPosition!!.y, px, py)
+                                ?: floatArrayOf(0f, 0f)
+                            deltaX = deltaPoint[0]
+                            deltaY = deltaPoint[1]
+                            currentPosition?.set(px, py)
+                        }
+                        else -> {
+                            val localX = px - box.left
+                            val localY = py - box.top
+                            var offsetX = localX - radius
+                            var offsetY = localY - radius
 
-                    val newStates = booleanArrayOf(
-                        deltaY <= -STICK_DEAD_ZONE,
-                        deltaX >= STICK_DEAD_ZONE,
-                        deltaY >= STICK_DEAD_ZONE,
-                        deltaX <= -STICK_DEAD_ZONE
-                    )
+                            val distance = kotlin.math.sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
+                            if (distance > radius) {
+                                val angle = atan2(offsetY, offsetX)
+                                offsetX = (cos(angle) * radius).toFloat()
+                                offsetY = (sin(angle) * radius).toFloat()
+                            }
 
-                    for (i in 0..3) {
-                        val value = if (i == 1 || i == 3) deltaX else deltaY
-                        val binding = getBindingAt(i)
-
-                        if (binding.isGamepad) {
-                            val adjustedValue = clamp(
-                                maxOf(0f, abs(value) - 0.01f) * sign(value) * STICK_SENSITIVITY,
-                                -1f, 1f
-                            )
-                            inputControlsView.handleInputEvent(binding, true, adjustedValue)
-                            states[i] = true
-                        } else {
-                            val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
-                            inputControlsView.handleInputEvent(binding, state, value)
-                            states[i] = state
+                            deltaX = clamp(offsetX / radius, -1f, 1f)
+                            deltaY = clamp(offsetY / radius, -1f, 1f)
                         }
                     }
-                    inputControlsView.invalidate()
-                }
-                Type.TRACKPAD -> {
-                    val newStates = booleanArrayOf(
-                        deltaY <= -TRACKPAD_MIN_SPEED,
-                        deltaX >= TRACKPAD_MIN_SPEED,
-                        deltaY >= TRACKPAD_MIN_SPEED,
-                        deltaX <= -TRACKPAD_MIN_SPEED
-                    )
-                    var cursorDx = 0
-                    var cursorDy = 0
 
-                    for (i in 0..3) {
-                        val value = if (i == 1 || i == 3) deltaX else deltaY
-                        val binding = getBindingAt(i)
+                    when (type) {
+                        Type.STICK -> {
+                            if (currentPosition == null) currentPosition = PointF()
+                            currentPosition?.x = box.left + deltaX * radius + radius
+                            currentPosition?.y = box.top + deltaY * radius + radius
 
-                        if (binding.isGamepad) {
-                            if (abs(value) > TRACKPAD_ACCELERATION_THRESHOLD) {
-                                inputControlsView.handleInputEvent(binding, true, value * STICK_SENSITIVITY)
+                            val newStates = booleanArrayOf(
+                                deltaY <= -STICK_DEAD_ZONE,
+                                deltaX >= STICK_DEAD_ZONE,
+                                deltaY >= STICK_DEAD_ZONE,
+                                deltaX <= -STICK_DEAD_ZONE
+                            )
+
+                            for (i in 0..3) {
+                                val value = if (i == 1 || i == 3) deltaX else deltaY
+                                val binding = getBindingAt(i)
+
+                                if (binding.isGamepad) {
+                                    val adjustedValue = clamp(
+                                        maxOf(0f, abs(value) - 0.01f) * sign(value) * STICK_SENSITIVITY,
+                                        -1f, 1f
+                                    )
+                                    inputControlsView.handleInputEvent(binding, true, adjustedValue)
+                                    states[i] = true
+                                } else {
+                                    val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                    inputControlsView.handleInputEvent(binding, state, value)
+                                    states[i] = state
+                                }
                             }
-                            states[i] = true
-                        } else {
-                            if (abs(value) > 4) {
-                                when (binding) {
-                                    Binding.MOUSE_MOVE_LEFT, Binding.MOUSE_MOVE_RIGHT -> cursorDx = round(value).toInt()
-                                    Binding.MOUSE_MOVE_UP, Binding.MOUSE_MOVE_DOWN -> cursorDy = round(value).toInt()
-                                    else -> {
-                                        inputControlsView.handleInputEvent(binding, newStates[i], value)
-                                        states[i] = newStates[i]
+                            inputControlsView.invalidate()
+                        }
+                        Type.TRACKPAD -> {
+                            val newStates = booleanArrayOf(
+                                deltaY <= -TRACKPAD_MIN_SPEED,
+                                deltaX >= TRACKPAD_MIN_SPEED,
+                                deltaY >= TRACKPAD_MIN_SPEED,
+                                deltaX <= -TRACKPAD_MIN_SPEED
+                            )
+                            var cursorDx = 0
+                            var cursorDy = 0
+
+                            for (i in 0..3) {
+                                val value = if (i == 1 || i == 3) deltaX else deltaY
+                                val binding = getBindingAt(i)
+
+                                if (binding.isGamepad) {
+                                    if (abs(value) > TRACKPAD_ACCELERATION_THRESHOLD) {
+                                        inputControlsView.handleInputEvent(binding, true, value * STICK_SENSITIVITY)
+                                    }
+                                    states[i] = true
+                                } else {
+                                    if (abs(value) > 4) {
+                                        when (binding) {
+                                            Binding.MOUSE_MOVE_LEFT, Binding.MOUSE_MOVE_RIGHT -> cursorDx = round(value).toInt()
+                                            Binding.MOUSE_MOVE_UP, Binding.MOUSE_MOVE_DOWN -> cursorDy = round(value).toInt()
+                                            else -> {
+                                                inputControlsView.handleInputEvent(binding, newStates[i], value)
+                                                states[i] = newStates[i]
+                                            }
+                                        }
                                     }
                                 }
                             }
+
+                            if (cursorDx != 0 || cursorDy != 0) {
+                                inputControlsView.injectPointerMove(cursorDx, cursorDy)
+                            }
                         }
-                    }
+                        Type.D_PAD -> {
+                            val newStates = booleanArrayOf(
+                                deltaY <= -DPAD_DEAD_ZONE,
+                                deltaX >= DPAD_DEAD_ZONE,
+                                deltaY >= DPAD_DEAD_ZONE,
+                                deltaX <= -DPAD_DEAD_ZONE
+                            )
 
-                    if (cursorDx != 0 || cursorDy != 0) {
-                        inputControlsView.injectPointerMove(cursorDx, cursorDy)
-                    }
-                }
-                Type.D_PAD -> {
-                    val newStates = booleanArrayOf(
-                        deltaY <= -DPAD_DEAD_ZONE,
-                        deltaX >= DPAD_DEAD_ZONE,
-                        deltaY >= DPAD_DEAD_ZONE,
-                        deltaX <= -DPAD_DEAD_ZONE
-                    )
+                            for (i in 0..3) {
+                                val value = if (i == 1 || i == 3) deltaX else deltaY
+                                val binding = getBindingAt(i)
+                                val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
 
-                    for (i in 0..3) {
-                        val value = if (i == 1 || i == 3) deltaX else deltaY
-                        val binding = getBindingAt(i)
-                        val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                if (state) {
+                                    inputControlsView.handleInputEvent(binding, true, value)
+                                } else if (states[i]) {
+                                    inputControlsView.handleInputEvent(binding, false, value)
+                                }
 
-                        if (state) {
-                            inputControlsView.handleInputEvent(binding, true, value)
-                        } else if (states[i]) {
-                            inputControlsView.handleInputEvent(binding, false, value)
+                                states[i] = state
+                            }
                         }
-
-                        states[i] = state
+                        else -> {}
                     }
+                    return true
                 }
-                else -> {}
+                Type.RANGE_BUTTON -> {
+                    scroller?.handleTouchMove(px, py)
+                    inputControlsView.invalidate()
+                    return true
+                }
             }
-            return true
-        } else if (pointerId == currentPointerId && type == Type.RANGE_BUTTON) {
-            scroller?.handleTouchMove(px, py)
-            inputControlsView.invalidate()
-            return true
         }
         return false
     }
@@ -1006,6 +1009,7 @@ fun stopKeyRepeat() {
                     }
                 }
                 Type.BUTTON -> {
+                    // 停止长按重复
                     stopKeyRepeat()
                     isKeyDownSent = false
 
@@ -1078,17 +1082,14 @@ fun stopKeyRepeat() {
         for (binding in bindings) bindingsArray.put(binding.name)
         json.put("bindings", bindingsArray)
 
-        // Add cheat code text (termux-app feature)
         if (type == Type.CHEAT_CODE_TEXT && cheatCodeText.isNotEmpty() && cheatCodeText != "None") {
             json.put("cheatCodeText", cheatCodeText)
         }
         
-        // Add custom icon id (termux-app feature)
         if (!customIconId.isNullOrEmpty()) {
             json.put("customIconId", customIconId)
         }
         
-        // Add background color (termux-app feature)
         if (backgroundColor > 0) {
             json.put("backgroundColor", backgroundColor)
         }
@@ -1102,10 +1103,6 @@ fun stopKeyRepeat() {
     }
 }
 
-/**
- * Simple cubic bezier interpolator for smooth animations
- * Based on termux-app implementation
- */
 class CubicBezierInterpolator {
     private var mX1 = 0f
     private var mY1 = 0f
