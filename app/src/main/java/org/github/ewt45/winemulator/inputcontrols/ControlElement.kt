@@ -158,8 +158,8 @@ class ControlElement(
     // 长按重复相关（为 BUTTON 类型添加）
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
-    private val keyRepeatDelayMs = 350L
-    private val keyRepeatIntervalMs = 40L
+    private val keyRepeatDelayMs = 50L
+    private val keyRepeatIntervalMs = 16L
 
     private fun reset() {
         text = ""
