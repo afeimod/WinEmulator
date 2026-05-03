@@ -8,10 +8,6 @@ import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
 import kotlin.math.*
 
-/**
- * Complete ControlElement implementation based on termux-app
- * Includes all element types: BUTTON, D_PAD, RANGE_BUTTON, STICK, TRACKPAD, COMBINE_BUTTON, CHEAT_CODE_TEXT
- */
 class ControlElement(
     private val inputControlsView: InputControlsView
 ) {
@@ -58,7 +54,6 @@ class ControlElement(
 
         companion object {
             fun names(): Array<String> = entries.map { it.name.replace("_", " ") }.toTypedArray()
-            
             fun fromString(name: String): Range? {
                 return when (name) {
                     "FROM_A_TO_Z", "A-Z", "FROM-A-TO-Z" -> FROM_A_TO_Z
@@ -128,7 +123,6 @@ class ControlElement(
                 boundingBoxNeedsUpdate = true
             }
         }
-    
     var customIconId: String? = null
         set(value) {
             if (field != value) {
@@ -139,7 +133,6 @@ class ControlElement(
         }
     private var oldCustomIconId: String? = null
     private var clipIcon: Bitmap? = null
-    
     var backgroundColor: Int = 0
         set(value) {
             if (field != value) {
@@ -149,7 +142,6 @@ class ControlElement(
             }
         }
     private var oldBackgroundColor: Int = -1
-    
     var cheatCodeText: String = "None"
     private var cheatCodePressed = false
 
@@ -744,7 +736,6 @@ class ControlElement(
                     }
                     return true
                 }
-                // ========== 修复 BUTTON 长按重复发送 ==========
                 Type.BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime()) {
                         touchTime = System.currentTimeMillis()
@@ -753,13 +744,11 @@ class ControlElement(
                         val binding0 = getBindingAt(0)
                         val binding1 = getBindingAt(1)
 
-                        // 发送初始按下事件
                         inputControlsView.handleInputEvent(binding0, true)
                         if (binding1 != Binding.NONE && binding1 != binding0) {
                             inputControlsView.handleInputEvent(binding1, true)
                         }
 
-                        // 对于非 toggle 的键盘按键，启动长按重复
                         if (!isToggleSwitch && binding0.isKeyboard) {
                             startKeyRepeat(binding0)
                         }
@@ -806,14 +795,11 @@ class ControlElement(
         }
     }
 
-    // ========== 修复：为 BUTTON 添加移出区域自动弹起 ==========
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
-                // 新增 BUTTON 类型的移出检测
                 Type.BUTTON -> {
                     if (!containsPoint(px, py)) {
-                        // 手指移出按钮区域 → 停止重复并弹起按键
                         stopKeyRepeat()
                         val binding0 = getBindingAt(0)
                         val binding1 = getBindingAt(1)
@@ -821,10 +807,8 @@ class ControlElement(
                         if (binding1 != Binding.NONE && binding1 != binding0) {
                             inputControlsView.handleInputEvent(binding1, false)
                         }
-                        // 清除当前触控状态
                         currentPointerId = -1
                         activePointerIds.remove(pointerId)
-                        // 重置 toggle 长按记录（如果有）
                         if (isKeepButtonPressedAfterMinTime()) {
                             touchTime = null
                             isSelected = false
@@ -967,6 +951,10 @@ class ControlElement(
                     inputControlsView.invalidate()
                     return true
                 }
+                else -> {
+                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动
+                    return false
+                }
             }
         }
         return false
@@ -1009,7 +997,6 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    // 停止长按重复
                     stopKeyRepeat()
                     isKeyDownSent = false
 
