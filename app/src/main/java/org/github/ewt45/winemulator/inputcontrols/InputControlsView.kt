@@ -798,6 +798,8 @@ class InputControlsView(
                     if (handledByControl) {
                         buttonPointers.remove(pointerId)
                     } else {
+                        // Need to check how many pointers are active BEFORE removing
+                        val activePointerCount = touchpadPointers.size
                         val lastPos = touchpadPointers[pointerId]
                         val downInfo = touchDownInfos[pointerId]
 
@@ -816,9 +818,10 @@ class InputControlsView(
                             } else if (!downInfo.movedBeyondTap &&
                                 distance <= CLICK_MAX_DISTANCE &&
                                 elapsed <= CLICK_MAX_TIME) {
-                                // Regular tap - send click (button 1 = left button)
-                                inputEventHandler?.onPointerButton(1, true)
-                                inputEventHandler?.onPointerButton(1, false)
+                                // Determine button based on number of active pointers (before removing current)
+                                val button = if (activePointerCount >= 2) 3 else 1  // 2+ fingers = right click
+                                inputEventHandler?.onPointerButton(button, true)
+                                inputEventHandler?.onPointerButton(button, false)
                                 handled = true
                             }
                         }

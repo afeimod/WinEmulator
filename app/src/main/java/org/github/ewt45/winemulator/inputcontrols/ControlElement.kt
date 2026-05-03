@@ -795,8 +795,26 @@ class ControlElement(
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 按钮无需处理移动，保持按下状态即可
-                    // 注意：不在这里停止重复，也不检测移出区域
+                    // For BUTTON type, we still need to check if finger moved out of the button area
+                    // If finger moved significantly beyond the button, treat as cancellation
+                    val box = getBoundingBox()
+                    val expandedRadius = maxOf(box.width(), box.height()) * 0.5f
+                    val centerX = box.centerX().toFloat()
+                    val centerY = box.centerY().toFloat()
+                    val dx = px - centerX
+                    val dy = py - centerY
+                    val distance = sqrt(dx * dx + dy * dy)
+                    
+                    // If finger moved far outside button area, end the press
+                    if (distance > expandedRadius) {
+                        // Finger moved too far - treat as release
+                        currentPointerId = -1
+                        val binding = getBindingAt(0)
+                        inputControlsView.handleInputEvent(binding, false)
+                        stopKeyRepeat()
+                        return false
+                    }
+                    // Finger still in button area - keep the key pressed (continue key repeat in background)
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
