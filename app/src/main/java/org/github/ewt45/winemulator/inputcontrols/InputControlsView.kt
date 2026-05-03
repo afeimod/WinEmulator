@@ -80,6 +80,7 @@ class InputControlsView(
     private data class TouchDownInfo(
         val downTime: Long,
         val downPosition: PointF,
+        var movedBeyondTap: Boolean = false,
         var isUp: Boolean = false
     )
     private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
@@ -728,20 +729,33 @@ class InputControlsView(
                                 // 计算相对于上次位置的增量移动
                                 val dx = x - lastPos.x
                                 val dy = y - lastPos.y
-                                
-                                // 直接调用输入事件处理器
-                                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
-                                    inputEventHandler?.onPointerMove(
-                                        (dx * CURSOR_ACCELERATION).toInt(),
-                                        (dy * CURSOR_ACCELERATION).toInt()
-                                    )
-                                } else {
-                                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+
+                                val downInfo = touchDownInfos[id]
+                                if (downInfo != null) {
+                                    val totalDx = x - downInfo.downPosition.x
+                                    val totalDy = y - downInfo.downPosition.y
+                                    val totalDistance = kotlin.math.sqrt(totalDx * totalDx + totalDy * totalDy)
+
+                                    if (totalDistance > CLICK_MAX_DISTANCE) {
+                                        downInfo.movedBeyondTap = true
+                                    }
                                 }
-                                
+
+                                // 小幅抖动不立即转为拖动，提升单击稳定性
+                                if (abs(dx) >= 2f || abs(dy) >= 2f) {
+                                    if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+                                        inputEventHandler?.onPointerMove(
+                                            (dx * CURSOR_ACCELERATION).toInt(),
+                                            (dy * CURSOR_ACCELERATION).toInt()
+                                        )
+                                    } else {
+                                        inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                                    }
+                                    handled = true
+                                }
+
                                 // 更新最后位置
                                 lastPos.set(x, y)
-                                handled = true
                             } else {
                                 // 第一次看到这个未占用的触点，记录初始位置但不产生移动
                                 touchpadPointers[id] = PointF(x, y)
@@ -766,15 +780,20 @@ class InputControlsView(
 
                         if (actionMasked != MotionEvent.ACTION_CANCEL &&
                             lastPos != null && downInfo != null) {
-                            val distance = kotlin.math.sqrt(
-                                (lastPos.x - downInfo.downPosition.x) * (lastPos.x - downInfo.downPosition.x) +
-                                (lastPos.y - downInfo.downPosition.y) * (lastPos.y - downInfo.downPosition.y)
-                            )
+                            val upX = event.getX(actionIndex)
+                            val upY = event.getY(actionIndex)
+                            val dx = upX - downInfo.downPosition.x
+                            val dy = upY - downInfo.downPosition.y
+                            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                            val elapsed = System.currentTimeMillis() - downInfo.downTime
 
-                            if (distance <= 50f) {
+                            if (!downInfo.movedBeyondTap &&
+                                distance <= CLICK_MAX_DISTANCE &&
+                                elapsed <= CLICK_MAX_TIME) {
                                 val button = if (trackedCount >= 2) 3 else 1
                                 inputEventHandler?.onPointerButton(button, true)
                                 inputEventHandler?.onPointerButton(button, false)
+                                handled = true
                             }
                         }
 
