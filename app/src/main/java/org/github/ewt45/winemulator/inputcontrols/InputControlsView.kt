@@ -3,8 +3,6 @@ package org.github.ewt45.winemulator.inputcontrols
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.InputDevice
@@ -37,6 +35,8 @@ class InputControlsView(
         const val CURSOR_ACCELERATION_THRESHOLD = 6
         const val CLICK_MAX_DISTANCE = 30f
         const val CLICK_MAX_TIME = 300L
+        const val LONG_PRESS_THRESHOLD_MS = 500L  // Long press threshold for drag
+        const val LONG_PRESS_MOVE_THRESHOLD = 30f  // Max movement during long press to start drag
     }
 
     var inputEventHandler: InputEventHandler? = null
@@ -51,10 +51,7 @@ class InputControlsView(
     // Timer for continuous mouse movement
     private var mouseMoveTimer: Timer? = null
     private val mouseMoveOffset = PointF()
-    
-    // Handler for key repeat
-    private var keyRepeatBinding: Binding? = null
-    
+
     private val cursor = Point()
     private val cursorSpeed: Float
         get() = profile?.cursorSpeed ?: 1.0f
@@ -77,15 +74,15 @@ class InputControlsView(
     // Track which pointers are handled by virtual buttons (persistent across events)
     private val buttonPointers = mutableSetOf<Int>()
     
-    // 跟踪触控板使用的触点ID及其最后位置
+    // Track pointers used by touchpad
     private val touchpadPointers = mutableMapOf<Int, PointF>()
     
-    // 跟踪触点的按下时间和位置，用于检测点击
+    // Track touch down time and position for click detection
     private data class TouchDownInfo(
         val downTime: Long,
         val downPosition: PointF,
         var movedBeyondTap: Boolean = false,
-        var isUp: Boolean = false
+        var isLongPressActivated: Boolean = false  // Whether long press has been activated for drag
     )
     private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
     
@@ -246,7 +243,9 @@ class InputControlsView(
     }
 
     /**
-     * Complete handleInputEvent implementation based on termux-app
+     * Simplified key handling - just send key down and key up events
+     * No timer-based repeat needed - the repeat is handled by D-PAD and STICK types
+     * This fixes the stuttering issue
      */
     fun handleInputEvent(binding: Binding, isDown: Boolean) {
         handleInputEvent(binding, isDown, 0f)
@@ -255,12 +254,10 @@ class InputControlsView(
     fun handleInputEvent(binding: Binding, isDown: Boolean, offset: Float) {
         // If gaming pad binding
         if (binding.isGamepad) {
-            // Gaming pad events handled separately through processJoystickInput
-            // But we can handle gamepad button state changes here if needed
             return
         }
 
-        // Mouse move binding
+        // Mouse move binding - use timer for continuous movement
         if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
             mouseMoveOffset.x = if (isDown) (if (offset != 0f) offset else (if (binding == Binding.MOUSE_MOVE_LEFT) -1f else 1f)) else 0f
             if (isDown) createMouseMoveTimer()
@@ -271,41 +268,32 @@ class InputControlsView(
             // Other bindings (keys, mouse buttons)
             when {
                 binding.isMouse -> {
-                    // Handle mouse button events - use master logic (no -1)
-                    when {
-                        binding.isMouseMove() -> {
-                            // 处理鼠标移动
-                            val dx = when (binding) {
-                                Binding.MOUSE_MOVE_LEFT -> -10
-                                Binding.MOUSE_MOVE_RIGHT -> 10
-                                else -> 0
-                            }
-                            val dy = when (binding) {
-                                Binding.MOUSE_MOVE_UP -> -10
-                                Binding.MOUSE_MOVE_DOWN -> 10
-                                else -> 0
-                            }
-                            if (isDown && (dx != 0 || dy != 0)) {
-                                inputEventHandler?.onPointerMove(dx, dy)
-                            }
+                    if (binding.isMouseMove()) {
+                        // 处理鼠标移动
+                        val dx = when (binding) {
+                            Binding.MOUSE_MOVE_LEFT -> -10
+                            Binding.MOUSE_MOVE_RIGHT -> 10
+                            else -> 0
                         }
-                        else -> {
-                            // 处理鼠标按钮事件 - 使用 getPointerButton 方法（不减1）
-                            binding.getPointerButton()?.let { button ->
-                                inputEventHandler?.onPointerButton(button, isDown)
-                            }
+                        val dy = when (binding) {
+                            Binding.MOUSE_MOVE_UP -> -10
+                            Binding.MOUSE_MOVE_DOWN -> 10
+                            else -> 0
+                        }
+                        if (isDown && (dx != 0 || dy != 0)) {
+                            inputEventHandler?.onPointerMove(dx, dy)
+                        }
+                    } else {
+                        // 处理鼠标按钮事件 - 使用 getPointerButton 方法
+                        binding.getPointerButton()?.let { button ->
+                            inputEventHandler?.onPointerButton(button, isDown)
                         }
                     }
                 }
                 binding.isKeyboard -> {
-                    // 对于键盘按键，如果是按下则启动重复
-                    if (isDown) {
-                        inputEventHandler?.onKeyEvent(binding.keycode, true)
-                        startKeyRepeatTimer(binding)
-                    } else {
-                        stopKeyRepeatTimer(binding)
-                        inputEventHandler?.onKeyEvent(binding.keycode, false)
-                    }
+                    // 只发送一次按键事件，不使用重复Timer
+                    // 这样可以避免与D-PAD的连续移动冲突
+                    inputEventHandler?.onKeyEvent(binding.keycode, isDown)
                 }
             }
         }
@@ -348,40 +336,8 @@ class InputControlsView(
         mouseMoveTimer = null
     }
     
-    /**
-     * Start key repeat timer for continuous key press
-     * 使用 Handler 确保在主线程执行，避免跨线程问题
-     */
-    private val keyRepeatHandler = Handler(Looper.getMainLooper())
-    private var keyRepeatRunnable: Runnable? = null
-    
-    private fun startKeyRepeatTimer(binding: Binding) {
-        // Stop any existing key repeat timer
-        stopKeyRepeatTimer(null)
-        
-        keyRepeatBinding = binding
-        keyRepeatRunnable = object : Runnable {
-            override fun run() {
-                keyRepeatBinding?.let { b ->
-                    inputEventHandler?.onKeyEvent(b.keycode, true)
-                }
-                // 持续重复直到被取消
-                keyRepeatHandler.postDelayed(this, 50) // 每50ms重复一次
-            }
-        }
-        // 延迟150ms后开始第一次重复
-        keyRepeatHandler.postDelayed(keyRepeatRunnable!!, 150)
-    }
-    
-    /**
-     * Stop key repeat timer
-     * @param binding The binding to stop, or null to stop all
-     */
-    private fun stopKeyRepeatTimer(binding: Binding?) {
-        keyRepeatRunnable?.let { keyRepeatHandler.removeCallbacks(it) }
-        keyRepeatRunnable = null
-        keyRepeatBinding = null
-    }
+    // Handler-related code removed - no more key repeat timer
+    // This fixes the stuttering issue
 
     override fun onDraw(canvas: Canvas) {
         val w = width
@@ -769,11 +725,11 @@ class InputControlsView(
                             }
                             // 对于按钮等不处理MOVE的控件，保持追踪，不移除
                         } else {
-                            // 这个触点没有被控件占用，作为触控板处理
+                            // This pointer is not occupied by any control, handle as touchpad
                             val lastPos = touchpadPointers[id]
                             
                             if (lastPos != null) {
-                                // 计算相对于上次位置的增量移动
+                                // Calculate incremental movement relative to last position
                                 val dx = x - lastPos.x
                                 val dy = y - lastPos.y
 
@@ -782,14 +738,35 @@ class InputControlsView(
                                     val totalDx = x - downInfo.downPosition.x
                                     val totalDy = y - downInfo.downPosition.y
                                     val totalDistance = kotlin.math.sqrt(totalDx * totalDx + totalDy * totalDy)
+                                    val elapsed = System.currentTimeMillis() - downInfo.downTime
 
+                                    // Mark as moved beyond tap threshold if distance exceeded
                                     if (totalDistance > CLICK_MAX_DISTANCE) {
                                         downInfo.movedBeyondTap = true
                                     }
+
+                                    // Check for long press activation (for drag)
+                                    // If held for LONG_PRESS_THRESHOLD_MS without moving too much, activate drag
+                                    if (!downInfo.isLongPressActivated && !downInfo.movedBeyondTap && 
+                                        elapsed >= LONG_PRESS_THRESHOLD_MS && 
+                                        totalDistance < LONG_PRESS_MOVE_THRESHOLD) {
+                                        downInfo.isLongPressActivated = true
+                                        // Send mouse button down (button 1 = left button)
+                                        inputEventHandler?.onPointerButton(1, true)
+                                    }
                                 }
 
-                                // 小幅抖动不立即转为拖动，提升单击稳定性
-                                if (abs(dx) >= 2f || abs(dy) >= 2f) {
+                                // If long press activated, send cursor movement during drag
+                                val isDragging = downInfo?.isLongPressActivated == true
+                                
+                                if (isDragging) {
+                                    // Drag mode - always send movement with acceleration
+                                    inputEventHandler?.onPointerMove(
+                                        (dx * CURSOR_ACCELERATION).toInt(),
+                                        (dy * CURSOR_ACCELERATION).toInt()
+                                    )
+                                } else if (abs(dx) >= 2f || abs(dy) >= 2f) {
+                                    // Normal cursor movement when not dragging
                                     if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
                                         inputEventHandler?.onPointerMove(
                                             (dx * CURSOR_ACCELERATION).toInt(),
@@ -801,10 +778,10 @@ class InputControlsView(
                                     handled = true
                                 }
 
-                                // 更新最后位置
+                                // Update last position
                                 lastPos.set(x, y)
                             } else {
-                                // 第一次看到这个未占用的触点，记录初始位置但不产生移动
+                                // First time seeing this unoccupied pointer, record initial position
                                 touchpadPointers[id] = PointF(x, y)
                             }
                         }
@@ -821,7 +798,6 @@ class InputControlsView(
                     if (handledByControl) {
                         buttonPointers.remove(pointerId)
                     } else {
-                        val trackedCount = touchpadPointers.size
                         val lastPos = touchpadPointers[pointerId]
                         val downInfo = touchDownInfos[pointerId]
 
@@ -834,12 +810,15 @@ class InputControlsView(
                             val distance = kotlin.math.sqrt(dx * dx + dy * dy)
                             val elapsed = System.currentTimeMillis() - downInfo.downTime
 
-                            if (!downInfo.movedBeyondTap &&
+                            // If long press was activated, this was a drag - release the button
+                            if (downInfo.isLongPressActivated) {
+                                inputEventHandler?.onPointerButton(1, false)
+                            } else if (!downInfo.movedBeyondTap &&
                                 distance <= CLICK_MAX_DISTANCE &&
                                 elapsed <= CLICK_MAX_TIME) {
-                                val button = if (trackedCount >= 2) 3 else 1
-                                inputEventHandler?.onPointerButton(button, true)
-                                inputEventHandler?.onPointerButton(button, false)
+                                // Regular tap - send click (button 1 = left button)
+                                inputEventHandler?.onPointerButton(1, true)
+                                inputEventHandler?.onPointerButton(1, false)
                                 handled = true
                             }
                         }
