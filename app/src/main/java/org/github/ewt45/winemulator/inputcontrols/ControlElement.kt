@@ -155,6 +155,12 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
+    // 长按重复相关（为 BUTTON 类型添加）
+    private val repeatHandler = Handler(Looper.getMainLooper())
+    private var repeatRunnable: Runnable? = null
+    private val keyRepeatDelayMs = 350L
+    private val keyRepeatIntervalMs = 40L
+
     private fun reset() {
         text = ""
         iconId = 0
@@ -164,6 +170,7 @@ class ControlElement(
         clipIcon = null
         backgroundColor = 0
         oldBackgroundColor = -1
+        stopKeyRepeat()
         boundingBoxNeedsUpdate = true
     }
 
@@ -734,7 +741,10 @@ class ControlElement(
                     if (!isToggleSwitch || !isSelected) {
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
-                        // 注意：不再手动重复发送，系统会处理长按重复
+                        // 长按重复（仅对非 toggle 的键盘按键）
+                        if (!isToggleSwitch && binding.isKeyboard) {
+                            startKeyRepeat(binding)
+                        }
                     }
                     return true
                 }
@@ -758,11 +768,32 @@ class ControlElement(
         return false
     }
 
+    private fun startKeyRepeat(binding: Binding) {
+        stopKeyRepeat()
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                if (currentPointerId != -1) {
+                    inputControlsView.handleInputEvent(binding, true)
+                    repeatHandler.postDelayed(this, keyRepeatIntervalMs)
+                }
+            }
+        }
+        repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
+    }
+
+    private fun stopKeyRepeat() {
+        repeatHandler?.let {
+            repeatRunnable?.let { task -> it.removeCallbacks(task) }
+            repeatRunnable = null
+        }
+    }
+
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 按钮无需处理移动
+                    // 按钮无需处理移动，保持按下状态即可
+                    // 注意：不在这里停止重复，也不检测移出区域
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -787,7 +818,7 @@ class ControlElement(
                             var offsetX = localX - radius
                             var offsetY = localY - radius
 
-                            val distance = kotlin.math.sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
+                            val distance = sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
                             if (distance > radius) {
                                 val angle = atan2(offsetY, offsetX)
                                 offsetX = (cos(angle) * radius).toFloat()
@@ -900,6 +931,7 @@ class ControlElement(
                     return true
                 }
                 else -> {
+                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动
                     return false
                 }
             }
@@ -916,6 +948,7 @@ class ControlElement(
                     cheatCodePressed = false
                 }
                 Type.COMBINE_BUTTON -> {
+                    stopKeyRepeat()
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
@@ -941,6 +974,7 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
+                    stopKeyRepeat()
                     val binding = getBindingAt(0)
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
@@ -959,6 +993,7 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
+                    stopKeyRepeat()
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
