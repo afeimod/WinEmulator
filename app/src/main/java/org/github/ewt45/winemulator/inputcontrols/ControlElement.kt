@@ -158,9 +158,8 @@ class ControlElement(
     // 长按重复相关
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var repeatRunnable: Runnable? = null
-    private val activePointerIds = mutableSetOf<Int>()
-    private val keyRepeatDelayMs = 350L
-    private val keyRepeatIntervalMs = 40L
+    private val keyRepeatDelayMs = 200L      // 首次延迟 200ms
+    private val keyRepeatIntervalMs = 16L   // 每 16ms 一次 (约 60fps)
 
     private fun reset() {
         text = ""
@@ -711,7 +710,6 @@ class ControlElement(
     fun handleTouchDown(pointerId: Int, px: Float, py: Float): Boolean {
         if (currentPointerId == -1 && containsPoint(px, py)) {
             currentPointerId = pointerId
-            activePointerIds.add(pointerId)
 
             when (type) {
                 Type.CHEAT_CODE_TEXT -> {
@@ -743,7 +741,7 @@ class ControlElement(
                     if (!isToggleSwitch || !isSelected) {
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
-                        // 长按重复发送（仅对非 toggle 的键盘按键启用）
+                        // 长按重复（仅对于键盘按键且非 toggle）
                         if (!isToggleSwitch && binding.isKeyboard) {
                             startKeyRepeat(binding)
                         }
@@ -774,7 +772,8 @@ class ControlElement(
         stopKeyRepeat()
         repeatRunnable = object : Runnable {
             override fun run() {
-                if (activePointerIds.isNotEmpty()) {
+                // 只有手指仍然按下时才继续重复
+                if (currentPointerId != -1) {
                     inputControlsView.handleInputEvent(binding, true)
                     repeatHandler.postDelayed(this, keyRepeatIntervalMs)
                 }
@@ -791,10 +790,11 @@ class ControlElement(
     }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
+        // 只处理当前指针的移动
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 按钮无需处理移动，保持按下状态即可
+                    // 按钮无需处理移动，直接返回 true 保持按下状态
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -1009,8 +1009,6 @@ class ControlElement(
                     currentPosition = null
                 }
             }
-            activePointerIds.remove(pointerId)
-            if (activePointerIds.isEmpty()) stopKeyRepeat()
             currentPointerId = -1
             return true
         }
