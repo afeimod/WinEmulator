@@ -610,9 +610,10 @@ class InputControlsView(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        parent?.requestDisallowInterceptTouchEvent(true)
         // In edit mode, parent handles touch events
         if (editMode && readyToDraw) {
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     val x = event.x
                     val y = event.y
@@ -830,101 +831,92 @@ class TouchpadView(context: Context) : View(context) {
     var isPointerButtonLeftEnabled = true
         private set
 
-    private val trackedPointers = mutableMapOf<Int, PointF>()
-    private var primaryPointerId = -1
+    private var lastX = 0f
+    private var lastY = 0f
+
+    // Finger tracking for tap detection
     private var fingerStartX = 0f
     private var fingerStartY = 0f
     private var fingerStartTime = 0L
-    private var dragMode = false
-
+    private var isFingerDown = false
+    
     var inputEventHandler: InputEventHandler? = null
 
     fun setPointerButtonLeftEnabled(enabled: Boolean) {
         isPointerButtonLeftEnabled = enabled
     }
 
-    private fun resetGestureState() {
-        primaryPointerId = -1
-        dragMode = false
-        trackedPointers.clear()
+    fun computeDeltaPoint(oldX: Float, oldY: Float, newX: Float, newY: Float): FloatArray {
+        return floatArrayOf(newX - oldX, newY - oldY)
     }
 
-    private fun qualifiesAsTap(end: PointF): Boolean {
-        val duration = System.currentTimeMillis() - fingerStartTime
-        val dx = end.x - fingerStartX
-        val dy = end.y - fingerStartY
-        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
-        return duration <= InputControlsView.MAX_TAP_MILLISECONDS * 4 &&
-            distance <= InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 3
+    /**
+     * Check if the finger movement qualifies as a tap (quick light touch)
+     */
+    private fun isTap(): Boolean {
+        if (!isFingerDown) return false
+        
+        val touchDuration = System.currentTimeMillis() - fingerStartTime
+        val travelDistance = kotlin.math.sqrt(
+            (lastX - fingerStartX) * (lastX - fingerStartX) + 
+            (lastY - fingerStartY) * (lastY - fingerStartY)
+        )
+        
+        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val action = event.actionMasked
-        val index = event.actionIndex
-        val pointerId = event.getPointerId(index)
-
-        when (action) {
+        parent?.requestDisallowInterceptTouchEvent(true)
+        val actionMasked = event.actionMasked
+        
+        when (actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                val p = PointF(event.getX(index), event.getY(index))
-                trackedPointers[pointerId] = p
-                if (primaryPointerId == -1) {
-                    primaryPointerId = pointerId
-                    fingerStartX = p.x
-                    fingerStartY = p.y
-                    fingerStartTime = System.currentTimeMillis()
-                }
+                // Mark finger as down and record start position/time
+                isFingerDown = true
+                fingerStartX = event.x
+                fingerStartY = event.y
+                lastX = fingerStartX
+                lastY = fingerStartY
+                fingerStartTime = System.currentTimeMillis()
             }
-
             MotionEvent.ACTION_MOVE -> {
-                for (i in 0 until event.pointerCount) {
-                    val id = event.getPointerId(i)
-                    val last = trackedPointers[id] ?: PointF(event.getX(i), event.getY(i)).also { trackedPointers[id] = it }
-                    val nx = event.getX(i)
-                    val ny = event.getY(i)
-                    val dx = nx - last.x
-                    val dy = ny - last.y
-
-                    if (id == primaryPointerId) {
-                        if (kotlin.math.abs(dx) > 1f || kotlin.math.abs(dy) > 1f) {
-                            if (kotlin.math.abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD ||
-                                kotlin.math.abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
-                                inputEventHandler?.onPointerMove((dx * InputControlsView.CURSOR_ACCELERATION).toInt(), (dy * InputControlsView.CURSOR_ACCELERATION).toInt())
-                            } else {
-                                inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
-                            }
-                            dragMode = true
-                        }
-                    }
-                    last.set(nx, ny)
+                val dx = event.x - lastX
+                val dy = event.y - lastY
+                
+                // Update position
+                lastX = event.x
+                lastY = event.y
+                
+                if (abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
+                    inputEventHandler?.onPointerMove(
+                        (dx * InputControlsView.CURSOR_ACCELERATION).toInt(),
+                        (dy * InputControlsView.CURSOR_ACCELERATION).toInt()
+                    )
+                } else {
+                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
                 }
             }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                val end = trackedPointers[pointerId] ?: PointF(event.getX(index), event.getY(index))
-                if (pointerId == primaryPointerId && !dragMode && isPointerButtonLeftEnabled && qualifiesAsTap(end)) {
-                    inputEventHandler?.onPointerButton(0, true)
-                    postDelayed({ inputEventHandler?.onPointerButton(0, false) }, 16)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                // On finger up, check if it was a tap and send mouse click
+                if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
+                    // Send mouse button press (left click down)
+                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                    
+                    // Send mouse button release after a short delay
+                    postDelayed({
+                        inputEventHandler?.onPointerButton(0, false)
+                    }, 30)
                 }
-                trackedPointers.remove(pointerId)
-                if (pointerId == primaryPointerId) {
-                    if (trackedPointers.isNotEmpty()) {
-                        primaryPointerId = trackedPointers.keys.first()
-                        trackedPointers[primaryPointerId]?.let {
-                            fingerStartX = it.x
-                            fingerStartY = it.y
-                            fingerStartTime = System.currentTimeMillis()
-                        }
-                        dragMode = false
-                    } else {
-                        resetGestureState()
-                    }
-                }
+                
+                // Reset finger state
+                isFingerDown = false
             }
-
-            MotionEvent.ACTION_CANCEL -> resetGestureState()
         }
         return true
     }
 
-    override fun onHoverEvent(event: MotionEvent): Boolean = false
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        // Basic hover support
+        return false
+    }
 }

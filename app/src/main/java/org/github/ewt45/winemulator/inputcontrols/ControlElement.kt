@@ -170,6 +170,10 @@ class ControlElement(
 
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var isKeyDownSent = false  // Track if key down event was sent
+    private var repeatRunnable: Runnable? = null
+    private val activePointerIds = mutableSetOf<Int>()
+    private val keyRepeatDelayMs = 350L
+    private val keyRepeatIntervalMs = 40L
 
     private fun reset() {
         text = ""
@@ -749,6 +753,7 @@ class ControlElement(
     fun handleTouchDown(pointerId: Int, px: Float, py: Float): Boolean {
         if (currentPointerId == -1 && containsPoint(px, py)) {
             currentPointerId = pointerId
+            activePointerIds.add(pointerId)
 
             when (type) {
                 Type.CHEAT_CODE_TEXT -> {
@@ -807,9 +812,24 @@ class ControlElement(
     /**
      * Stop key repeat (cleanup handler)
      */
-    private fun stopKeyRepeat() {
+    private 
+    private fun startKeyRepeat(binding: Binding) {
+        stopKeyRepeat()
+        repeatRunnable = object : Runnable {
+            override fun run() {
+                if (activePointerIds.isNotEmpty()) {
+                    inputControlsView.handleInputEvent(binding, true)
+                    repeatHandler.postDelayed(this, keyRepeatIntervalMs)
+                }
+            }
+        }
+        repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
+    }
+
+fun stopKeyRepeat() {
         repeatHandler?.let {
-            it.removeCallbacksAndMessages(null)
+            repeatRunnable?.let { task -> it.removeCallbacks(task) }
+            repeatRunnable = null
         }
     }
 
@@ -1027,6 +1047,8 @@ class ControlElement(
                     currentPosition = null
                 }
             }
+            activePointerIds.remove(pointerId)
+            if (activePointerIds.isEmpty()) stopKeyRepeat()
             currentPointerId = -1
             return true
         }
