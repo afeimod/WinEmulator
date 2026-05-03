@@ -155,12 +155,6 @@ class ControlElement(
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
 
-    // 长按重复相关
-    private val repeatHandler = Handler(Looper.getMainLooper())
-    private var repeatRunnable: Runnable? = null
-    private val keyRepeatDelayMs = 200L      // 首次延迟 200ms
-    private val keyRepeatIntervalMs = 16L   // 每 16ms 一次 (约 60fps)
-
     private fun reset() {
         text = ""
         iconId = 0
@@ -170,7 +164,6 @@ class ControlElement(
         clipIcon = null
         backgroundColor = 0
         oldBackgroundColor = -1
-        stopKeyRepeat()
         boundingBoxNeedsUpdate = true
     }
 
@@ -741,10 +734,7 @@ class ControlElement(
                     if (!isToggleSwitch || !isSelected) {
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
-                        // 长按重复（仅对于键盘按键且非 toggle）
-                        if (!isToggleSwitch && binding.isKeyboard) {
-                            startKeyRepeat(binding)
-                        }
+                        // 注意：不再手动重复发送，系统会处理长按重复
                     }
                     return true
                 }
@@ -768,33 +758,11 @@ class ControlElement(
         return false
     }
 
-    private fun startKeyRepeat(binding: Binding) {
-        stopKeyRepeat()
-        repeatRunnable = object : Runnable {
-            override fun run() {
-                // 只有手指仍然按下时才继续重复
-                if (currentPointerId != -1) {
-                    inputControlsView.handleInputEvent(binding, true)
-                    repeatHandler.postDelayed(this, keyRepeatIntervalMs)
-                }
-            }
-        }
-        repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
-    }
-
-    fun stopKeyRepeat() {
-        repeatHandler?.let {
-            repeatRunnable?.let { task -> it.removeCallbacks(task) }
-            repeatRunnable = null
-        }
-    }
-
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
-        // 只处理当前指针的移动
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // 按钮无需处理移动，直接返回 true 保持按下状态
+                    // 按钮无需处理移动
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -932,7 +900,6 @@ class ControlElement(
                     return true
                 }
                 else -> {
-                    // COMBINE_BUTTON, CHEAT_CODE_TEXT 不需要处理移动
                     return false
                 }
             }
@@ -949,7 +916,6 @@ class ControlElement(
                     cheatCodePressed = false
                 }
                 Type.COMBINE_BUTTON -> {
-                    stopKeyRepeat()
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
@@ -975,7 +941,6 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    stopKeyRepeat()
                     val binding = getBindingAt(0)
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
@@ -994,7 +959,6 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
-                    stopKeyRepeat()
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
