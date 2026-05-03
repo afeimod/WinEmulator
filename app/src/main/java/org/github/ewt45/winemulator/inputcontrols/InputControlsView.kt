@@ -5,15 +5,21 @@ import android.content.Context
 import android.graphics.*
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
-import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
-import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import java.util.Timer
+import java.util.TimerTask
 import kotlin.math.*
 
 /**
- * View for rendering and interacting with input controls
+ * Complete InputControlsView implementation based on termux-app
+ * Fixed version with complete feature set and bug fixes
  */
 @SuppressLint("ViewConstructor")
 class InputControlsView(
@@ -21,13 +27,34 @@ class InputControlsView(
     private var editMode: Boolean = false
 ) : View(context) {
 
+    companion object {
+        const val DEFAULT_OVERLAY_OPACITY = 0.4f
+        const val MAX_TAP_TRAVEL_DISTANCE = 10
+        const val MAX_TAP_MILLISECONDS = 200
+        const val CURSOR_ACCELERATION = 1.25f
+        const val CURSOR_ACCELERATION_THRESHOLD = 6
+        const val CLICK_MAX_DISTANCE = 30f
+        const val CLICK_MAX_TIME = 300L
+        const val LONG_PRESS_THRESHOLD_MS = 500L  // Long press threshold for drag
+        const val LONG_PRESS_MOVE_THRESHOLD = 30f  // Max movement during long press to start drag
+    }
+
     var inputEventHandler: InputEventHandler? = null
     var profile: ControlsProfile? = null
         private set
     var showTouchscreenControls = true
-    var overlayOpacity = 0.4f
+    var overlayOpacity = DEFAULT_OVERLAY_OPACITY
 
     var touchpadView: TouchpadView? = null
+    private var xServer: Any? = null  // Reference to LorieView
+
+    // Timer for continuous mouse movement
+    private var mouseMoveTimer: Timer? = null
+    private val mouseMoveOffset = PointF()
+
+    private val cursor = Point()
+    private val cursorSpeed: Float
+        get() = profile?.cursorSpeed ?: 1.0f
 
     val snappingSize: Int
         get() = if (width > 0) maxOf(width, height) / 100 else 10
@@ -42,30 +69,38 @@ class InputControlsView(
     private var moveCursor = false
     private var offsetX = 0f
     private var offsetY = 0f
-    private val cursor = Point()
-    private var pendingProfileReload = false  // 标记是否需要在新尺寸测量后重新加载配置
+    private var pendingProfileReload = false
 
+    // Track which pointers are handled by virtual buttons (persistent across events)
+    private val buttonPointers = mutableSetOf<Int>()
+    
+    // Track pointers used by touchpad
+    private val touchpadPointers = mutableMapOf<Int, PointF>()
+    
+    // Track touch down time and position for click detection
+    private data class TouchDownInfo(
+        val downTime: Long,
+        val downPosition: PointF,
+        var movedBeyondTap: Boolean = false,
+        var isLongPressActivated: Boolean = false  // Whether long press has been activated for drag
+    )
+    private val touchDownInfos = mutableMapOf<Int, TouchDownInfo>()
+    
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
+    private val colorFilter = PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
     private var readyToDraw = false
 
     private var vibrator: Vibrator? = null
     private var vibrationEffect: VibrationEffect? = null
 
-    private var rangeScroller: RangeScroller? = null
-    private var currentElementForScroller: ControlElement? = null
-
-
-
-    // Icon cache
+    // Icon cache - complete 17 icons like termux-app
     private val icons = arrayOfNulls<Bitmap>(17)
-
-    // 用于检测尺寸变化，重新加载元素坐标
-    private var lastMaxWidth = 0
-    private var lastMaxHeight = 0
+    
+    // Counter map for tracking icon usage (termux-app feature)
+    private val counterMap = mutableMapOf<String, Int>()
 
     init {
-        // 默认可点击可聚焦，但会根据 showTouchscreenControls 动态调整
         setClickable(true)
         setFocusable(true)
         isFocusableInTouchMode = true
@@ -81,34 +116,49 @@ class InputControlsView(
         }
     }
 
+    fun setXServer(server: Any) {
+        this.xServer = server
+        createMouseMoveTimer()
+    }
+    
+    // 获取触控板指针的最后位置
+    fun getTouchpadLastPosition(pointerId: Int): PointF? = touchpadPointers[pointerId]
+    
+    // 更新触控板指针的最后位置
+    fun updateTouchpadLastPosition(pointerId: Int, x: Float, y: Float) {
+        touchpadPointers[pointerId] = PointF(x, y)
+    }
+    
+    // 移除触控板指针
+    fun removeTouchpadPointer(pointerId: Int) {
+        touchpadPointers.remove(pointerId)
+        touchDownInfos.remove(pointerId)
+    }
+
     /**
-     * 设置是否显示虚拟按键，同时调整视图的点击和聚焦状态
+     * Get X server reference
+     */
+    fun getXServer(): Any? = xServer
+
+    /**
+     * Set whether to show virtual controls, and adjust view's click/focus state
      */
     @JvmName("setControlsVisible")
     fun setControlsVisible(show: Boolean) {
         showTouchscreenControls = show
-        // 当不显示虚拟按键时，禁用所有交互，确保不拦截触摸事件
         isClickable = false
         isFocusable = false
         isFocusableInTouchMode = false
-        // 刷新视图以更新绘制
         invalidate()
     }
 
-
-
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        // 当视图尺寸变化时，重新加载元素以重新计算坐标
-        // 这处理了屏幕旋转和分辨率变化的情况
         if (w > 0 && h > 0) {
-            // 如果有待加载的配置，先加载配置
             if (pendingProfileReload && profile != null) {
                 pendingProfileReload = false
                 reloadElements()
-            }
-            // 无论尺寸是否变化，都重新加载元素以确保坐标正确
-            else if (profile != null) {
+            } else if (profile != null) {
                 reloadElements()
             }
         }
@@ -116,7 +166,6 @@ class InputControlsView(
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        // 当屏幕方向变化时，重新加载元素以重新计算坐标
         if (profile != null && width > 0 && height > 0) {
             reloadElements()
         }
@@ -124,11 +173,8 @@ class InputControlsView(
 
     private fun reloadElements() {
         if (profile != null) {
-            // 保存当前选中的元素（如果有）
             val selected = selectedElement
-            // 重新加载元素（会更新所有元素的坐标）
             profile!!.loadElements(this)
-            // 恢复选中状态
             if (selected != null) {
                 val newSelected = profile!!.getElements().find { it == selected }
                 selectElement(newSelected)
@@ -144,12 +190,11 @@ class InputControlsView(
     fun setProfile(profile: ControlsProfile?) {
         this.profile = profile
         deselectAllElements()
-        // 立即加载元素，但可能视图尚未测量
+        stopMouseMoveTimer()
         if (width > 0 && height > 0) {
             pendingProfileReload = false
             reloadElements()
         } else {
-            // 视图尚未测量，标记待加载，下次 onSizeChanged 时加载
             pendingProfileReload = true
         }
     }
@@ -181,7 +226,7 @@ class InputControlsView(
         return false
     }
 
-    fun getRangeScroller(): RangeScroller? = rangeScroller
+    fun getRangeScroller(): RangeScroller? = null // RangeScroller is managed by ControlElement
 
     private fun deselectAllElements() {
         selectedElement = null
@@ -197,14 +242,33 @@ class InputControlsView(
         invalidate()
     }
 
-    fun handleInputEvent(binding: Binding, isDown: Boolean, value: Float = 0f) {
-        when {
-            binding.isGamepad -> {
-                // Gamepad events handled separately
-            }
-            binding.isMouse -> {
-                when {
-                    binding.isMouseMove() -> {
+    /**
+     * Simplified key handling - just send key down and key up events
+     * No timer-based repeat needed - the repeat is handled by D-PAD and STICK types
+     * This fixes the stuttering issue
+     */
+    fun handleInputEvent(binding: Binding, isDown: Boolean) {
+        handleInputEvent(binding, isDown, 0f)
+    }
+
+    fun handleInputEvent(binding: Binding, isDown: Boolean, offset: Float) {
+        // If gaming pad binding
+        if (binding.isGamepad) {
+            return
+        }
+
+        // Mouse move binding - use timer for continuous movement
+        if (binding == Binding.MOUSE_MOVE_LEFT || binding == Binding.MOUSE_MOVE_RIGHT) {
+            mouseMoveOffset.x = if (isDown) (if (offset != 0f) offset else (if (binding == Binding.MOUSE_MOVE_LEFT) -1f else 1f)) else 0f
+            if (isDown) createMouseMoveTimer()
+        } else if (binding == Binding.MOUSE_MOVE_DOWN || binding == Binding.MOUSE_MOVE_UP) {
+            mouseMoveOffset.y = if (isDown) (if (offset != 0f) offset else (if (binding == Binding.MOUSE_MOVE_UP) -1f else 1f)) else 0f
+            if (isDown) createMouseMoveTimer()
+        } else {
+            // Other bindings (keys, mouse buttons)
+            when {
+                binding.isMouse -> {
+                    if (binding.isMouseMove()) {
                         // 处理鼠标移动
                         val dx = when (binding) {
                             Binding.MOUSE_MOVE_LEFT -> -10
@@ -219,17 +283,18 @@ class InputControlsView(
                         if (isDown && (dx != 0 || dy != 0)) {
                             inputEventHandler?.onPointerMove(dx, dy)
                         }
-                    }
-                    else -> {
-                        // 处理鼠标按钮事件，使用 getPointerButton 方法
+                    } else {
+                        // 处理鼠标按钮事件 - 使用 getPointerButton 方法
                         binding.getPointerButton()?.let { button ->
                             inputEventHandler?.onPointerButton(button, isDown)
                         }
                     }
                 }
-            }
-            binding.isKeyboard -> {
-                inputEventHandler?.onKeyEvent(binding.keycode, isDown)
+                binding.isKeyboard -> {
+                    // 只发送一次按键事件，不使用重复Timer
+                    // 这样可以避免与D-PAD的连续移动冲突
+                    inputEventHandler?.onKeyEvent(binding.keycode, isDown)
+                }
             }
         }
     }
@@ -237,6 +302,42 @@ class InputControlsView(
     fun injectPointerMove(dx: Int, dy: Int) {
         inputEventHandler?.onPointerMove(dx, dy)
     }
+
+    /**
+     * Create mouse move timer - use timer to continuously send mouse move events
+     * This solves the continuous movement issue when pressing and holding virtual buttons
+     */
+    private fun createMouseMoveTimer() {
+        // Stop existing timer
+        stopMouseMoveTimer()
+        
+        // Only create timer when there's offset
+        if (mouseMoveOffset.x == 0f && mouseMoveOffset.y == 0f) return
+        if (profile == null) return
+        
+        mouseMoveTimer = Timer()
+        mouseMoveTimer?.scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                val speed = cursorSpeed
+                val dx = (mouseMoveOffset.x * 10 * speed).toInt()
+                val dy = (mouseMoveOffset.y * 10 * speed).toInt()
+                if (dx != 0 || dy != 0) {
+                    injectPointerMove(dx, dy)
+                }
+            }
+        }, 0, 1000 / 60) // 60fps
+    }
+
+    /**
+     * Stop mouse move timer
+     */
+    private fun stopMouseMoveTimer() {
+        mouseMoveTimer?.cancel()
+        mouseMoveTimer = null
+    }
+    
+    // Handler-related code removed - no more key repeat timer
+    // This fixes the stuttering issue
 
     override fun onDraw(canvas: Canvas) {
         val w = width
@@ -324,20 +425,20 @@ class InputControlsView(
 
     fun getPath(): Path = path
 
-    fun getColorFilter(): ColorFilter {
-        return PorterDuffColorFilter(0xFFFFFFFF.toInt(), PorterDuff.Mode.SRC_IN)
-    }
+    fun getColorFilter(): ColorFilter = colorFilter
 
     fun getPrimaryColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 255, 255)
 
     fun getSecondaryColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 2, 119, 189)
 
-    /**
-     * 获取高亮颜色（用于 RANGE-BUTTON 滑动时的高亮显示）
-     */
-    fun getHighlightColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 193, 7)  // 橙黄色高亮
+    fun getHighlightColor(): Int = Color.argb((overlayOpacity * 255).toInt(), 255, 193, 7)
 
+    /**
+     * Get icon by ID - loads from assets
+     */
     fun getIcon(id: Byte): Bitmap? {
+        if (id < 0 || id >= icons.size) return null
+        
         if (icons[id.toInt()] == null) {
             try {
                 context.assets.open("inputcontrols/icons/$id.png").use { inputStream ->
@@ -350,13 +451,171 @@ class InputControlsView(
         return icons[id.toInt()]
     }
 
+    /**
+     * Get custom icon from app's private storage
+     */
+    fun getCustomIcon(iconId: String): Bitmap? {
+        val buttonIconFile = File(context.filesDir.path + "/home/.buttonIcons", "$iconId.png")
+        if (!buttonIconFile.exists()) {
+            return null
+        }
+        return BitmapFactory.decodeFile(buttonIconFile.path)
+    }
+
+    /**
+     * Clip bitmap to circular or rectangular shape
+     */
+    fun clipBitmap(bitmap: Bitmap?, isCircular: Boolean): Bitmap? {
+        if (bitmap == null) return null
+        
+        val clippedBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(clippedBitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val shader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+        paint.shader = shader
+        
+        if (isCircular) {
+            val centerX = bitmap.width / 2
+            val centerY = bitmap.height / 2
+            val radius = minOf(centerX, centerY)
+            canvas.drawCircle(centerX.toFloat(), centerY.toFloat(), radius.toFloat(), paint)
+        } else {
+            val rect = RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
+            canvas.drawRect(rect, paint)
+        }
+        return clippedBitmap
+    }
+
+    /**
+     * Create shape bitmap (circle or rectangle) with specified color
+     */
+    fun createShapeBitmap(width: Float, height: Float, color: Int, isCircular: Boolean): Bitmap {
+        val bitmap = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+
+        if (isCircular) {
+            val radius = (minOf(width, height) / 2).toInt()
+            canvas.drawCircle(width / 2, height / 2, radius.toFloat(), paint)
+        } else {
+            val rect = RectF(0f, 0f, width, height)
+            canvas.drawRect(rect, paint)
+        }
+        return bitmap
+    }
+
+    /**
+     * Counter map operations for icon tracking (termux-app feature)
+     */
+    fun counterMapIncrease(iconId: String) {
+        val v = counterMap[iconId] ?: 0
+        counterMap[iconId] = v + 1
+    }
+
+    fun counterMapDecrease(iconId: String) {
+        val v = counterMap[iconId]
+        if (v != null) {
+            counterMap[iconId] = v - 1
+        }
+    }
+
+    fun counterMapZero(iconId: String): Boolean {
+        val v = counterMap[iconId]
+        return v == null || v <= 0
+    }
+
     private fun roundTo(value: Float, rounding: Float): Float {
         return (value / rounding).roundToInt() * rounding
     }
 
+    /**
+     * Handle external gamepad events
+     */
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        // Process external gamepad/controller events
+        if (!editMode && profile != null) {
+            val controller = profile!!.getController(event.deviceId)
+            if (controller != null && controller.updateStateFromMotionEvent(event)) {
+                // Handle L2/R2 buttons (termux-app feature)
+                processGamepadButtons(controller)
+                processJoystickInput(controller)
+                return true
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    /**
+     * Process gamepad button states (L2/R2 triggers)
+     */
+    private fun processGamepadButtons(controller: ExternalController) {
+        val state = controller.state
+        
+        // L2 trigger
+        val l2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
+        if (l2Binding?.binding != null) {
+            handleInputEvent(l2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_L2.toInt()))
+        }
+        
+        // R2 trigger
+        val r2Binding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
+        if (r2Binding?.binding != null) {
+            handleInputEvent(r2Binding.binding!!, state.isPressed(ExternalController.IDX_BUTTON_R2.toInt()))
+        }
+    }
+
+    /**
+     * Process joystick input and send key events
+     */
+    private fun processJoystickInput(controller: ExternalController) {
+        val axes = intArrayOf(
+            MotionEvent.AXIS_X, MotionEvent.AXIS_Y, 
+            MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ,
+            MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y
+        )
+        val values = floatArrayOf(
+            controller.state.thumbLX, controller.state.thumbLY,
+            controller.state.thumbRX, controller.state.thumbRY,
+            controller.state.getDPadX().toFloat(), controller.state.getDPadY().toFloat()
+        )
+
+        for (i in axes.indices) {
+            if (abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
+                val direction: Int = if (values[i] > 0) 1 else -1
+                val controllerBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], direction)
+                )
+                if (controllerBinding?.binding != null) {
+                    handleInputEvent(controllerBinding.binding!!, true, values[i])
+                }
+            } else {
+                val positiveBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1)
+                )
+                if (positiveBinding?.binding != null) {
+                    handleInputEvent(positiveBinding.binding!!, false, values[i])
+                }
+                val negativeBinding = controller.getControllerBinding(
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], -1)
+                )
+                if (negativeBinding?.binding != null) {
+                    handleInputEvent(negativeBinding.binding!!, false, values[i])
+                }
+            }
+        }
+    }
+
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        // Pass hover events to touchpad
+        return touchpadView?.onHoverEvent(event) ?: false
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        parent?.requestDisallowInterceptTouchEvent(true)
+        // In edit mode, parent handles touch events
         if (editMode && readyToDraw) {
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     val x = event.x
                     val y = event.y
@@ -393,65 +652,185 @@ class InputControlsView(
             return true
         }
 
-        // 非编辑模式下，只有当 showTouchscreenControls 为 true 时才处理触摸事件
-        if (!editMode && profile != null && showTouchscreenControls) {
+        // In non-edit mode, use handleTouchEvent
+        return handleTouchEvent(event)
+    }
+
+    /**
+     * Handle touch events - correctly dispatch between virtual buttons and touchpad
+     * Complete implementation based on termux-app
+     */
+    fun handleTouchEvent(event: MotionEvent): Boolean {
+        // Mouse events directly to touchpad
+        if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            return touchpadView?.onTouchEvent(event) ?: false
+        }
+
+        // Non-edit mode with profile, handle touch
+        if (!editMode && profile != null) {
             val actionIndex = event.actionIndex
             val pointerId = event.getPointerId(actionIndex)
             val actionMasked = event.actionMasked
-
             var handled = false
 
             when (actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                     val x = event.getX(actionIndex)
                     val y = event.getY(actionIndex)
+                    
+                    // Enable left button
+                    touchpadView?.setPointerButtonLeftEnabled(true)
 
+                    var handledByControl = false
+                    // Check virtual buttons for this down position
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchDown(pointerId, x, y)) {
                             vibrator?.vibrate(vibrationEffect)
-                            handled = true
+                            // 记录该触点已被占用
+                            buttonPointers.add(pointerId)
+                            handledByControl = true
+                            // If bound to mouse left button, disable touchpad's left button
+                            if (element.getBindingAt(0) == Binding.MOUSE_LEFT_BUTTON) {
+                                touchpadView?.setPointerButtonLeftEnabled(false)
+                            }
                             break
                         }
                     }
 
-                    if (!handled) {
-                        // 让 touchpadView 处理（如果存在），但不一定消费事件
-                        touchpadView?.onTouchEvent(event)
+                    if (!handledByControl) {
+                        // 这个触点没有被控件占用，可以用于触控板
+                        touchpadPointers[pointerId] = PointF(x, y)
+                        // 记录按下时间和位置，用于检测点击
+                        touchDownInfos[pointerId] = TouchDownInfo(System.currentTimeMillis(), PointF(x, y))
                     }
+                    // DOWN 事件总是被处理
+                    handled = true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    // 遍历所有触点，独立处理每个触点的移动
                     for (i in 0 until event.pointerCount) {
                         val x = event.getX(i)
                         val y = event.getY(i)
                         val id = event.getPointerId(i)
 
-                        for (element in profile!!.getElements()) {
-                            if (element.handleTouchMove(id, x, y)) {
-                                handled = true
-                                break
+                        // 如果该触点已被某个控件占用，则交给控件处理
+                        if (buttonPointers.contains(id)) {
+                            var thisHandled = false
+                            for (element in profile!!.getElements()) {
+                                if (element.handleTouchMove(id, x, y)) {
+                                    thisHandled = true
+                                    handled = true
+                                    break
+                                }
+                            }
+                            // 对于按钮等不处理MOVE的控件，保持追踪，不移除
+                        } else {
+                            // This pointer is not occupied by any control, handle as touchpad
+                            val lastPos = touchpadPointers[id]
+                            
+                            if (lastPos != null) {
+                                // Calculate incremental movement relative to last position
+                                val dx = x - lastPos.x
+                                val dy = y - lastPos.y
+
+                                val downInfo = touchDownInfos[id]
+                                if (downInfo != null) {
+                                    val totalDx = x - downInfo.downPosition.x
+                                    val totalDy = y - downInfo.downPosition.y
+                                    val totalDistance = kotlin.math.sqrt(totalDx * totalDx + totalDy * totalDy)
+                                    val elapsed = System.currentTimeMillis() - downInfo.downTime
+
+                                    // Mark as moved beyond tap threshold if distance exceeded
+                                    if (totalDistance > CLICK_MAX_DISTANCE) {
+                                        downInfo.movedBeyondTap = true
+                                    }
+
+                                    // Check for long press activation (for drag)
+                                    // If held for LONG_PRESS_THRESHOLD_MS without moving too much, activate drag
+                                    if (!downInfo.isLongPressActivated && !downInfo.movedBeyondTap && 
+                                        elapsed >= LONG_PRESS_THRESHOLD_MS && 
+                                        totalDistance < LONG_PRESS_MOVE_THRESHOLD) {
+                                        downInfo.isLongPressActivated = true
+                                        // Send mouse button down (button 1 = left button)
+                                        inputEventHandler?.onPointerButton(1, true)
+                                    }
+                                }
+
+                                // If long press activated, send cursor movement during drag
+                                val isDragging = downInfo?.isLongPressActivated == true
+                                
+                                if (isDragging) {
+                                    // Drag mode - always send movement with acceleration
+                                    inputEventHandler?.onPointerMove(
+                                        (dx * CURSOR_ACCELERATION).toInt(),
+                                        (dy * CURSOR_ACCELERATION).toInt()
+                                    )
+                                } else if (abs(dx) >= 2f || abs(dy) >= 2f) {
+                                    // Normal cursor movement when not dragging
+                                    if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
+                                        inputEventHandler?.onPointerMove(
+                                            (dx * CURSOR_ACCELERATION).toInt(),
+                                            (dy * CURSOR_ACCELERATION).toInt()
+                                        )
+                                    } else {
+                                        inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                                    }
+                                    handled = true
+                                }
+
+                                // Update last position
+                                lastPos.set(x, y)
+                            } else {
+                                // First time seeing this unoccupied pointer, record initial position
+                                touchpadPointers[id] = PointF(x, y)
                             }
                         }
                     }
-
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
-                    }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                    var handledByControl = false
                     for (element in profile!!.getElements()) {
                         if (element.handleTouchUp(pointerId)) {
-                            handled = true
+                            handledByControl = true
                         }
                     }
 
-                    if (!handled) {
-                        touchpadView?.onTouchEvent(event)
+                    if (handledByControl) {
+                        buttonPointers.remove(pointerId)
+                    } else {
+                        val lastPos = touchpadPointers[pointerId]
+                        val downInfo = touchDownInfos[pointerId]
+
+                        if (actionMasked != MotionEvent.ACTION_CANCEL &&
+                            lastPos != null && downInfo != null) {
+                            val upX = event.getX(actionIndex)
+                            val upY = event.getY(actionIndex)
+                            val dx = upX - downInfo.downPosition.x
+                            val dy = upY - downInfo.downPosition.y
+                            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                            val elapsed = System.currentTimeMillis() - downInfo.downTime
+
+                            // If long press was activated, this was a drag - release the button
+                            if (downInfo.isLongPressActivated) {
+                                inputEventHandler?.onPointerButton(1, false)
+                            } else if (!downInfo.movedBeyondTap &&
+                                distance <= CLICK_MAX_DISTANCE &&
+                                elapsed <= CLICK_MAX_TIME) {
+                                // Regular tap - send click (button 1 = left button)
+                                inputEventHandler?.onPointerButton(1, true)
+                                inputEventHandler?.onPointerButton(1, false)
+                                handled = true
+                            }
+                        }
+
+                        touchpadPointers.remove(pointerId)
+                        touchDownInfos.remove(pointerId)
                     }
                 }
             }
+
             return handled
         }
-        // 当 showTouchscreenControls 为 false 或 profile 为 null 时，不处理触摸事件，让事件传递给下层
         return false
     }
 
@@ -461,68 +840,166 @@ class InputControlsView(
         }
         return null
     }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        stopMouseMoveTimer()
+    }
 }
 
 /**
- * Touchpad view for mouse simulation
+ * Touchpad view for mouse simulation - complete version with tap detection and drag support
+ * Based on termux-app implementation
  */
 @SuppressLint("ViewConstructor")
 class TouchpadView(context: Context) : View(context) {
     var isPointerButtonLeftEnabled = true
         private set
 
-    private var swapMouseButtons = false
-    private var simTouchScreen = false
-
     private var lastX = 0f
     private var lastY = 0f
 
+    // Finger tracking for tap detection
+    private var fingerStartX = 0f
+    private var fingerStartY = 0f
+    private var fingerStartTime = 0L
+    private var isFingerDown = false
+    
+    // Long press and drag tracking
+    private var isLongPressActive = false
+    private var longPressStartTime = 0L
+    private val longPressThresholdMs = 500L  // 500ms to activate long press
+    private var isDragging = false
+    private var dragStarted = false
+    
     var inputEventHandler: InputEventHandler? = null
-
-    companion object {
-        const val CURSOR_ACCELERATION = 2f
-        const val CURSOR_ACCELERATION_THRESHOLD = 4f
-    }
 
     fun setPointerButtonLeftEnabled(enabled: Boolean) {
         isPointerButtonLeftEnabled = enabled
-    }
-
-    fun setSwapMouseButtons() {
-        swapMouseButtons = !swapMouseButtons
-    }
-
-    fun setSimTouchScreen() {
-        simTouchScreen = !simTouchScreen
     }
 
     fun computeDeltaPoint(oldX: Float, oldY: Float, newX: Float, newY: Float): FloatArray {
         return floatArrayOf(newX - oldX, newY - oldY)
     }
 
+    /**
+     * Check if the finger movement qualifies as a tap (quick light touch)
+     */
+    private fun isTap(): Boolean {
+        if (!isFingerDown) return false
+        
+        val touchDuration = System.currentTimeMillis() - fingerStartTime
+        val travelDistance = kotlin.math.sqrt(
+            (lastX - fingerStartX) * (lastX - fingerStartX) + 
+            (lastY - fingerStartY) * (lastY - fingerStartY)
+        )
+        
+        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
+    }
+
+    /**
+     * Check if long press should be activated (finger held without much movement)
+     */
+    private fun checkLongPress(): Boolean {
+        if (!isFingerDown) return false
+        
+        val touchDuration = System.currentTimeMillis() - longPressStartTime
+        val travelDistance = kotlin.math.sqrt(
+            (lastX - fingerStartX) * (lastX - fingerStartX) + 
+            (lastY - fingerStartY) * (lastY - fingerStartY)
+        )
+        
+        // Long press activates if finger held for threshold time and hasn't moved too much
+        return touchDuration >= longPressThresholdMs && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 3
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                lastX = event.x
-                lastY = event.y
+        parent?.requestDisallowInterceptTouchEvent(true)
+        val actionMasked = event.actionMasked
+        
+        when (actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                // Mark finger as down and record start position/time
+                isFingerDown = true
+                isLongPressActive = false
+                isDragging = false
+                dragStarted = false
+                fingerStartX = event.x
+                fingerStartY = event.y
+                lastX = fingerStartX
+                lastY = fingerStartY
+                fingerStartTime = System.currentTimeMillis()
+                longPressStartTime = fingerStartTime
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.x - lastX
                 val dy = event.y - lastY
-
-                if (abs(dx) > CURSOR_ACCELERATION_THRESHOLD || abs(dy) > CURSOR_ACCELERATION_THRESHOLD) {
-                    inputEventHandler?.onPointerMove(
-                        (dx * CURSOR_ACCELERATION).toInt(),
-                        (dy * CURSOR_ACCELERATION).toInt()
-                    )
-                } else {
-                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
-                }
-
+                
+                // Update position
                 lastX = event.x
                 lastY = event.y
+                
+                // Check for long press activation
+                if (!isLongPressActive && !isDragging) {
+                    if (checkLongPress()) {
+                        // Long press activated - start drag
+                        isLongPressActive = true
+                        isDragging = true
+                        dragStarted = true
+                        // Send mouse button down event (button 1 = left button for X11)
+                        if (isPointerButtonLeftEnabled) {
+                            inputEventHandler?.onPointerButton(1, true)  // 1 = left button
+                        }
+                    }
+                }
+                
+                // If dragging, send cursor movement during drag (drag with pointer)
+                if (isDragging && dragStarted) {
+                    // Drag is active - send movement while dragging
+                    inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                } else {
+                    // Normal cursor movement when not dragging
+                    if (abs(dx) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD || abs(dy) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
+                        inputEventHandler?.onPointerMove(
+                            (dx * InputControlsView.CURSOR_ACCELERATION).toInt(),
+                            (dy * InputControlsView.CURSOR_ACCELERATION).toInt()
+                        )
+                    } else {
+                        inputEventHandler?.onPointerMove(dx.toInt(), dy.toInt())
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                // On finger up, check if it was a tap and send mouse click
+                if (isFingerDown) {
+                    // If long press was active and we were dragging, release the button
+                    if (isLongPressActive && isDragging) {
+                        // Send mouse button release after drag (button 1 = left button for X11)
+                        inputEventHandler?.onPointerButton(1, false)
+                    } else if (isTap() && isPointerButtonLeftEnabled) {
+                        // Regular tap - send click (button 1 = left button for X11)
+                        // Send mouse button press (left click down)
+                        inputEventHandler?.onPointerButton(1, true)
+                        
+                        // Send mouse button release after a short delay
+                        postDelayed({
+                            inputEventHandler?.onPointerButton(1, false)
+                        }, 30)
+                    }
+                }
+                
+                // Reset finger state
+                isFingerDown = false
+                isLongPressActive = false
+                isDragging = false
+                dragStarted = false
             }
         }
         return true
+    }
+
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        // Basic hover support
+        return false
     }
 }
