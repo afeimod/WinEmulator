@@ -862,7 +862,8 @@ class TouchpadView(context: Context) : View(context) {
             (lastY - fingerStartY) * (lastY - fingerStartY)
         )
         
-        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 5 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 5
+        // 使用更灵敏的阈值来检测点击（基于termux-app的优化）
+        return touchDuration < InputControlsView.MAX_TAP_MILLISECONDS * 3 && travelDistance < InputControlsView.MAX_TAP_TRAVEL_DISTANCE * 3
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -899,11 +900,11 @@ class TouchpadView(context: Context) : View(context) {
                 // On finger up, check if it was a tap and send mouse click
                 if (isFingerDown && isTap() && isPointerButtonLeftEnabled) {
                     // Send mouse button press (left click down)
-                    inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                    inputEventHandler?.onPointerButton(1, true)  // 1 = left button
                     
                     // Send mouse button release after a short delay
                     postDelayed({
-                        inputEventHandler?.onPointerButton(0, false)
+                        inputEventHandler?.onPointerButton(1, false)
                     }, 30)
                 }
                 
