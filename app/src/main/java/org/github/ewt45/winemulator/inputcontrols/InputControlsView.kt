@@ -52,6 +52,9 @@ class InputControlsView(
     private var mouseMoveTimer: Timer? = null
     private val mouseMoveOffset = PointF()
     
+    // Handler for key repeat
+    private var keyRepeatBinding: Binding? = null
+    
     private val cursor = Point()
     private val cursorSpeed: Float
         get() = profile?.cursorSpeed ?: 1.0f
