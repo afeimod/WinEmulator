@@ -52,10 +52,6 @@ class InputControlsView(
     private var mouseMoveTimer: Timer? = null
     private val mouseMoveOffset = PointF()
     
-    // Timer for continuous key press (for keyboard repeat)
-    private var keyRepeatTimer: Timer? = null
-    private var keyRepeatBinding: Binding? = null
-    
     private val cursor = Point()
     private val cursorSpeed: Float
         get() = profile?.cursorSpeed ?: 1.0f
@@ -351,20 +347,27 @@ class InputControlsView(
     
     /**
      * Start key repeat timer for continuous key press
+     * 使用 Handler 确保在主线程执行，避免跨线程问题
      */
+    private val keyRepeatHandler = Handler(Looper.getMainLooper())
+    private var keyRepeatRunnable: Runnable? = null
+    
     private fun startKeyRepeatTimer(binding: Binding) {
         // Stop any existing key repeat timer
         stopKeyRepeatTimer(null)
         
         keyRepeatBinding = binding
-        keyRepeatTimer = Timer()
-        keyRepeatTimer?.scheduleAtFixedRate(object : TimerTask() {
+        keyRepeatRunnable = object : Runnable {
             override fun run() {
                 keyRepeatBinding?.let { b ->
                     inputEventHandler?.onKeyEvent(b.keycode, true)
                 }
+                // 持续重复直到被取消
+                keyRepeatHandler.postDelayed(this, 50) // 每50ms重复一次
             }
-        }, 150, 50) // 初始延迟150ms，每50ms重复一次
+        }
+        // 延迟150ms后开始第一次重复
+        keyRepeatHandler.postDelayed(keyRepeatRunnable!!, 150)
     }
     
     /**
@@ -372,11 +375,9 @@ class InputControlsView(
      * @param binding The binding to stop, or null to stop all
      */
     private fun stopKeyRepeatTimer(binding: Binding?) {
-        if (binding == null || keyRepeatBinding == binding) {
-            keyRepeatTimer?.cancel()
-            keyRepeatTimer = null
-            keyRepeatBinding = null
-        }
+        keyRepeatRunnable?.let { keyRepeatHandler.removeCallbacks(it) }
+        keyRepeatRunnable = null
+        keyRepeatBinding = null
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -963,9 +964,9 @@ class TouchpadView(context: Context) : View(context) {
                         isLongPressActive = true
                         isDragging = true
                         dragStarted = true
-                        // Send mouse button down event
+                        // Send mouse button down event (button 1 = left button for X11)
                         if (isPointerButtonLeftEnabled) {
-                            inputEventHandler?.onPointerButton(0, true)  // 0 = left button
+                            inputEventHandler?.onPointerButton(1, true)  // 1 = left button
                         }
                     }
                 }
@@ -991,16 +992,16 @@ class TouchpadView(context: Context) : View(context) {
                 if (isFingerDown) {
                     // If long press was active and we were dragging, release the button
                     if (isLongPressActive && isDragging) {
-                        // Send mouse button release after drag
-                        inputEventHandler?.onPointerButton(0, false)
+                        // Send mouse button release after drag (button 1 = left button for X11)
+                        inputEventHandler?.onPointerButton(1, false)
                     } else if (isTap() && isPointerButtonLeftEnabled) {
-                        // Regular tap - send click
+                        // Regular tap - send click (button 1 = left button for X11)
                         // Send mouse button press (left click down)
-                        inputEventHandler?.onPointerButton(0, true)
+                        inputEventHandler?.onPointerButton(1, true)
                         
                         // Send mouse button release after a short delay
                         postDelayed({
-                            inputEventHandler?.onPointerButton(0, false)
+                            inputEventHandler?.onPointerButton(1, false)
                         }, 30)
                     }
                 }
