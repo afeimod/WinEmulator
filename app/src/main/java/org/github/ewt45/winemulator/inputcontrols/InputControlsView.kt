@@ -761,45 +761,67 @@ class InputControlsView(
                         // 释放该触点的占用状态
                         buttonPointers.remove(pointerId)
                     } else {
-                        // 触控板点击检测 - 平衡方案，检查所有触点
-                        if (actionMasked == MotionEvent.ACTION_UP) {
-                            val touchCount = touchpadPointers.size
+                        // 触控板点击检测 - 使用test源码的逻辑
+                        val downInfo = touchDownInfos[pointerId]
+                        val lastPos = touchpadPointers[pointerId]
+                        
+                        var isClick = false
+                        if (downInfo != null && lastPos != null) {
+                            val elapsed = System.currentTimeMillis() - downInfo.downTime
+                            val distance = kotlin.math.sqrt(
+                                (lastPos.x - downInfo.downPosition.x) * (lastPos.x - downInfo.downPosition.x) +
+                                (lastPos.y - downInfo.downPosition.y) * (lastPos.y - downInfo.downPosition.y)
+                            )
                             
-                            if (touchCount >= 1) {
-                                // 检查所有触点，确保都是点击
-                                var isClick = true
-                                for ((id, downInfo) in touchDownInfos) {
-                                    val lastPos = touchpadPointers[id]
-                                    if (lastPos != null) {
-                                        val distance = kotlin.math.sqrt(
-                                            (lastPos.x - downInfo.downPosition.x) * (lastPos.x - downInfo.downPosition.x) +
-                                            (lastPos.y - downInfo.downPosition.y) * (lastPos.y - downInfo.downPosition.y)
+                            // 使用更灵敏的阈值：距离小于30像素且时间少于300毫秒视为点击
+                            isClick = (distance < 30f && elapsed < 300L)
+                        }
+                        
+                        // 只有当最后一个手指抬起时才检测点击
+                        if (isClick && actionMasked == MotionEvent.ACTION_UP) {
+                            // 检查是否有其他触点也是点击
+                            val otherClicks = touchDownInfos.filterKeys { it != pointerId }
+                            
+                            if (otherClicks.isNotEmpty()) {
+                                // 有其他触点，检查它们是否也是点击
+                                val allAreClicks = otherClicks.all { (id, info) ->
+                                    val otherLastPos = touchpadPointers[id]
+                                    if (otherLastPos != null) {
+                                        val otherElapsed = System.currentTimeMillis() - info.downTime
+                                        val otherDistance = kotlin.math.sqrt(
+                                            (otherLastPos.x - info.downPosition.x) * (otherLastPos.x - info.downPosition.x) +
+                                            (otherLastPos.y - info.downPosition.y) * (otherLastPos.y - info.downPosition.y)
                                         )
-                                        // 距离小于 50 像素视为点击
-                                        if (distance > 50f) {
-                                            isClick = false
-                                            break
-                                        }
+                                        otherDistance < 30f && otherElapsed < 300L
+                                    } else {
+                                        false
                                     }
                                 }
                                 
-                                if (isClick) {
-                                    if (touchCount == 2) {
-                                        // 双指点击 -> 右键
-                                        inputEventHandler?.onPointerButton(3, true)
-                                        inputEventHandler?.onPointerButton(3, false)
-                                    } else {
-                                        // 单指点击 -> 左键
-                                        inputEventHandler?.onPointerButton(1, true)
-                                        inputEventHandler?.onPointerButton(1, false)
-                                    }
+                                if (allAreClicks && otherClicks.size == 1) {
+                                    // 双指点击，发送鼠标右键
+                                    inputEventHandler?.onPointerButton(3, true)
+                                    inputEventHandler?.onPointerButton(3, false)
+                                } else {
+                                    // 多个手指或其他情况，发送左键
+                                    inputEventHandler?.onPointerButton(1, true)
+                                    inputEventHandler?.onPointerButton(1, false)
                                 }
+                            } else {
+                                // 单指点击，发送鼠标左键
+                                inputEventHandler?.onPointerButton(1, true)
+                                inputEventHandler?.onPointerButton(1, false)
                             }
                         }
                         
-                        // 清除触控板记录
-                        touchpadPointers.remove(pointerId)
-                        touchDownInfos.remove(pointerId)
+                        // 移除触控板记录
+                        if (actionMasked == MotionEvent.ACTION_UP) {
+                            touchpadPointers.clear()
+                            touchDownInfos.clear()
+                        } else {
+                            touchpadPointers.remove(pointerId)
+                            touchDownInfos.remove(pointerId)
+                        }
                     }
                 }
             }
