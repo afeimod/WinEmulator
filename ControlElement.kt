@@ -720,8 +720,16 @@ class ControlElement(
                             states[i] = true
                         } else {
                             val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
-                            inputControlsView.handleInputEvent(binding, state, value)
-                            states[i] = state
+                            if (binding.isKeyboard) {
+                                // Lock keyboard direction: once activated, stay pressed until touch release
+                                if (!states[i] && state) {
+                                    inputControlsView.handleInputEvent(binding, true, value)
+                                }
+                                states[i] = states[i] || state
+                            } else {
+                                inputControlsView.handleInputEvent(binding, state, value)
+                                states[i] = state
+                            }
                         }
                     }
                     inputControlsView.invalidate()
@@ -751,8 +759,16 @@ class ControlElement(
                                     Binding.MOUSE_MOVE_LEFT, Binding.MOUSE_MOVE_RIGHT -> cursorDx = round(value).toInt()
                                     Binding.MOUSE_MOVE_UP, Binding.MOUSE_MOVE_DOWN -> cursorDy = round(value).toInt()
                                     else -> {
-                                        inputControlsView.handleInputEvent(binding, newStates[i], value)
-                                        states[i] = newStates[i]
+                                        if (binding.isKeyboard) {
+                                            // Lock keyboard direction: once activated, stay pressed until touch release
+                                            if (!states[i] && newStates[i]) {
+                                                inputControlsView.handleInputEvent(binding, true, value)
+                                            }
+                                            states[i] = states[i] || newStates[i]
+                                        } else {
+                                            inputControlsView.handleInputEvent(binding, newStates[i], value)
+                                            states[i] = newStates[i]
+                                        }
                                     }
                                 }
                             }
@@ -775,8 +791,17 @@ class ControlElement(
                         val value = if (i == 1 || i == 3) deltaX else deltaY
                         val binding = getBindingAt(i)
                         val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
-                        inputControlsView.handleInputEvent(binding, state, value)
-                        states[i] = state
+                        if (binding.isKeyboard) {
+                            // Lock keyboard direction: once activated, stay pressed until touch release
+                            // This prevents dead zone boundary fluctuations from toggling key state
+                            if (!states[i] && state) {
+                                inputControlsView.handleInputEvent(binding, true, value)
+                            }
+                            states[i] = states[i] || state
+                        } else {
+                            inputControlsView.handleInputEvent(binding, state, value)
+                            states[i] = state
+                        }
                     }
                 }
                 else -> {}
