@@ -146,6 +146,8 @@ class ControlElement(
     private var cheatCodePressed = false
 
     private var currentPointerId: Int = -1
+    // 标记BUTTON是否处于持续按下状态（像方向键一样）
+    private var isButtonHeldDown: Boolean = false
     private val boundingBox: Rect = Rect()
     private var boundingBoxNeedsUpdate: Boolean = true
     private val states: BooleanArray = booleanArrayOf(false, false, false, false)
@@ -739,12 +741,12 @@ class ControlElement(
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
+                        // 直接发送按键按下事件，不再使用Handler重复机制
+                        // 在handleTouchMove中保持按键按下状态
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
-                        // 长按重复（仅对非 toggle 的键盘按键）
-                        if (!isToggleSwitch && binding.isKeyboard) {
-                            startKeyRepeat(binding)
-                        }
+                        // 标记为持续按下状态
+                        isButtonHeldDown = true
                     }
                     return true
                 }
@@ -795,8 +797,8 @@ class ControlElement(
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
-                    // For BUTTON type, we still need to check if finger moved out of the button area
-                    // If finger moved significantly beyond the button, treat as cancellation
+                    // 像D_PAD一样，保持按键按下状态
+                    // 只要手指还在按钮区域内，就持续发送keyDown事件
                     val box = getBoundingBox()
                     val expandedRadius = maxOf(box.width(), box.height()) * 0.5f
                     val centerX = box.centerX().toFloat()
@@ -805,16 +807,21 @@ class ControlElement(
                     val dy = py - centerY
                     val distance = sqrt(dx * dx + dy * dy)
                     
-                    // If finger moved far outside button area, end the press
                     if (distance > expandedRadius) {
-                        // Finger moved too far - treat as release
+                        // 手指移出按钮区域，释放按键
                         currentPointerId = -1
                         val binding = getBindingAt(0)
-                        inputControlsView.handleInputEvent(binding, false)
-                        stopKeyRepeat()
+                        if (isButtonHeldDown) {
+                            inputControlsView.handleInputEvent(binding, false)
+                            isButtonHeldDown = false
+                        }
                         return false
                     }
-                    // Finger still in button area - keep the key pressed (continue key repeat in background)
+                    // 手指仍在按钮区域内，持续发送keyDown事件（就像方向键一样）
+                    if (isButtonHeldDown) {
+                        val binding = getBindingAt(0)
+                        inputControlsView.handleInputEvent(binding, true)
+                    }
                     return true
                 }
                 Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
@@ -995,17 +1002,11 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    stopKeyRepeat()
+                    // 释放按键
                     val binding = getBindingAt(0)
-                    if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
-                        isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
-                        if (!isSelected) {
-                            inputControlsView.handleInputEvent(binding, false)
-                        }
-                        touchTime = null
-                        inputControlsView.invalidate()
-                    } else if (!isToggleSwitch || isSelected) {
+                    if (isButtonHeldDown) {
                         inputControlsView.handleInputEvent(binding, false)
+                        isButtonHeldDown = false
                     }
 
                     if (isToggleSwitch) {
