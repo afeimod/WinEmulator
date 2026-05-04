@@ -1,13 +1,9 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.*
-import android.os.Handler
-import android.os.Looper
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
-import java.util.Timer
-import java.util.TimerTask
 import kotlin.math.*
 
 class ControlElement(
@@ -150,8 +146,6 @@ class ControlElement(
     private var currentPointerId: Int = -1
     // 标记BUTTON是否处于持续按下状态（像方向键一样）
     private var isButtonHeldDown: Boolean = false
-    // 保存当前按住按键的binding，用于Timer持续发送
-    private var heldDownBinding: Binding? = null
     private val boundingBox: Rect = Rect()
     private var boundingBoxNeedsUpdate: Boolean = true
     private val states: BooleanArray = booleanArrayOf(false, false, false, false)
@@ -160,17 +154,6 @@ class ControlElement(
 
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
-
-    // 长按重复相关（为 BUTTON 类型添加）
-    private val repeatHandler = Handler(Looper.getMainLooper())
-    private var repeatRunnable: Runnable? = null
-    private val keyRepeatDelayMs = 50L
-    private val keyRepeatIntervalMs = 16L
-    
-    // 持续按下Timer（像D_PAD一样持续发送）
-    private var holdTimer: Timer? = null
-    private var holdTimerTask: TimerTask? = null
-    private val holdIntervalMs = 16L  // 约60fps，持续发送
 
     private fun reset() {
         text = ""
@@ -181,7 +164,6 @@ class ControlElement(
         clipIcon = null
         backgroundColor = 0
         oldBackgroundColor = -1
-        stopKeyRepeat()
         boundingBoxNeedsUpdate = true
     }
 
@@ -754,8 +736,6 @@ class ControlElement(
                         inputControlsView.handleInputEvent(binding, true)
                         // 标记为持续按下状态
                         isButtonHeldDown = true
-                        // 立即启动持续发送机制
-                        startButtonHoldTimer(binding)
                     }
                     return true
                 }
@@ -779,58 +759,7 @@ class ControlElement(
         return false
     }
 
-    private fun startKeyRepeat(binding: Binding) {
-        stopKeyRepeat()
-        // 对于键盘按键，按下时立即发送一次，然后启动重复
-        // 不要在这里重复发送，因为 handleInputEvent 已经发送了第一次
-        repeatRunnable = object : Runnable {
-            override fun run() {
-                if (currentPointerId != -1) {
-                    inputControlsView.handleInputEvent(binding, true)
-                    repeatHandler.postDelayed(this, keyRepeatIntervalMs)
-                }
-            }
-        }
-        // 延迟后开始重复，而不是立即重复
-        repeatHandler.postDelayed(repeatRunnable!!, keyRepeatDelayMs)
-    }
 
-    private fun stopKeyRepeat() {
-        repeatHandler?.let {
-            repeatRunnable?.let { task -> it.removeCallbacks(task) }
-            repeatRunnable = null
-        }
-    }
-    
-    /**
-     * 启动持续按键Timer - 像D_PAD一样持续发送按键按下事件
-     */
-    private fun startButtonHoldTimer(binding: Binding) {
-        stopButtonHoldTimer()
-        heldDownBinding = binding
-        
-        holdTimer = Timer()
-        holdTimerTask = object : TimerTask() {
-            override fun run() {
-                if (currentPointerId != -1 && heldDownBinding != null) {
-                    // 持续发送keyDown事件（跟D_PAD一样）
-                    inputControlsView.handleInputEvent(heldDownBinding!!, true)
-                }
-            }
-        }
-        // 立即开始，每16ms发送一次（约60fps）
-        holdTimer?.scheduleAtFixedRate(holdTimerTask, 0, holdIntervalMs)
-    }
-    
-    /**
-     * 停止持续按键Timer
-     */
-    private fun stopButtonHoldTimer() {
-        holdTimer?.cancel()
-        holdTimer = null
-        holdTimerTask = null
-        heldDownBinding = null
-    }
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
@@ -992,7 +921,6 @@ class ControlElement(
                     cheatCodePressed = false
                 }
                 Type.COMBINE_BUTTON -> {
-                    stopKeyRepeat()
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
@@ -1024,8 +952,6 @@ class ControlElement(
                         inputControlsView.handleInputEvent(binding, false)
                         isButtonHeldDown = false
                     }
-                    // 停止持续按键Timer
-                    stopButtonHoldTimer()
 
                     if (isToggleSwitch) {
                         isSelected = !isSelected
@@ -1033,7 +959,6 @@ class ControlElement(
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
-                    stopKeyRepeat()
                     for (i in states.indices) {
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
