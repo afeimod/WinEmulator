@@ -749,7 +749,16 @@ class ControlElement(
                     return handleTouchMove(pointerId, px, py)
                 }
                 Type.D_PAD, Type.STICK -> {
-                    return handleTouchMove(pointerId, px, py)
+                    // 关键修复：D_PAD在touchDown时立即计算方向并发送keyDown事件
+                    // 而不是等待touchMove，这样手指放在中心也能立即响应
+                    if (currentPosition == null) currentPosition = PointF()
+                    currentPosition?.set(px, py)
+                    
+                    // 先发送初始的keyDown事件（基于初始触摸位置）
+                    // 使用一个标记避免handleTouchMove中的重复发送
+                    sendDpadInitialEvents(px, py, true)
+                    
+                    return handleTouchMove(pointerId, px, py, isInitialEvent = true)
                 }
             }
         }
@@ -758,7 +767,7 @@ class ControlElement(
 
 
 
-    fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
+    fun handleTouchMove(pointerId: Int, px: Float, py: Float, isInitialEvent: Boolean = false): Boolean {
         if (pointerId == currentPointerId) {
             when (type) {
                 Type.BUTTON -> {
@@ -802,6 +811,9 @@ class ControlElement(
 
                     when (type) {
                         Type.STICK -> {
+                            // STICK也需要在isInitialEvent时跳过
+                            if (!isInitialEvent) {
+                                // STICK处理逻辑保持不变
                             if (currentPosition == null) currentPosition = PointF()
                             currentPosition?.x = box.left + deltaX * radius + radius
                             currentPosition?.y = box.top + deltaY * radius + radius
@@ -831,6 +843,7 @@ class ControlElement(
                                 }
                             }
                             inputControlsView.invalidate()
+                            }
                         }
                         Type.TRACKPAD -> {
                             val newStates = booleanArrayOf(
@@ -870,25 +883,29 @@ class ControlElement(
                             }
                         }
                         Type.D_PAD -> {
-                            val newStates = booleanArrayOf(
-                                deltaY <= -DPAD_DEAD_ZONE,
-                                deltaX >= DPAD_DEAD_ZONE,
-                                deltaY >= DPAD_DEAD_ZONE,
-                                deltaX <= -DPAD_DEAD_ZONE
-                            )
+                            // D_PAD的核心逻辑：计算方向并发送事件
+                            // isInitialEvent时跳过，因为已经在sendDpadInitialEvents中处理了
+                            if (!isInitialEvent) {
+                                val newStates = booleanArrayOf(
+                                    deltaY <= -DPAD_DEAD_ZONE,
+                                    deltaX >= DPAD_DEAD_ZONE,
+                                    deltaY >= DPAD_DEAD_ZONE,
+                                    deltaX <= -DPAD_DEAD_ZONE
+                                )
 
-                            for (i in 0..3) {
-                                val value = if (i == 1 || i == 3) deltaX else deltaY
-                                val binding = getBindingAt(i)
-                                val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                for (i in 0..3) {
+                                    val value = if (i == 1 || i == 3) deltaX else deltaY
+                                    val binding = getBindingAt(i)
+                                    val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
 
-                                if (state) {
-                                    inputControlsView.handleInputEvent(binding, true, value)
-                                } else if (states[i]) {
-                                    inputControlsView.handleInputEvent(binding, false, value)
+                                    if (state) {
+                                        inputControlsView.handleInputEvent(binding, true, value)
+                                    } else if (states[i]) {
+                                        inputControlsView.handleInputEvent(binding, false, value)
+                                    }
+
+                                    states[i] = state
                                 }
-
-                                states[i] = state
                             }
                         }
                         else -> {}
@@ -980,6 +997,49 @@ class ControlElement(
 
     private fun clamp(value: Float, min: Float, max: Float): Float {
         return maxOf(min, minOf(max, value))
+    }
+
+    /**
+     * D_PAD专用的初始事件发送方法
+     * winlator逻辑：按下时发送一次keyDown，让X11自动处理repeat
+     * 修复"动一下停一下"和"松开后还在移动"的问题
+     */
+    private fun sendDpadInitialEvents(px: Float, py: Float, isInitialEvent: Boolean) {
+        if (!isInitialEvent) return
+        
+        val box = getBoundingBox()
+        val radius = box.width() * 0.5f
+        
+        // 计算相对于中心的偏移
+        val localX = px - box.left
+        val localY = py - box.top
+        val offsetX = localX - radius
+        val offsetY = localY - radius
+
+        // 归一化到-1到1
+        val deltaX = clamp(offsetX / radius, -1f, 1f)
+        val deltaY = clamp(offsetY / radius, -1f, 1f)
+
+        // winlator逻辑：找到主要方向，发送一次keyDown即可
+        // X11会自动处理repeat，不需要客户端定时器
+        val absX = abs(deltaX)
+        val absY = abs(deltaY)
+        
+        // 确定主要方向（只选一个最主要的方向）
+        var mainDirection = -1
+        if (absX > absY) {
+            mainDirection = if (deltaX > 0) 1 else 3  // 右:1, 左:3
+        } else if (absY > 0) {
+            mainDirection = if (deltaY > 0) 2 else 0  // 下:2, 上:0
+        }
+        
+        // 如果找到有效方向，发送keyDown
+        if (mainDirection >= 0) {
+            val binding = getBindingAt(mainDirection)
+            if (binding != Binding.NONE) {
+                inputControlsView.handleInputEvent(binding, true)
+            }
+        }
     }
 
     fun toJSONObject(): org.json.JSONObject {
