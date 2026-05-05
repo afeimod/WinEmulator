@@ -1,7 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.PointF
-import android.os.SystemClock
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -37,26 +36,18 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 关键修复：确保每个keyDown都有对应的keyUp，避免事件串联
+     * 使用最简单的构造函数，避免任何可能导致事件缓冲的flags
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        // 使用正确的KeyEvent构造函数创建事件
-        val eventTime = SystemClock.uptimeMillis()
+        // 使用最简单的构造函数，避免事件被系统缓冲或队列处理
+        // 移除所有可能导致延迟的flags
         val event = KeyEvent(
-            eventTime,    // downTime
-            eventTime,    // eventTime
             if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
-            keycode,
-            0,            // repeatCount = 0，禁用系统repeat
-            0,            // metaState
-            0,            // deviceId
-            0,            // scancode
-            KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE,
-            0             // edgeFlags
+            keycode
         )
         sender.sendKeyEvent(event)
         
