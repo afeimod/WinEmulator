@@ -44,9 +44,9 @@ class X11InputSender {
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        // 使用KeyEvent.obtain创建，确保事件独立
+        // 使用正确的KeyEvent构造函数创建事件
         val eventTime = SystemClock.uptimeMillis()
-        val event = KeyEvent.obtain(
+        val event = KeyEvent(
             eventTime,    // downTime
             eventTime,    // eventTime
             if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
@@ -56,11 +56,9 @@ class X11InputSender {
             0,            // deviceId
             0,            // scancode
             KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE,
-            0,            // source
             0             // edgeFlags
         )
         sender.sendKeyEvent(event)
-        event.recycle()  // 回收事件对象
         
         // 跟踪按下的键，确保正确释放
         if (isDown) {
