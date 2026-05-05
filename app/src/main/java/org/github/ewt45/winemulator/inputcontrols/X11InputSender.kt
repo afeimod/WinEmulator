@@ -36,58 +36,26 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 关键修复：解决60fps帧率锁定导致的输入队列延迟问题
-     * 在keyUp时添加"立即刷新"机制
+     * 简化版：直接同步发送事件，不使用任何缓冲或刷新机制
+     * 按键重复由X11服务端自动处理（与winlator一致）
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
+        // 使用最简化的构造函数，直接同步发送
+        // 不添加任何标志或参数，避免额外的缓冲处理
         val event = KeyEvent(
             if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
             keycode
         )
         sender.sendKeyEvent(event)
-        
-        // 关键修复：在keyUp时尝试刷新事件队列
-        // 60fps的帧率会导致事件被队列化，在松开时需要立即处理
-        if (!isDown) {
-            // 发送一个同步信号，尝试立即处理待处理的事件
-            flushKeyEvents()
-        }
-        
+
         if (isDown) {
             pressedKeys.add(keycode)
         } else {
             pressedKeys.remove(keycode)
-        }
-    }
-    
-    /**
-     * 刷新待处理的按键事件
-     * 尝试立即处理所有待处理的事件，解决60fps导致的延迟
-     */
-    private fun flushKeyEvents() {
-        try {
-            // 尝试调用termux-x11的刷新方法
-            // 这可能不存在，但try-catch会保证不会崩溃
-            inputEventSender?.let { sender ->
-                // 尝试通过反射调用flush方法
-                val method = sender.javaClass.getMethod("flush")
-                method.invoke(sender)
-            }
-        } catch (e: Exception) {
-            // 方法不存在，忽略
-        }
-        
-        // 同时尝试发送一个空事件来"解锁"事件队列
-        try {
-            // 发送一个特殊的事件来触发队列刷新
-            val emptyEvent = KeyEvent(KeyEvent.ACTION_UP, 0)
-            inputEventSender?.sendKeyEvent(emptyEvent)
-        } catch (e: Exception) {
-            // 忽略
         }
     }
     
