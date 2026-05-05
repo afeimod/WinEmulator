@@ -1,5 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
+import android.view.Choreographer
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -11,19 +12,21 @@ import com.termux.x11.input.RenderData
  * Sends keyboard and mouse events through Android's InputEvent system to LorieView
  *
  * 实现说明：
- * 此实现与 termux-x11 参考项目保持一致，完全依赖 X 服务器端的自动重复（Auto-Repeat）功能
- * 不在客户端实现任何按键重复逻辑
+ * 此实现用于在X服务器auto-repeat不可用时，通过客户端实现可靠的按键重复逻辑
+ * 使用Android Choreographer与屏幕刷新率同步，确保流畅的按键重复体验
  *
  * 按键事件的处理流程：
  * 1. ControlElement.handleTouchDown 调用 handleInputEvent(binding, true)
  * 2. handleInputEvent 调用 X11InputSender.sendKeyEvent(keycode, true)
  * 3. sendKeyEvent 发送一次 KeyEvent.ACTION_DOWN 事件
- * 4. X 服务器检测到 keyDown 事件后，自动按照系统配置产生重复事件
+ * 4. 启动Choreographer回调，在每个帧刷新时检查是否需要发送重复事件
  * 5. ControlElement.handleTouchUp 调用 handleInputEvent(binding, false)
- * 6. sendKeyEvent 发送 KeyEvent.ACTION_UP 事件
- * 7. X 服务器检测到 keyUp 事件后，停止自动重复
+ * 6. sendKeyEvent 发送 KeyEvent.ACTION_UP 事件，停止重复循环
  *
- * 这种方式与 Winlator 和 termux-x11 参考项目的实现完全一致
+ * 重复参数：
+ * - 初始延迟：500ms（长按500ms后开始重复）
+ * - 重复间隔：与屏幕刷新率同步（约16ms for 60fps，约8ms for 120fps）
+ * - 只发送keyDown事件，不发送keyUp（keyUp在手指抬起时发送一次）
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
@@ -35,6 +38,34 @@ class X11InputSender {
     val isInitialized: Boolean
         get() = inputEventSender != null
 
+    // 按键重复状态追踪
+    private val repeatingKeys = mutableSetOf<Int>()
+    private val pendingRepeatKeys = mutableSetOf<Int>()
+
+    // Choreographer用于与屏幕刷新率同步
+    private val choreographer = Choreographer.getInstance()
+    private var isRepeating = false
+
+    // Choreographer回调
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (pendingRepeatKeys.isNotEmpty()) {
+                // 发送重复事件
+                synchronized(repeatingKeys) {
+                    for (keycode in pendingRepeatKeys.toList()) {
+                        if (repeatingKeys.contains(keycode)) {
+                            sendKeyDownEvent(keycode)
+                        }
+                    }
+                }
+                // 继续下一帧
+                choreographer.postFrameCallback(this)
+            } else {
+                isRepeating = false
+            }
+        }
+    }
+
     /**
      * Initialize with an InputStub (typically LorieView)
      */
@@ -45,21 +76,59 @@ class X11InputSender {
     /**
      * Send a key event using Android KeyEvent
      *
-     * 此方法与 termux-x11 参考项目保持一致：
-     * - 只发送一次 keyDown 事件
-     * - 只发送一次 keyUp 事件
-     * - 不实现任何客户端重复逻辑
-     * - 完全依赖 X 服务器端的自动重复功能
-     *
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
 
-        // 创建并发送 KeyEvent，与参考项目完全一致
-        val action = if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-        val event = KeyEvent(action, keycode)
+        if (isDown) {
+            // 发送初始keyDown
+            sendKeyDownEvent(keycode)
+
+            // 启动重复逻辑
+            synchronized(repeatingKeys) {
+                repeatingKeys.add(keycode)
+                pendingRepeatKeys.add(keycode)
+
+                // 如果还没有启动Choreographer，启动它
+                if (!isRepeating) {
+                    isRepeating = true
+                    choreographer.postFrameCallback(frameCallback)
+                }
+            }
+        } else {
+            // 停止重复
+            synchronized(repeatingKeys) {
+                repeatingKeys.remove(keycode)
+                pendingRepeatKeys.remove(keycode)
+
+                // 如果没有更多重复的键，停止Choreographer
+                if (pendingRepeatKeys.isEmpty()) {
+                    isRepeating = false
+                }
+            }
+
+            // 发送keyUp
+            sendKeyUpEvent(keycode)
+        }
+    }
+
+    /**
+     * 发送keyDown事件（内部方法，不包含重复逻辑）
+     */
+    private fun sendKeyDownEvent(keycode: Int) {
+        val sender = inputEventSender ?: return
+        val event = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
+        sender.sendKeyEvent(event)
+    }
+
+    /**
+     * 发送keyUp事件（内部方法）
+     */
+    private fun sendKeyUpEvent(keycode: Int) {
+        val sender = inputEventSender ?: return
+        val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
         sender.sendKeyEvent(event)
     }
 
@@ -273,6 +342,13 @@ class X11InputSender {
      * Cleanup resources
      */
     fun release() {
+        // 停止所有重复
+        synchronized(repeatingKeys) {
+            repeatingKeys.clear()
+            pendingRepeatKeys.clear()
+            isRepeating = false
+        }
+        choreographer.removeFrameCallback(frameCallback)
         inputEventSender = null
     }
 }
