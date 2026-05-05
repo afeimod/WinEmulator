@@ -1,7 +1,5 @@
 package org.github.ewt45.winemulator.inputcontrols
 
-import android.os.Handler
-import android.os.Looper
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -11,29 +9,28 @@ import com.termux.x11.input.RenderData
 /**
  * X11 Input Handler using InputEventSender
  * Sends keyboard and mouse events through Android's InputEvent system to LorieView
- * 
- * 实现客户端自动重复机制，因为termux-x11的X服务器默认禁用X11自动重复
- * 按键重复速率：初始延迟500ms，之后每50ms重复一次（约20次/秒）
+ *
+ * 实现说明：
+ * 此实现与 termux-x11 参考项目保持一致，完全依赖 X 服务器端的自动重复（Auto-Repeat）功能
+ * 不在客户端实现任何按键重复逻辑
+ *
+ * 按键事件的处理流程：
+ * 1. ControlElement.handleTouchDown 调用 handleInputEvent(binding, true)
+ * 2. handleInputEvent 调用 X11InputSender.sendKeyEvent(keycode, true)
+ * 3. sendKeyEvent 发送一次 KeyEvent.ACTION_DOWN 事件
+ * 4. X 服务器检测到 keyDown 事件后，自动按照系统配置产生重复事件
+ * 5. ControlElement.handleTouchUp 调用 handleInputEvent(binding, false)
+ * 6. sendKeyEvent 发送 KeyEvent.ACTION_UP 事件
+ * 7. X 服务器检测到 keyUp 事件后，停止自动重复
+ *
+ * 这种方式与 Winlator 和 termux-x11 参考项目的实现完全一致
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
-    
-    // Track pressed keys to ensure proper keyUp
-    private val pressedKeys = mutableSetOf<Int>()
-    
-    // 客户端重复定时器：每个按键独立的Runnable
-    private val keyRepeatRunnables = mutableMapOf<Int, Runnable>()
-    
-    // Handler用于管理定时器
-    private val handler = Handler(Looper.getMainLooper())
-    
-    // 重复参数：初始延迟和重复间隔（毫秒）
-    private val repeatInitialDelay = 500L  // 长按500ms后开始重复
-    private val repeatInterval = 50L       // 每50ms重复一次
-    
+
     // RenderData for touch events - needs to be set from LorieView
     var renderData: RenderData? = null
-    
+
     // Whether InputEventSender is initialized
     val isInitialized: Boolean
         get() = inputEventSender != null
@@ -47,74 +44,23 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 当按键按下时，启动客户端重复机制
-     * 当按键释放时，停止重复并发送keyUp
+     *
+     * 此方法与 termux-x11 参考项目保持一致：
+     * - 只发送一次 keyDown 事件
+     * - 只发送一次 keyUp 事件
+     * - 不实现任何客户端重复逻辑
+     * - 完全依赖 X 服务器端的自动重复功能
+     *
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
-        
-        if (isDown) {
-            // 发送初始keyDown
-            val event = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
-            sender.sendKeyEvent(event)
-            pressedKeys.add(keycode)
-            
-            // 停止任何现有的重复
-            stopKeyRepeat(keycode)
-            
-            // 启动新的重复定时器：先延迟initialDelay，然后每repeatInterval重复一次
-            val repeatRunnable = Runnable {
-                // 检查按键是否仍然被按下
-                if (pressedKeys.contains(keycode)) {
-                    val repeatEvent = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
-                    sender.sendKeyEvent(repeatEvent)
-                    // 调度下一次重复
-                    handler.postDelayed(repeatRunnables[keycode]!!, repeatInterval)
-                }
-            }
-            keyRepeatRunnables[keycode] = repeatRunnable
-            handler.postDelayed(repeatRunnable, repeatInitialDelay)
-        } else {
-            // 停止重复定时器
-            stopKeyRepeat(keycode)
-            
-            // 发送keyUp
-            val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
-            sender.sendKeyEvent(event)
-            pressedKeys.remove(keycode)
-        }
-    }
-    
-    /**
-     * 停止按键的重复定时器
-     */
-    private fun stopKeyRepeat(keycode: Int) {
-        keyRepeatRunnables[keycode]?.let { runnable ->
-            handler.removeCallbacks(runnable)
-        }
-        keyRepeatRunnables.remove(keycode)
-    }
-    
-    /**
-     * 确保所有按下的键都被释放
-     * 用于清理可能卡住的状态
-     */
-    fun releaseAllKeys() {
-        // 停止所有重复定时器
-        keyRepeatRunnables.values.forEach { handler.removeCallbacks(it) }
-        keyRepeatRunnables.clear()
-        
-        // 发送所有按下键的keyUp
-        val keysToRelease = pressedKeys.toList()
-        pressedKeys.clear()
-        for (keycode in keysToRelease) {
-            inputEventSender?.let { sender ->
-                val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
-                sender.sendKeyEvent(event)
-            }
-        }
+
+        // 创建并发送 KeyEvent，与参考项目完全一致
+        val action = if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
+        val event = KeyEvent(action, keycode)
+        sender.sendKeyEvent(event)
     }
 
     /**
@@ -130,17 +76,16 @@ class X11InputSender {
     }
 
     /**
-     * Send mouse button event - 同步发送鼠标按钮事件
+     * Send mouse button event
      * @param button Button index (1=left, 2=middle, 3=right, 4=scroll up, 5=scroll down)
      * @param isDown True if pressed, false if released
      */
     fun sendMouseButtonEvent(button: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
-        
-        // 直接同步发送，避免异步延迟
+
         when (button) {
             1 -> {
-                // Left button - send as button press/release
+                // Left button
                 sender.sendMouseEvent(null, BUTTON_LEFT, isDown, true)
             }
             2 -> {
@@ -152,13 +97,13 @@ class X11InputSender {
                 sender.sendMouseEvent(null, BUTTON_RIGHT, isDown, true)
             }
             4 -> {
-                // Scroll up - use wheel event
+                // Scroll up
                 if (isDown) {
                     sender.sendMouseWheelEvent(0f, -1f)
                 }
             }
             5 -> {
-                // Scroll down - use wheel event
+                // Scroll down
                 if (isDown) {
                     sender.sendMouseWheelEvent(0f, 1f)
                 }
@@ -167,26 +112,22 @@ class X11InputSender {
     }
 
     /**
-     * Send mouse motion event (relative movement) - 同步发送鼠标移动事件
+     * Send mouse motion event (relative movement)
      * @param dx Change in X coordinate
      * @param dy Change in Y coordinate
      */
     fun sendMouseMotionEvent(dx: Int, dy: Int) {
         val sender = inputEventSender ?: return
-        
-        // 直接同步发送鼠标移动，避免异步延迟
         sender.sendCursorMove(dx.toFloat(), dy.toFloat(), true)
     }
 
     /**
-     * Send mouse wheel event - 同步发送鼠标滚轮事件
+     * Send mouse wheel event
      * @param deltaX Horizontal scroll amount
      * @param deltaY Vertical scroll amount
      */
     fun sendMouseWheelEvent(deltaX: Float, deltaY: Float) {
         val sender = inputEventSender ?: return
-        
-        // 直接同步发送滚轮事件
         sender.sendMouseWheelEvent(deltaX, deltaY)
     }
 
@@ -198,7 +139,7 @@ class X11InputSender {
         return when (evdev) {
             // Escape and special keys
             1 -> KeyEvent.KEYCODE_ESCAPE
-            
+
             // Function keys F1-F12
             59 -> KeyEvent.KEYCODE_F1
             60 -> KeyEvent.KEYCODE_F2
@@ -212,8 +153,8 @@ class X11InputSender {
             68 -> KeyEvent.KEYCODE_F10
             87 -> KeyEvent.KEYCODE_F11
             88 -> KeyEvent.KEYCODE_F12
-            
-            // Numbers row (with shift)
+
+            // Numbers row
             2 -> KeyEvent.KEYCODE_1
             3 -> KeyEvent.KEYCODE_2
             4 -> KeyEvent.KEYCODE_3
@@ -224,13 +165,13 @@ class X11InputSender {
             9 -> KeyEvent.KEYCODE_8
             10 -> KeyEvent.KEYCODE_9
             11 -> KeyEvent.KEYCODE_0
-            
+
             // Operators and special keys
             12 -> KeyEvent.KEYCODE_MINUS
             13 -> KeyEvent.KEYCODE_EQUALS
-            14 -> KeyEvent.KEYCODE_DEL  // Backspace
+            14 -> KeyEvent.KEYCODE_DEL
             15 -> KeyEvent.KEYCODE_TAB
-            
+
             // Letters Q-Z
             16 -> KeyEvent.KEYCODE_Q
             17 -> KeyEvent.KEYCODE_W
@@ -245,8 +186,8 @@ class X11InputSender {
             26 -> KeyEvent.KEYCODE_LEFT_BRACKET
             27 -> KeyEvent.KEYCODE_RIGHT_BRACKET
             28 -> KeyEvent.KEYCODE_ENTER
-            29 -> KeyEvent.KEYCODE_CTRL_LEFT  // Left Control
-            
+            29 -> KeyEvent.KEYCODE_CTRL_LEFT
+
             // Letters A-L
             30 -> KeyEvent.KEYCODE_A
             31 -> KeyEvent.KEYCODE_S
@@ -259,8 +200,8 @@ class X11InputSender {
             38 -> KeyEvent.KEYCODE_L
             39 -> KeyEvent.KEYCODE_SEMICOLON
             40 -> KeyEvent.KEYCODE_APOSTROPHE
-            41 -> KeyEvent.KEYCODE_GRAVE  // Backtick/Tilde
-            
+            41 -> KeyEvent.KEYCODE_GRAVE
+
             // Modifiers
             42 -> KeyEvent.KEYCODE_SHIFT_LEFT
             43 -> KeyEvent.KEYCODE_BACKSLASH
@@ -279,28 +220,28 @@ class X11InputSender {
             56 -> KeyEvent.KEYCODE_ALT_LEFT
             57 -> KeyEvent.KEYCODE_SPACE
             58 -> KeyEvent.KEYCODE_CAPS_LOCK
-            
+
             // Lock keys
             69 -> KeyEvent.KEYCODE_NUM_LOCK
             70 -> KeyEvent.KEYCODE_SCROLL_LOCK
-            
+
             // Navigation cluster
-            72 -> KeyEvent.KEYCODE_DPAD_UP  // Up arrow
+            72 -> KeyEvent.KEYCODE_DPAD_UP
             73 -> KeyEvent.KEYCODE_PAGE_UP
             74 -> KeyEvent.KEYCODE_PAGE_DOWN
-            75 -> KeyEvent.KEYCODE_NUMPAD_4  // Keypad 4 (also used as Left on some keyboards)
-            76 -> KeyEvent.KEYCODE_NUMPAD_5  // Keypad 5
-            77 -> KeyEvent.KEYCODE_NUMPAD_6  // Keypad 6 (also used as Right on some keyboards)
-            78 -> KeyEvent.KEYCODE_NUMPAD_1  // Keypad 1 (also used as End on some keyboards)
-            79 -> KeyEvent.KEYCODE_NUMPAD_7  // Keypad 7 (also used as Home on some keyboards)
-            80 -> KeyEvent.KEYCODE_DPAD_DOWN  // Down arrow
-            81 -> KeyEvent.KEYCODE_NUMPAD_0  // Keypad 0 (also used as Insert on some keyboards)
+            75 -> KeyEvent.KEYCODE_NUMPAD_4
+            76 -> KeyEvent.KEYCODE_NUMPAD_5
+            77 -> KeyEvent.KEYCODE_NUMPAD_6
+            78 -> KeyEvent.KEYCODE_NUMPAD_1
+            79 -> KeyEvent.KEYCODE_NUMPAD_7
+            80 -> KeyEvent.KEYCODE_DPAD_DOWN
+            81 -> KeyEvent.KEYCODE_NUMPAD_0
             82 -> KeyEvent.KEYCODE_NUMPAD_SUBTRACT
-            83 -> KeyEvent.KEYCODE_NUMPAD_DOT  // Keypad Delete/Decimal
+            83 -> KeyEvent.KEYCODE_NUMPAD_DOT
             84 -> KeyEvent.KEYCODE_NUMPAD_DIVIDE
             85 -> KeyEvent.KEYCODE_NUMPAD_MULTIPLY
             86 -> KeyEvent.KEYCODE_NUMPAD_ADD
-            
+
             // Additional navigation keys
             102 -> KeyEvent.KEYCODE_MOVE_HOME
             104 -> KeyEvent.KEYCODE_PAGE_UP
@@ -310,20 +251,19 @@ class X11InputSender {
             109 -> KeyEvent.KEYCODE_PAGE_DOWN
             110 -> KeyEvent.KEYCODE_INSERT
             111 -> KeyEvent.KEYCODE_FORWARD_DEL
-            
-            // Keypad enter (different from regular enter)
+
+            // Keypad enter
             96 -> KeyEvent.KEYCODE_NUMPAD_ENTER
-            
+
             // Right side modifiers
             97 -> KeyEvent.KEYCODE_CTRL_RIGHT
-            98 -> KeyEvent.KEYCODE_NUMPAD_DIVIDE  // Actually this is Print Screen on some keyboards
-            99 -> KeyEvent.KEYCODE_SYSRQ  // Print Screen/SysRq
-            
+            98 -> KeyEvent.KEYCODE_NUMPAD_DIVIDE
+            99 -> KeyEvent.KEYCODE_SYSRQ
+
             // Additional keys
-            100 -> KeyEvent.KEYCODE_ALT_RIGHT  // Alt Gr / Right Alt
-            
+            100 -> KeyEvent.KEYCODE_ALT_RIGHT
+
             else -> {
-                // For unknown keycodes, try to use the keycode directly if it's in a valid Android range
                 if (evdev in 1..255) evdev else 0
             }
         }
@@ -333,7 +273,6 @@ class X11InputSender {
      * Cleanup resources
      */
     fun release() {
-        releaseAllKeys()
         inputEventSender = null
     }
 }
