@@ -35,6 +35,7 @@ import org.github.ewt45.winemulator.Consts.Pref.inputcontrols_opacity
 import org.github.ewt45.winemulator.Consts.Pref.inputcontrols_profile_id
 import org.github.ewt45.winemulator.Consts.Pref.proot_bool_options
 import org.github.ewt45.winemulator.Consts.Pref.proot_startup_cmd
+import org.github.ewt45.winemulator.Consts.Pref.proot_x11_auto_repeat
 import org.github.ewt45.winemulator.Consts.Pref.general_theme_mode
 import org.github.ewt45.winemulator.Consts.Pref.x11_touch_mode
 import org.github.ewt45.winemulator.Consts.Pref.x11_screen_orientation
