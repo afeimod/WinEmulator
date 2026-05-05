@@ -112,12 +112,17 @@ class Proot {
         //安装了不知道什么？mesa-dri-gallium ? mesa-gles?之后，需要加这个参数否则xfce4不启动了（没输出也不退出）
 //            "LIBGL_ALWAYS_SOFTWARE=1",
 
+        // X11自动重复命令 - 启用键盘自动重复功能
+        // 这解决了虚拟按键长按时"走一下停一下"的问题，与termux-x11参考项目保持一致
+        val x11AutoRepeatCmd = "xset r on 2>/dev/null || true"
+
         prootCmd.addAll(
             listOf(
                 "/usr/bin/env",
                 "-i",
                 *loginEnvs.toArray(),
-                userInfo.shell, "-l", // -l: 交互式shell，-c: 执行某命令并退出
+                userInfo.shell, "-lc", // -l: 交互式shell，-c: 执行某命令并退出
+                "$x11AutoRepeatCmd; exec ${userInfo.shell}", // 先执行xset命令，然后启动shell
             )
         )
 
