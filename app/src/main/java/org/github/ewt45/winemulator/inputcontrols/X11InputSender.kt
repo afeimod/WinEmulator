@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.PointF
+import android.os.SystemClock
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -16,6 +17,9 @@ import com.termux.x11.input.RenderData
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
+    
+    // Track pressed keys to ensure proper keyUp
+    private val pressedKeys = mutableSetOf<Int>()
     
     // RenderData for touch events - needs to be set from LorieView
     var renderData: RenderData? = null
@@ -33,31 +37,49 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 同步发送按键事件，确保立即响应
-     * 关键：禁用Android的自动repeat机制，让X11服务端处理repeat
+     * 关键修复：确保每个keyDown都有对应的keyUp，避免事件串联
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        // 关键修复：禁用Android的自动key repeat
-        // Android默认会在ACTION_DOWN后自动发送repeat事件（repeatCount > 0）
-        // 这与winlator依赖X11 repeat的逻辑冲突，导致延迟
-        // 通过设置FLAG_LONG_PRESS和禁用来阻止系统repeat
-        val event = KeyEvent(
-            System.currentTimeMillis(),
-            System.currentTimeMillis(),
+        // 使用KeyEvent.obtain创建，确保事件独立
+        val eventTime = SystemClock.uptimeMillis()
+        val event = KeyEvent.obtain(
+            eventTime,    // downTime
+            eventTime,    // eventTime
             if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
             keycode,
-            0,  // repeatCount = 0，禁用系统repeat
-            0,  // metaState
-            0,  // deviceId
-            0,  // scancode
-            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_VIRTUAL_HARD_KEY,
-            0   // edgeFlags
+            0,            // repeatCount = 0，禁用系统repeat
+            0,            // metaState
+            0,            // deviceId
+            0,            // scancode
+            KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE,
+            0,            // source
+            0             // edgeFlags
         )
         sender.sendKeyEvent(event)
+        event.recycle()  // 回收事件对象
+        
+        // 跟踪按下的键，确保正确释放
+        if (isDown) {
+            pressedKeys.add(keycode)
+        } else {
+            pressedKeys.remove(keycode)
+        }
+    }
+    
+    /**
+     * 确保所有按下的键都被释放
+     * 用于清理可能卡住的状态
+     */
+    fun releaseAllKeys() {
+        val keysToRelease = pressedKeys.toList()
+        pressedKeys.clear()
+        for (keycode in keysToRelease) {
+            sendKeyEvent(keycode, false)
+        }
     }
 
     /**
