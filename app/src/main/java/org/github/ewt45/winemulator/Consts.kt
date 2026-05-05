@@ -92,8 +92,6 @@ object Consts {
         val general_shared_ext_path by item("shared_ext_path", setOf("/storage/emulated/0/Download"))
         val proot_bool_options by item("proot_bool_options", setOf( "-L", "--link2symlink", "--sysvipc", "--kill-on-exit", /*"--root-id",*/))
         val proot_startup_cmd by item("proot_startup_cmd", "")
-        /** 是否启用X11键盘自动重复功能。启用后虚拟按键的长按会像真实键盘一样产生连续按键事件 */
-        val proot_x11_auto_repeat by item("proot_x11_auto_repeat", true)
 
         // Input Controls Settings
         val inputcontrols_enabled by item("inputcontrols_enabled", false)
