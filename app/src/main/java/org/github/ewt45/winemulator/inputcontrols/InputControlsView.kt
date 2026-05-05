@@ -291,8 +291,8 @@ class InputControlsView(
                     }
                 }
                 binding.isKeyboard -> {
-                    // 只发送一次按键事件，不使用重复Timer
-                    // 这样可以避免与D-PAD的连续移动冲突
+                    // 键盘按键：只发送一次按下/释放事件
+                    // 让X11的自动重复机制处理长按重复
                     inputEventHandler?.onKeyEvent(binding.keycode, isDown)
                 }
             }
