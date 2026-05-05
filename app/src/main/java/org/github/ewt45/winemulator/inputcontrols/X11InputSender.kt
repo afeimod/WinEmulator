@@ -34,17 +34,28 @@ class X11InputSender {
     /**
      * Send a key event using Android KeyEvent
      * 同步发送按键事件，确保立即响应
+     * 关键：禁用Android的自动repeat机制，让X11服务端处理repeat
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        // 直接同步发送，避免异步延迟
-        // handler.post 会导致事件排队和延迟，特别是 keyUp 事件可能被延迟很久
+        // 关键修复：禁用Android的自动key repeat
+        // Android默认会在ACTION_DOWN后自动发送repeat事件（repeatCount > 0）
+        // 这与winlator依赖X11 repeat的逻辑冲突，导致延迟
+        // 通过设置FLAG_LONG_PRESS和禁用来阻止系统repeat
         val event = KeyEvent(
+            System.currentTimeMillis(),
+            System.currentTimeMillis(),
             if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
-            keycode
+            keycode,
+            0,  // repeatCount = 0，禁用系统repeat
+            0,  // metaState
+            0,  // deviceId
+            0,  // scancode
+            KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_VIRTUAL_HARD_KEY,
+            KeyEvent.META_CAP_LOCKED
         )
         sender.sendKeyEvent(event)
     }
