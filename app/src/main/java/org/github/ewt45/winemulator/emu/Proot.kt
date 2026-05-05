@@ -117,8 +117,7 @@ class Proot {
                 "/usr/bin/env",
                 "-i",
                 *loginEnvs.toArray(),
-                userInfo.shell, "-lc", // -l: 交互式shell，-c: 执行某命令并退出
-                "exec \$SHELL -l", // 启动登录shell
+                userInfo.shell, "-l", // -l: 交互式shell，-c: 执行某命令并退出
             )
         )
 
