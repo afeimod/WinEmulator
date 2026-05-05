@@ -114,6 +114,8 @@ class Proot {
 
         // X11自动重复命令 - 启用键盘自动重复功能
         // 这解决了虚拟按键长按时"走一下停一下"的问题，与termux-x11参考项目保持一致
+        // xset命令需要rootfs中安装了x11-utils包，如果不存在会静默失败
+        // 使用exec $SHELL -l来确保使用正确的登录shell
         val x11AutoRepeatCmd = "xset r on 2>/dev/null || true"
 
         prootCmd.addAll(
@@ -122,7 +124,7 @@ class Proot {
                 "-i",
                 *loginEnvs.toArray(),
                 userInfo.shell, "-lc", // -l: 交互式shell，-c: 执行某命令并退出
-                "$x11AutoRepeatCmd; exec ${userInfo.shell}", // 先执行xset命令，然后启动shell
+                "$x11AutoRepeatCmd; exec \$SHELL -l", // 先执行xset命令，然后启动登录shell
             )
         )
 
