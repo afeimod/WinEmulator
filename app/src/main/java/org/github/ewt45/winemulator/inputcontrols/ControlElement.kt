@@ -811,38 +811,56 @@ class ControlElement(
 
                     when (type) {
                         Type.STICK -> {
-                            // STICK也需要在isInitialEvent时跳过
+                            // STICK也需要总是更新states，只在非初始事件时发送事件
                             if (!isInitialEvent) {
-                                // STICK处理逻辑保持不变
-                            if (currentPosition == null) currentPosition = PointF()
-                            currentPosition?.x = box.left + deltaX * radius + radius
-                            currentPosition?.y = box.top + deltaY * radius + radius
+                                if (currentPosition == null) currentPosition = PointF()
+                                currentPosition?.x = box.left + deltaX * radius + radius
+                                currentPosition?.y = box.top + deltaY * radius + radius
 
-                            val newStates = booleanArrayOf(
-                                deltaY <= -STICK_DEAD_ZONE,
-                                deltaX >= STICK_DEAD_ZONE,
-                                deltaY >= STICK_DEAD_ZONE,
-                                deltaX <= -STICK_DEAD_ZONE
-                            )
+                                val newStates = booleanArrayOf(
+                                    deltaY <= -STICK_DEAD_ZONE,
+                                    deltaX >= STICK_DEAD_ZONE,
+                                    deltaY >= STICK_DEAD_ZONE,
+                                    deltaX <= -STICK_DEAD_ZONE
+                                )
 
-                            for (i in 0..3) {
-                                val value = if (i == 1 || i == 3) deltaX else deltaY
-                                val binding = getBindingAt(i)
+                                for (i in 0..3) {
+                                    val value = if (i == 1 || i == 3) deltaX else deltaY
+                                    val binding = getBindingAt(i)
+                                    // 跳过NONE绑定
+                                    if (binding == Binding.NONE) continue
 
-                                if (binding.isGamepad) {
-                                    val adjustedValue = clamp(
-                                        maxOf(0f, abs(value) - 0.01f) * sign(value) * STICK_SENSITIVITY,
-                                        -1f, 1f
-                                    )
-                                    inputControlsView.handleInputEvent(binding, true, adjustedValue)
-                                    states[i] = true
-                                } else {
-                                    val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
-                                    inputControlsView.handleInputEvent(binding, state, value)
-                                    states[i] = state
+                                    if (binding.isGamepad) {
+                                        val adjustedValue = clamp(
+                                            maxOf(0f, abs(value) - 0.01f) * sign(value) * STICK_SENSITIVITY,
+                                            -1f, 1f
+                                        )
+                                        inputControlsView.handleInputEvent(binding, true, adjustedValue)
+                                        states[i] = true
+                                    } else {
+                                        val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                        inputControlsView.handleInputEvent(binding, state, value)
+                                        states[i] = state
+                                    }
                                 }
-                            }
-                            inputControlsView.invalidate()
+                                inputControlsView.invalidate()
+                            } else {
+                                // 初始事件时也要更新states（即使不发送事件）
+                                // 这确保handleTouchUp能正确处理
+                                val newStates = booleanArrayOf(
+                                    deltaY <= -STICK_DEAD_ZONE,
+                                    deltaX >= STICK_DEAD_ZONE,
+                                    deltaY >= STICK_DEAD_ZONE,
+                                    deltaX <= -STICK_DEAD_ZONE
+                                )
+                                for (i in 0..3) {
+                                    val binding = getBindingAt(i)
+                                    if (binding != Binding.NONE) {
+                                        val value = if (i == 1 || i == 3) deltaX else deltaY
+                                        val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                        states[i] = state
+                                    }
+                                }
                             }
                         }
                         Type.TRACKPAD -> {
@@ -884,28 +902,34 @@ class ControlElement(
                         }
                         Type.D_PAD -> {
                             // D_PAD的核心逻辑：计算方向并发送事件
-                            // isInitialEvent时跳过，因为已经在sendDpadInitialEvents中处理了
-                            if (!isInitialEvent) {
-                                val newStates = booleanArrayOf(
-                                    deltaY <= -DPAD_DEAD_ZONE,
-                                    deltaX >= DPAD_DEAD_ZONE,
-                                    deltaY >= DPAD_DEAD_ZONE,
-                                    deltaX <= -DPAD_DEAD_ZONE
-                                )
+                            // 关键修复：无论isInitialEvent如何，都要更新states
+                            val newStates = booleanArrayOf(
+                                deltaY <= -DPAD_DEAD_ZONE,
+                                deltaX >= DPAD_DEAD_ZONE,
+                                deltaY >= DPAD_DEAD_ZONE,
+                                deltaX <= -DPAD_DEAD_ZONE
+                            )
 
-                                for (i in 0..3) {
-                                    val value = if (i == 1 || i == 3) deltaX else deltaY
-                                    val binding = getBindingAt(i)
-                                    val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
-
+                            // 总是更新states状态，但只在非初始事件时发送事件
+                            for (i in 0..3) {
+                                val binding = getBindingAt(i)
+                                // 跳过NONE绑定
+                                if (binding == Binding.NONE) continue
+                                
+                                val value = if (i == 1 || i == 3) deltaX else deltaY
+                                val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
+                                
+                                // 只在非初始事件时发送，避免重复
+                                if (!isInitialEvent) {
                                     if (state) {
                                         inputControlsView.handleInputEvent(binding, true, value)
                                     } else if (states[i]) {
                                         inputControlsView.handleInputEvent(binding, false, value)
                                     }
-
-                                    states[i] = state
                                 }
+                                
+                                // 总是更新states状态
+                                states[i] = state
                             }
                         }
                         else -> {}
