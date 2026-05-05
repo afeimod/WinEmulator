@@ -155,7 +155,7 @@ class ControlElement(
     // 持续按键定时器（用于游戏移动等需要持续按下的场景）
     private var holdTimer: Timer? = null
     private var holdTimerTask: TimerTask? = null
-    private val holdIntervalMs = 50L  // 每50ms发送一次keyDown（约20次/秒）
+    private val holdIntervalMs = 30L  // 每30ms发送一次keyDown（约33次/秒），更频繁移动更流畅
 
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
