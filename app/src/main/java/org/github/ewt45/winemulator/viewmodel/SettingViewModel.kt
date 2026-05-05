@@ -132,6 +132,7 @@ class SettingViewModel : ViewModel() {
         PrefProot(
             proot_bool_options.run { pref[key] ?: default },
             proot_startup_cmd.run { pref[key] ?: default },
+            proot_x11_auto_repeat.run { pref[key] ?: default },
         )
     }
     val prootState = stateInSimple(PrefProot_DEFAULT, prootFlow)
@@ -232,6 +233,11 @@ class SettingViewModel : ViewModel() {
     fun onChangeProotStartupCmd(cmdRaw: String) {
         //换行 -> 空格， 去掉结尾 &, 去掉首尾空格
         editDateStoreAsync(proot_startup_cmd.key, cmdRaw.replace("\n", " ").trim().trimEnd('&').trim())
+    }
+
+    /** 修改X11键盘自动重复设置 */
+    fun onChangeProotX11AutoRepeat(enabled: Boolean) {
+        editDateStoreAsync(proot_x11_auto_repeat.key, enabled)
     }
 
     private val resolutionRegex = Regex("^(\\d+)(\\D+)(\\d+)$")
@@ -403,11 +409,14 @@ data class PrefProot(
     /** 只会出现一次且没有附加参数的选项。有全名就尽量使用全名 */
     val boolOptions: Set<String>,
     val startupCmd: String,
+    /** 是否启用X11键盘自动重复功能。启用后虚拟按键的长按会像真实键盘一样产生连续按键事件 */
+    val x11AutoRepeat: Boolean = true,
 )
 
 private val PrefProot_DEFAULT = PrefProot(
     proot_bool_options.default,
     proot_startup_cmd.default,
+    Consts.Pref.proot_x11_auto_repeat.default,
 )
 
 data class PrefGeneral(
