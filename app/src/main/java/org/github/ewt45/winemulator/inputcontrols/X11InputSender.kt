@@ -1,8 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.PointF
-import android.os.Handler
-import android.os.Looper
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -18,7 +16,6 @@ import com.termux.x11.input.RenderData
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
-    private val handler = Handler(Looper.getMainLooper())
     
     // RenderData for touch events - needs to be set from LorieView
     var renderData: RenderData? = null
@@ -36,19 +33,20 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
+     * 同步发送按键事件，确保立即响应
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        handler.post {
-            val event = KeyEvent(
-                if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
-                keycode
-            )
-            sender.sendKeyEvent(event)
-        }
+        // 直接同步发送，避免异步延迟
+        // handler.post 会导致事件排队和延迟，特别是 keyUp 事件可能被延迟很久
+        val event = KeyEvent(
+            if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
+            keycode
+        )
+        sender.sendKeyEvent(event)
     }
 
     /**
@@ -64,69 +62,64 @@ class X11InputSender {
     }
 
     /**
-     * Send mouse button event
+     * Send mouse button event - 同步发送鼠标按钮事件
      * @param button Button index (1=left, 2=middle, 3=right, 4=scroll up, 5=scroll down)
      * @param isDown True if pressed, false if released
      */
     fun sendMouseButtonEvent(button: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        handler.post {
-            when (button) {
-                1 -> {
-                    // Left button - send as button press/release
-                    sender.sendMouseEvent(null, BUTTON_LEFT, isDown, true)
+        // 直接同步发送，避免异步延迟
+        when (button) {
+            1 -> {
+                // Left button - send as button press/release
+                sender.sendMouseEvent(null, BUTTON_LEFT, isDown, true)
+            }
+            2 -> {
+                // Middle button
+                sender.sendMouseEvent(null, BUTTON_MIDDLE, isDown, true)
+            }
+            3 -> {
+                // Right button
+                sender.sendMouseEvent(null, BUTTON_RIGHT, isDown, true)
+            }
+            4 -> {
+                // Scroll up - use wheel event
+                if (isDown) {
+                    sender.sendMouseWheelEvent(0f, -1f)
                 }
-                2 -> {
-                    // Middle button
-                    sender.sendMouseEvent(null, BUTTON_MIDDLE, isDown, true)
-                }
-                3 -> {
-                    // Right button
-                    sender.sendMouseEvent(null, BUTTON_RIGHT, isDown, true)
-                }
-                4 -> {
-                    // Scroll up - use wheel event
-                    if (isDown) {
-                        sender.sendMouseWheelEvent(0f, -1f)
-                    }
-                }
-                5 -> {
-                    // Scroll down - use wheel event
-                    if (isDown) {
-                        sender.sendMouseWheelEvent(0f, 1f)
-                    }
+            }
+            5 -> {
+                // Scroll down - use wheel event
+                if (isDown) {
+                    sender.sendMouseWheelEvent(0f, 1f)
                 }
             }
         }
     }
 
     /**
-     * Send mouse motion event (relative movement)
+     * Send mouse motion event (relative movement) - 同步发送鼠标移动事件
      * @param dx Change in X coordinate
      * @param dy Change in Y coordinate
      */
     fun sendMouseMotionEvent(dx: Int, dy: Int) {
         val sender = inputEventSender ?: return
         
-        handler.post {
-            // Send cursor move with relative coordinates
-            // The last parameter 'true' means relative movement
-            sender.sendCursorMove(dx.toFloat(), dy.toFloat(), true)
-        }
+        // 直接同步发送鼠标移动，避免异步延迟
+        sender.sendCursorMove(dx.toFloat(), dy.toFloat(), true)
     }
 
     /**
-     * Send mouse wheel event
+     * Send mouse wheel event - 同步发送鼠标滚轮事件
      * @param deltaX Horizontal scroll amount
      * @param deltaY Vertical scroll amount
      */
     fun sendMouseWheelEvent(deltaX: Float, deltaY: Float) {
         val sender = inputEventSender ?: return
         
-        handler.post {
-            sender.sendMouseWheelEvent(deltaX, deltaY)
-        }
+        // 直接同步发送滚轮事件
+        sender.sendMouseWheelEvent(deltaX, deltaY)
     }
 
     /**
@@ -272,7 +265,6 @@ class X11InputSender {
      * Cleanup resources
      */
     fun release() {
-        handler.removeCallbacksAndMessages(null)
         inputEventSender = null
     }
 }
