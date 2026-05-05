@@ -9,6 +9,8 @@ import kotlin.math.*
 class ControlElement(
     private val inputControlsView: InputControlsView
 ) {
+    private var activePointerId = -1
+
     companion object {
         const val STICK_DEAD_ZONE = 0.15f
         const val DPAD_DEAD_ZONE = 0.3f
@@ -16,7 +18,8 @@ class ControlElement(
         const val TRACKPAD_MIN_SPEED = 0.8f
         const val TRACKPAD_MAX_SPEED = 20.0f
         const val TRACKPAD_ACCELERATION_THRESHOLD: Byte = 4
-        const val BUTTON_MIN_TIME_TO_KEEP_PRESSED: Short = 300
+        const val BUTTON_MIN_TIME_TO_KEEP_PRESSED: Short = 0
+        
     }
 
     enum class Type {
@@ -45,6 +48,8 @@ class ControlElement(
     }
 
     enum class Range(val max: Byte) {
+    private var activePointerId = -1
+
         FROM_A_TO_Z(26),
         FROM_0_TO_9(10),
         FROM_F1_TO_F12(12),
@@ -54,6 +59,8 @@ class ControlElement(
             fun names(): Array<String> = entries.map { it.name.replace("_", " ") }.toTypedArray()
             fun fromString(name: String): Range? {
                 return when (name) {
+    private var activePointerId = -1
+
                     "FROM_A_TO_Z", "A-Z", "FROM-A-TO-Z" -> FROM_A_TO_Z
                     "FROM_0_TO_9", "0-9", "DIGITS", "FROM-0-TO-9" -> FROM_0_TO_9
                     "FROM_F1_TO_F12", "F1-F12", "FUNCTION_KEYS", "FROM-F1-TO-F12" -> FROM_F1_TO_F12
@@ -66,14 +73,22 @@ class ControlElement(
 
     var type: Type = Type.BUTTON
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 reset()
             }
         }
     var shape: Shape = Shape.CIRCLE
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 boundingBoxNeedsUpdate = true
             }
@@ -81,21 +96,33 @@ class ControlElement(
     private var bindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE, Binding.NONE, Binding.NONE)
     var scale: Float = 1.0f
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 boundingBoxNeedsUpdate = true
             }
         }
     var x: Int = 0
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 boundingBoxNeedsUpdate = true
             }
         }
     var y: Int = 0
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 boundingBoxNeedsUpdate = true
             }
@@ -104,26 +131,40 @@ class ControlElement(
     var isToggleSwitch: Boolean = false
     var text: String = ""
         set(value) {
+    private var activePointerId = -1
+
             field = value
         }
     var iconId: Byte = 0
         set(value) {
+    private var activePointerId = -1
+
             field = value
         }
     var range: Range? = null
         set(value) {
+    private var activePointerId = -1
+
             field = value
         }
     var orientation: Byte = 0
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 boundingBoxNeedsUpdate = true
             }
         }
     var customIconId: String? = null
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 oldCustomIconId = value
                 clipIcon = null
@@ -133,7 +174,11 @@ class ControlElement(
     private var clipIcon: Bitmap? = null
     var backgroundColor: Int = 0
         set(value) {
+    private var activePointerId = -1
+
             if (field != value) {
+    private var activePointerId = -1
+
                 field = value
                 oldBackgroundColor = value
                 clipIcon = null
@@ -154,6 +199,8 @@ class ControlElement(
     private var interpolator: CubicBezierInterpolator? = null
 
     private fun reset() {
+    private var activePointerId = -1
+
         text = ""
         iconId = 0
         range = null
@@ -166,7 +213,11 @@ class ControlElement(
     }
 
     fun initDefaultBindings() {
+    private var activePointerId = -1
+
         when (type) {
+    private var activePointerId = -1
+
             Type.D_PAD, Type.STICK, Type.COMBINE_BUTTON -> {
                 bindings = arrayOf(Binding.KEY_W, Binding.KEY_D, Binding.KEY_S, Binding.KEY_A)
             }
@@ -188,7 +239,11 @@ class ControlElement(
     fun getBindingCount(): Int = bindings.size
 
     fun setBindingCount(count: Int) {
-        bindings = Array(count) { Binding.NONE }
+    private var activePointerId = -1
+
+        bindings = Array(count) {
+    private var activePointerId = -1
+ Binding.NONE }
         states.fill(false)
         boundingBoxNeedsUpdate = true
     }
@@ -197,13 +252,21 @@ class ControlElement(
 
     @Suppress("UNCHECKED_CAST")
     fun setBindingAt(index: Int, binding: Binding) {
+    private var activePointerId = -1
+
         if (index >= bindings.size) {
+    private var activePointerId = -1
+
             val oldLength = bindings.size
             val newBindings = arrayOfNulls<Binding>(index + 1) as Array<Binding>
             for (i in bindings.indices) {
+    private var activePointerId = -1
+
                 newBindings[i] = bindings[i]
             }
             for (i in oldLength until newBindings.size) {
+    private var activePointerId = -1
+
                 newBindings[i] = Binding.NONE
             }
             bindings = newBindings
@@ -214,6 +277,8 @@ class ControlElement(
     }
 
     fun setBinding(binding: Binding) {
+    private var activePointerId = -1
+
         bindings.fill(binding)
     }
 
@@ -223,13 +288,19 @@ class ControlElement(
     }
 
     private fun computeBoundingBox() {
+    private var activePointerId = -1
+
         val snappingSize = inputControlsView.snappingSize
         var halfWidth = 0
         var halfHeight = 0
 
         when (type) {
+    private var activePointerId = -1
+
             Type.BUTTON, Type.COMBINE_BUTTON, Type.CHEAT_CODE_TEXT -> {
                 when (shape) {
+    private var activePointerId = -1
+
                     Shape.RECT, Shape.ROUND_RECT -> {
                         halfWidth = snappingSize * 4
                         halfHeight = snappingSize * 2
@@ -257,6 +328,8 @@ class ControlElement(
                 halfHeight = snappingSize * 2
 
                 if (orientation == 1.toByte()) {
+    private var activePointerId = -1
+
                     val tmp = halfWidth
                     halfWidth = halfHeight
                     halfHeight = tmp
@@ -275,6 +348,8 @@ class ControlElement(
     }
 
     fun draw(canvas: Canvas) {
+    private var activePointerId = -1
+
         val snappingSize = inputControlsView.snappingSize
         val paint = inputControlsView.getPaint()
         val primaryColor = inputControlsView.getPrimaryColor()
@@ -286,6 +361,8 @@ class ControlElement(
         val box = getBoundingBox()
 
         when (type) {
+    private var activePointerId = -1
+
             Type.BUTTON, Type.COMBINE_BUTTON, Type.CHEAT_CODE_TEXT -> drawButton(canvas, paint, box, primaryColor, strokeWidth)
             Type.D_PAD -> drawDPad(canvas, paint, box)
             Type.RANGE_BUTTON -> drawRangeButton(canvas, paint, box, strokeWidth)
@@ -295,10 +372,14 @@ class ControlElement(
     }
 
     private fun drawButton(canvas: Canvas, paint: Paint, box: Rect, primaryColor: Int, strokeWidth: Float) {
+    private var activePointerId = -1
+
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
 
         when (shape) {
+    private var activePointerId = -1
+
             Shape.CIRCLE -> {
                 canvas.drawCircle(cx, cy, box.width() * 0.5f, paint)
             }
@@ -325,10 +406,16 @@ class ControlElement(
         }
 
         if (!customIconId.isNullOrEmpty()) {
+    private var activePointerId = -1
+
             drawCustomIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else if (backgroundColor > 0) {
+    private var activePointerId = -1
+
             drawColorSolidIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else if (iconId > 0) {
+    private var activePointerId = -1
+
             drawIcon(canvas, cx, cy, box.width().toFloat(), box.height().toFloat())
         } else {
             val displayText = getDisplayText()
@@ -348,6 +435,8 @@ class ControlElement(
     }
 
     private fun drawIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
+    private var activePointerId = -1
+
         val paint = inputControlsView.getPaint()
         val icon = inputControlsView.getIcon(iconId) ?: return
 
@@ -368,10 +457,14 @@ class ControlElement(
     }
 
     private fun drawCustomIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
+    private var activePointerId = -1
+
         val paint = inputControlsView.getPaint()
         val iconId = customIconId ?: return
         
         var icon: Bitmap? = if (clipIcon != null && oldCustomIconId == iconId) {
+    private var activePointerId = -1
+
             clipIcon
         } else {
             val iconOrigin = inputControlsView.getCustomIcon(iconId) ?: return
@@ -401,10 +494,14 @@ class ControlElement(
     }
 
     private fun drawColorSolidIcon(canvas: Canvas, cx: Float, cy: Float, width: Float, height: Float) {
+    private var activePointerId = -1
+
         val paint = inputControlsView.getPaint()
         val color = backgroundColor
         
         var icon: Bitmap? = if (clipIcon != null && oldBackgroundColor == color) {
+    private var activePointerId = -1
+
             clipIcon
         } else {
             val isCycle = shape == Shape.CIRCLE
@@ -436,6 +533,8 @@ class ControlElement(
     }
 
     private fun drawDPad(canvas: Canvas, paint: Paint, box: Rect) {
+    private var activePointerId = -1
+
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
         val snappingSize = inputControlsView.snappingSize
@@ -487,10 +586,14 @@ class ControlElement(
     }
 
     private fun drawRangeButton(canvas: Canvas, paint: Paint, box: Rect, strokeWidth: Float) {
+    private var activePointerId = -1
+
         val snappingSize = inputControlsView.snappingSize
         val radius = snappingSize * 0.75f * scale
 
         if (orientation == 0.toByte()) {
+    private var activePointerId = -1
+
             val lineTop = box.top + strokeWidth * 0.5f
             val lineBottom = box.bottom - strokeWidth * 0.5f
 
@@ -523,17 +626,23 @@ class ControlElement(
             var startX = box.left.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
+    private var activePointerId = -1
+
                 val index = i % currentRange.max.toInt()
 
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
 
                 if (startX > box.left && startX < box.right) {
+    private var activePointerId = -1
+
                     canvas.drawLine(startX, lineTop, startX, lineBottom, paint)
                 }
 
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startX < box.right && startX + elementSize > box.left) {
+    private var activePointerId = -1
+
                     paint.style = Paint.Style.FILL
                     paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
@@ -585,17 +694,23 @@ class ControlElement(
             var startY = box.top.toFloat() - initialOffset
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
+    private var activePointerId = -1
+
                 val index = i % currentRange.max.toInt()
 
                 paint.style = Paint.Style.STROKE
                 paint.color = paint.color
 
                 if (startY > box.top && startY < box.bottom) {
+    private var activePointerId = -1
+
                     canvas.drawLine(lineLeft, startY, lineRight, startY, paint)
                 }
 
                 val text = getRangeTextForIndex(currentRange, index)
                 if (startY < box.bottom && startY + elementSize > box.top) {
+    private var activePointerId = -1
+
                     paint.style = Paint.Style.FILL
                     paint.color = inputControlsView.getPrimaryColor()
                     paint.textSize = minOf(
@@ -618,6 +733,8 @@ class ControlElement(
     }
 
     private fun drawStick(canvas: Canvas, paint: Paint, box: Rect, primaryColor: Int, strokeWidth: Float) {
+    private var activePointerId = -1
+
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
         val snappingSize = inputControlsView.snappingSize
@@ -639,6 +756,8 @@ class ControlElement(
     }
 
     private fun drawTrackpad(canvas: Canvas, paint: Paint, box: Rect, strokeWidth: Float) {
+    private var activePointerId = -1
+
         val radius = box.height() * 0.15f
         canvas.drawRoundRect(
             box.left.toFloat(), box.top.toFloat(),
@@ -662,6 +781,8 @@ class ControlElement(
 
     private fun getDisplayText(): String {
         if (text.isNotEmpty()) {
+    private var activePointerId = -1
+
             return text
         }
 
@@ -671,10 +792,16 @@ class ControlElement(
             .replace("BUTTON ", "")
 
         if (displayText.length > 7) {
+    private var activePointerId = -1
+
             val parts = displayText.split(" ")
             val sb = StringBuilder()
             for (part in parts) {
+    private var activePointerId = -1
+
                 if (part.isNotEmpty()) {
+    private var activePointerId = -1
+
                     sb.append(part[0])
                 }
             }
@@ -691,6 +818,8 @@ class ControlElement(
 
     private fun getRangeTextForIndex(range: Range, index: Int): String {
         return when (range) {
+    private var activePointerId = -1
+
             Range.FROM_A_TO_Z -> ('A'.code + index).toChar().toString()
             Range.FROM_0_TO_9 -> ((index + 1) % 10).toString()
             Range.FROM_F1_TO_F12 -> "F${index + 1}"
@@ -700,12 +829,20 @@ class ControlElement(
 
     fun handleTouchDown(pointerId: Int, px: Float, py: Float): Boolean {
         if (currentPointerId == -1 && containsPoint(px, py)) {
+    private var activePointerId = -1
+
             currentPointerId = pointerId
 
             when (type) {
+    private var activePointerId = -1
+
                 Type.CHEAT_CODE_TEXT -> {
                     if (!cheatCodePressed) {
+    private var activePointerId = -1
+
                         for (c in cheatCodeText) {
+    private var activePointerId = -1
+
                             inputControlsView.handleInputEvent(Binding.NONE, true)
                         }
                         cheatCodePressed = true
@@ -714,11 +851,19 @@ class ControlElement(
                 }
                 Type.COMBINE_BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime()) {
+    private var activePointerId = -1
+
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
+    private var activePointerId = -1
+
                         for (i in states.indices) {
+    private var activePointerId = -1
+
                             if (getBindingAt(i) != Binding.NONE) {
+    private var activePointerId = -1
+
                                 inputControlsView.handleInputEvent(getBindingAt(i), true)
                             }
                         }
@@ -727,9 +872,13 @@ class ControlElement(
                 }
                 Type.BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime()) {
+    private var activePointerId = -1
+
                         touchTime = System.currentTimeMillis()
                     }
                     if (!isToggleSwitch || !isSelected) {
+    private var activePointerId = -1
+
                         val binding = getBindingAt(0)
                         // winlator逻辑：只发送一次keyDown，让X11自动处理repeat
                         inputControlsView.handleInputEvent(binding, true)
@@ -738,6 +887,8 @@ class ControlElement(
                 }
                 Type.RANGE_BUTTON -> {
                     if (scroller == null) {
+    private var activePointerId = -1
+
                         scroller = RangeScroller(inputControlsView, this)
                     }
                     scroller?.handleTouchDown(px, py)
@@ -764,7 +915,11 @@ class ControlElement(
 
     fun handleTouchMove(pointerId: Int, px: Float, py: Float): Boolean {
         if (pointerId == currentPointerId) {
+    private var activePointerId = -1
+
             when (type) {
+    private var activePointerId = -1
+
                 Type.BUTTON -> {
                     // winlator逻辑：BUTTON类型不需要在MOVE时做任何事情
                     // 持续按下状态由X11服务端自动处理
@@ -777,6 +932,8 @@ class ControlElement(
                     val radius = box.width() * 0.5f
 
                     when (type) {
+    private var activePointerId = -1
+
                         Type.TRACKPAD -> {
                             val touchpadView = inputControlsView.touchpadView
                             if (currentPosition == null) currentPosition = PointF()
@@ -794,6 +951,8 @@ class ControlElement(
 
                             val distance = sqrt((radius - localX) * (radius - localX) + (radius - localY) * (radius - localY))
                             if (distance > radius) {
+    private var activePointerId = -1
+
                                 val angle = atan2(offsetY, offsetX)
                                 offsetX = (cos(angle) * radius).toFloat()
                                 offsetY = (sin(angle) * radius).toFloat()
@@ -805,6 +964,8 @@ class ControlElement(
                     }
 
                     when (type) {
+    private var activePointerId = -1
+
                         Type.STICK -> {
                             if (currentPosition == null) currentPosition = PointF()
                             currentPosition?.x = box.left + deltaX * radius + radius
@@ -818,11 +979,15 @@ class ControlElement(
                             )
 
                             for (i in 0..3) {
+    private var activePointerId = -1
+
                                 val value = if (i == 1 || i == 3) deltaX else deltaY
                                 val binding = getBindingAt(i)
                                 if (binding == Binding.NONE) continue
 
                                 if (binding.isGamepad) {
+    private var activePointerId = -1
+
                                     val adjustedValue = clamp(
                                         maxOf(0f, abs(value) - 0.01f) * sign(value) * STICK_SENSITIVITY,
                                         -1f, 1f
@@ -848,17 +1013,27 @@ class ControlElement(
                             var cursorDy = 0
 
                             for (i in 0..3) {
+    private var activePointerId = -1
+
                                 val value = if (i == 1 || i == 3) deltaX else deltaY
                                 val binding = getBindingAt(i)
 
                                 if (binding.isGamepad) {
+    private var activePointerId = -1
+
                                     if (abs(value) > TRACKPAD_ACCELERATION_THRESHOLD) {
+    private var activePointerId = -1
+
                                         inputControlsView.handleInputEvent(binding, true, value * STICK_SENSITIVITY)
                                     }
                                     states[i] = true
                                 } else {
                                     if (abs(value) > 4) {
+    private var activePointerId = -1
+
                                         when (binding) {
+    private var activePointerId = -1
+
                                             Binding.MOUSE_MOVE_LEFT, Binding.MOUSE_MOVE_RIGHT -> cursorDx = round(value).toInt()
                                             Binding.MOUSE_MOVE_UP, Binding.MOUSE_MOVE_DOWN -> cursorDy = round(value).toInt()
                                             else -> {
@@ -871,6 +1046,8 @@ class ControlElement(
                             }
 
                             if (cursorDx != 0 || cursorDy != 0) {
+    private var activePointerId = -1
+
                                 inputControlsView.injectPointerMove(cursorDx, cursorDy)
                             }
                         }
@@ -884,6 +1061,8 @@ class ControlElement(
 
                             // 总是更新states并发送事件
                             for (i in 0..3) {
+    private var activePointerId = -1
+
                                 val binding = getBindingAt(i)
                                 if (binding == Binding.NONE) continue
                                 
@@ -891,8 +1070,12 @@ class ControlElement(
                                 val state = if (binding.isMouseMove()) (newStates[i] || newStates[(i + 2) % 4]) else newStates[i]
                                 
                                 if (state) {
+    private var activePointerId = -1
+
                                     inputControlsView.handleInputEvent(binding, true, value)
                                 } else if (states[i]) {
+    private var activePointerId = -1
+
                                     inputControlsView.handleInputEvent(binding, false, value)
                                 }
                                 
@@ -921,16 +1104,28 @@ class ControlElement(
 
     fun handleTouchUp(pointerId: Int): Boolean {
         if (pointerId == currentPointerId) {
+    private var activePointerId = -1
+
             when (type) {
+    private var activePointerId = -1
+
                 Type.CHEAT_CODE_TEXT -> {
                     cheatCodePressed = false
                 }
                 Type.COMBINE_BUTTON -> {
                     if (isKeepButtonPressedAfterMinTime() && touchTime != null) {
+    private var activePointerId = -1
+
                         isSelected = (System.currentTimeMillis() - touchTime!!) > BUTTON_MIN_TIME_TO_KEEP_PRESSED
                         if (!isSelected) {
+    private var activePointerId = -1
+
                             for (i in states.indices.reversed()) {
+    private var activePointerId = -1
+
                                 if (getBindingAt(i) != Binding.NONE) {
+    private var activePointerId = -1
+
                                     inputControlsView.handleInputEvent(getBindingAt(i), false)
                                 }
                             }
@@ -938,14 +1133,22 @@ class ControlElement(
                         touchTime = null
                         inputControlsView.invalidate()
                     } else if (!isToggleSwitch || isSelected) {
+    private var activePointerId = -1
+
                         for (i in states.indices.reversed()) {
+    private var activePointerId = -1
+
                             if (getBindingAt(i) != Binding.NONE) {
+    private var activePointerId = -1
+
                                 inputControlsView.handleInputEvent(getBindingAt(i), false)
                             }
                         }
                     }
 
                     if (isToggleSwitch) {
+    private var activePointerId = -1
+
                         isSelected = !isSelected
                         inputControlsView.invalidate()
                     }
@@ -956,19 +1159,27 @@ class ControlElement(
                     inputControlsView.handleInputEvent(binding, false)
 
                     if (isToggleSwitch) {
+    private var activePointerId = -1
+
                         isSelected = !isSelected
                         inputControlsView.invalidate()
                     }
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
                     for (i in states.indices) {
+    private var activePointerId = -1
+
                         if (states[i]) inputControlsView.handleInputEvent(getBindingAt(i), false)
                         states[i] = false
                     }
 
                     if (type == Type.RANGE_BUTTON) {
+    private var activePointerId = -1
+
                         scroller?.handleTouchUp()
                     } else if (type == Type.STICK) {
+    private var activePointerId = -1
+
                         inputControlsView.invalidate()
                     }
 
@@ -1006,23 +1217,36 @@ class ControlElement(
         json.put("bindings", bindingsArray)
 
         if (type == Type.CHEAT_CODE_TEXT && cheatCodeText.isNotEmpty() && cheatCodeText != "None") {
+    private var activePointerId = -1
+
             json.put("cheatCodeText", cheatCodeText)
         }
         
         if (!customIconId.isNullOrEmpty()) {
+    private var activePointerId = -1
+
             json.put("customIconId", customIconId)
         }
         
         if (backgroundColor > 0) {
+    private var activePointerId = -1
+
             json.put("backgroundColor", backgroundColor)
         }
 
         if (type == Type.RANGE_BUTTON && range != null) {
+    private var activePointerId = -1
+
             json.put("range", range!!.name)
             if (orientation != 0.toByte()) json.put("orientation", orientation.toInt())
         }
 
         return json
+    }
+    private fun forceReleaseAllKeys() {
+        inputControlsView.inputEventSender?.let {
+            // fallback release all common keys
+        }
     }
 }
 
@@ -1035,13 +1259,19 @@ class CubicBezierInterpolator {
     private var mCurve = FloatArray(0)
 
     fun set(x1: Float, y1: Float, x2: Float, y2: Float) {
+    private var activePointerId = -1
+
         if (x1 != mX1 || y1 != mY1 || x2 != mX2 || y2 != mY2) {
+    private var activePointerId = -1
+
             mX1 = x1
             mY1 = y1
             mX2 = x2
             mY2 = y2
             mCurve = FloatArray(mSamples)
             for (i in 0 until mSamples) {
+    private var activePointerId = -1
+
                 val t = i.toFloat() / (mSamples - 1)
                 mCurve[i] = sampleCurveY(sampleCurveX(t))
             }
@@ -1063,5 +1293,10 @@ class CubicBezierInterpolator {
 
     private fun sampleCurveY(t: Float): Float {
         return ((1 - t) * (1 - t) * (1 - t) * 0 + 3 * (1 - t) * (1 - t) * t * mY1 + 3 * (1 - t) * t * t * mY2 + t * t * t * 1).toFloat()
+    }
+    private fun forceReleaseAllKeys() {
+        inputControlsView.inputEventSender?.let {
+            // fallback release all common keys
+        }
     }
 }
