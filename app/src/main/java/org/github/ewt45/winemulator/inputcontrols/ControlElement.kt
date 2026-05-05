@@ -144,8 +144,6 @@ class ControlElement(
     private var cheatCodePressed = false
 
     private var currentPointerId: Int = -1
-    // 标记BUTTON是否处于持续按下状态（像方向键一样）
-    private var isButtonHeldDown: Boolean = false
     private val boundingBox: Rect = Rect()
     private var boundingBoxNeedsUpdate: Boolean = true
     private val states: BooleanArray = booleanArrayOf(false, false, false, false)
@@ -734,8 +732,6 @@ class ControlElement(
                     if (!isToggleSwitch || !isSelected) {
                         val binding = getBindingAt(0)
                         inputControlsView.handleInputEvent(binding, true)
-                        // 标记为持续按下状态
-                        isButtonHeldDown = true
                     }
                     return true
                 }
@@ -946,12 +942,10 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    // 释放按键
+                    // 释放按键 - 直接发送 keyUp，不依赖 isButtonHeldDown 标志
+                    // 参考 winlator 的实现，简化状态管理
                     val binding = getBindingAt(0)
-                    if (isButtonHeldDown) {
-                        inputControlsView.handleInputEvent(binding, false)
-                        isButtonHeldDown = false
-                    }
+                    inputControlsView.handleInputEvent(binding, false)
 
                     if (isToggleSwitch) {
                         isSelected = !isSelected
