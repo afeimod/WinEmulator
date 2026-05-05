@@ -1,6 +1,7 @@
 package org.github.ewt45.winemulator.inputcontrols
 
-import android.graphics.PointF
+import android.os.Handler
+import android.os.Looper
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -11,14 +12,24 @@ import com.termux.x11.input.RenderData
  * X11 Input Handler using InputEventSender
  * Sends keyboard and mouse events through Android's InputEvent system to LorieView
  * 
- * This is the corrected implementation that properly uses the InputEventSender API
- * from the master-x11 project to inject input events into the X11 session.
+ * 实现客户端自动重复机制，因为termux-x11的X服务器默认禁用X11自动重复
+ * 按键重复速率：初始延迟500ms，之后每50ms重复一次（约20次/秒）
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
     
     // Track pressed keys to ensure proper keyUp
     private val pressedKeys = mutableSetOf<Int>()
+    
+    // 客户端重复定时器：每个按键独立的Runnable
+    private val keyRepeatRunnables = mutableMapOf<Int, Runnable>()
+    
+    // Handler用于管理定时器
+    private val handler = Handler(Looper.getMainLooper())
+    
+    // 重复参数：初始延迟和重复间隔（毫秒）
+    private val repeatInitialDelay = 500L  // 长按500ms后开始重复
+    private val repeatInterval = 50L       // 每50ms重复一次
     
     // RenderData for touch events - needs to be set from LorieView
     var renderData: RenderData? = null
@@ -36,27 +47,54 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 简化版：直接同步发送事件，不使用任何缓冲或刷新机制
-     * 按键重复由X11服务端自动处理（与winlator一致）
+     * 当按键按下时，启动客户端重复机制
+     * 当按键释放时，停止重复并发送keyUp
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
-        // 使用最简化的构造函数，直接同步发送
-        // 不添加任何标志或参数，避免额外的缓冲处理
-        val event = KeyEvent(
-            if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
-            keycode
-        )
-        sender.sendKeyEvent(event)
-
         if (isDown) {
+            // 发送初始keyDown
+            val event = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
+            sender.sendKeyEvent(event)
             pressedKeys.add(keycode)
+            
+            // 停止任何现有的重复
+            stopKeyRepeat(keycode)
+            
+            // 启动新的重复定时器：先延迟initialDelay，然后每repeatInterval重复一次
+            val repeatRunnable = Runnable {
+                // 检查按键是否仍然被按下
+                if (pressedKeys.contains(keycode)) {
+                    val repeatEvent = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
+                    sender.sendKeyEvent(repeatEvent)
+                    // 调度下一次重复
+                    handler.postDelayed(repeatRunnables[keycode]!!, repeatInterval)
+                }
+            }
+            keyRepeatRunnables[keycode] = repeatRunnable
+            handler.postDelayed(repeatRunnable, repeatInitialDelay)
         } else {
+            // 停止重复定时器
+            stopKeyRepeat(keycode)
+            
+            // 发送keyUp
+            val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
+            sender.sendKeyEvent(event)
             pressedKeys.remove(keycode)
         }
+    }
+    
+    /**
+     * 停止按键的重复定时器
+     */
+    private fun stopKeyRepeat(keycode: Int) {
+        keyRepeatRunnables[keycode]?.let { runnable ->
+            handler.removeCallbacks(runnable)
+        }
+        keyRepeatRunnables.remove(keycode)
     }
     
     /**
@@ -64,10 +102,18 @@ class X11InputSender {
      * 用于清理可能卡住的状态
      */
     fun releaseAllKeys() {
+        // 停止所有重复定时器
+        keyRepeatRunnables.values.forEach { handler.removeCallbacks(it) }
+        keyRepeatRunnables.clear()
+        
+        // 发送所有按下键的keyUp
         val keysToRelease = pressedKeys.toList()
         pressedKeys.clear()
         for (keycode in keysToRelease) {
-            sendKeyEvent(keycode, false)
+            inputEventSender?.let { sender ->
+                val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
+                sender.sendKeyEvent(event)
+            }
         }
     }
 
@@ -287,6 +333,7 @@ class X11InputSender {
      * Cleanup resources
      */
     fun release() {
+        releaseAllKeys()
         inputEventSender = null
     }
 }
