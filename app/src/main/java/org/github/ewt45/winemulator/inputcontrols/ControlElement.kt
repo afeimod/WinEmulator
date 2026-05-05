@@ -1,6 +1,8 @@
 package org.github.ewt45.winemulator.inputcontrols
 
 import android.graphics.*
+import java.util.Timer
+import java.util.TimerTask
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Range
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Shape
 import org.github.ewt45.winemulator.inputcontrols.ControlElement.Type
@@ -149,6 +151,11 @@ class ControlElement(
     private val states: BooleanArray = booleanArrayOf(false, false, false, false)
     private var currentPosition: PointF? = null
     private var touchTime: Long? = null
+    
+    // 持续按键定时器（用于游戏移动等需要持续按下的场景）
+    private var holdTimer: Timer? = null
+    private var holdTimerTask: TimerTask? = null
+    private val holdIntervalMs = 50L  // 每50ms发送一次keyDown（约20次/秒）
 
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
@@ -731,7 +738,10 @@ class ControlElement(
                     }
                     if (!isToggleSwitch || !isSelected) {
                         val binding = getBindingAt(0)
+                        // 立即发送一次keyDown事件
                         inputControlsView.handleInputEvent(binding, true)
+                        // 启动持续发送定时器（每50ms发送一次keyDown）
+                        startButtonHoldTimer(binding)
                     }
                     return true
                 }
@@ -942,8 +952,10 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    // 释放按键 - 直接发送 keyUp，不依赖 isButtonHeldDown 标志
-                    // 参考 winlator 的实现，简化状态管理
+                    // 停止持续发送定时器
+                    stopButtonHoldTimer()
+                    
+                    // 发送keyUp释放按键
                     val binding = getBindingAt(0)
                     inputControlsView.handleInputEvent(binding, false)
 
@@ -980,6 +992,33 @@ class ControlElement(
 
     private fun clamp(value: Float, min: Float, max: Float): Float {
         return maxOf(min, minOf(max, value))
+    }
+
+    /**
+     * 启动持续按键定时器 - 每隔一定时间发送keyDown事件
+     * 用于游戏移动等需要持续按下的场景
+     */
+    private fun startButtonHoldTimer(binding: Binding) {
+        stopButtonHoldTimer()
+        
+        holdTimer = Timer()
+        holdTimerTask = object : TimerTask() {
+            override fun run() {
+                // 持续发送keyDown事件
+                inputControlsView.handleInputEvent(binding, true)
+            }
+        }
+        // 立即开始，每50ms重复一次
+        holdTimer?.scheduleAtFixedRate(holdTimerTask, 0, holdIntervalMs)
+    }
+
+    /**
+     * 停止持续按键定时器
+     */
+    private fun stopButtonHoldTimer() {
+        holdTimer?.cancel()
+        holdTimer = null
+        holdTimerTask = null
     }
 
     fun toJSONObject(): org.json.JSONObject {
