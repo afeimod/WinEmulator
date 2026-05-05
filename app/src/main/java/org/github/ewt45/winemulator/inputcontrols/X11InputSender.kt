@@ -55,7 +55,7 @@ class X11InputSender {
             0,  // deviceId
             0,  // scancode
             KeyEvent.FLAG_FROM_SYSTEM or KeyEvent.FLAG_VIRTUAL_HARD_KEY,
-            KeyEvent.META_CAP_LOCKED
+            0   // edgeFlags
         )
         sender.sendKeyEvent(event)
     }
