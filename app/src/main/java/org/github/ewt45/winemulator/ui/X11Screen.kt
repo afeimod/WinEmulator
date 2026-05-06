@@ -91,7 +91,8 @@ fun X11Screen(
 
     // 只创建一次 InputControlsView，避免重建
     val inputControlsView = remember {
-        InputControlsView(context, editMode = false).apply {
+        InputControlsView(context).apply {
+            this.setEditMode(false)
             this.inputEventHandler = inputEventHandler
         }
     }
