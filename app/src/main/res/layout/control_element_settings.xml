@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:background="#CC000000"
     android:padding="16dp">
 
@@ -11,19 +11,21 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- Type -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/type"
+            android:text="Type"
             android:textColor="#FFFFFF" />
 
         <Spinner
             android:id="@+id/SType"
-            style="@style/ComboBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:background="#FFFFFF" />
 
+        <!-- Shape -->
         <LinearLayout
             android:id="@+id/LLShape"
             android:layout_width="match_parent"
@@ -35,17 +37,18 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/shape"
+                android:text="Shape"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SShape"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
         </LinearLayout>
 
+        <!-- Scale -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -56,7 +59,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/scale"
+                android:text="Scale"
                 android:textColor="#FFFFFF" />
 
             <TextView
@@ -70,9 +73,10 @@
             android:id="@+id/SBScale"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="150"
-            android:min="50" />
+            android:max="200"
+            android:progress="100" />
 
+        <!-- Range Options -->
         <LinearLayout
             android:id="@+id/LLRangeOptions"
             android:layout_width="match_parent"
@@ -84,21 +88,21 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/range"
+                android:text="Range"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SRange"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/orientation"
+                android:text="Orientation"
                 android:textColor="#FFFFFF" />
 
             <RadioGroup
@@ -111,7 +115,7 @@
                     android:id="@+id/RBHorizontal"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/horizontal"
+                    android:text="Horizontal"
                     android:textColor="#FFFFFF" />
 
                 <RadioButton
@@ -119,18 +123,27 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
-                    android:text="@string/vertical"
+                    android:text="Vertical"
                     android:textColor="#FFFFFF" />
             </RadioGroup>
         </LinearLayout>
+
+        <!-- Bindings Container -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Bindings"
+            android:textColor="#FFFFFF" />
 
         <LinearLayout
             android:id="@+id/LLBindings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:orientation="vertical" />
 
+        <!-- D-Pad Bindings -->
         <LinearLayout
             android:id="@+id/LLDPadBindings"
             android:layout_width="match_parent"
@@ -142,68 +155,70 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/binding_up"
+                android:text="Up"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SBindingUp"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/binding_right"
+                android:text="Right"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SBindingRight"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/binding_down"
+                android:text="Down"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SBindingDown"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/binding_left"
+                android:text="Left"
                 android:textColor="#FFFFFF" />
 
             <Spinner
                 android:id="@+id/SBindingLeft"
-                style="@style/ComboBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF" />
         </LinearLayout>
 
+        <!-- Toggle Switch -->
         <CheckBox
             android:id="@+id/CBToggleSwitch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/toggle_switch"
+            android:text="Toggle Switch"
             android:textColor="#FFFFFF"
             android:visibility="gone" />
 
+        <!-- Custom Text -->
         <LinearLayout
             android:id="@+id/LLCustomTextIcon"
             android:layout_width="match_parent"
@@ -215,17 +230,17 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/custom_text"
+                android:text="Custom Text"
                 android:textColor="#FFFFFF" />
 
             <EditText
                 android:id="@+id/ETCustomText"
-                style="@style/EditText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:background="#FFFFFF"
-                android:hint="@string/none"
-                android:inputType="textCapCharacters"
+                android:hint="None"
+                android:inputType="text"
                 android:maxLength="8"
                 android:padding="8dp" />
 
@@ -233,7 +248,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/icon"
+                android:text="Icon"
                 android:textColor="#FFFFFF" />
 
             <HorizontalScrollView
