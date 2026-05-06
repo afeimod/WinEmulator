@@ -53,6 +53,22 @@ abstract class FileUtils {
         }
 
         /**
+         * Copy file from source to destination
+         */
+        fun copy(sourceFile: File, destFile: File): Boolean {
+            return try {
+                FileInputStream(sourceFile).use { inputStream ->
+                    FileOutputStream(destFile).use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                true
+            } catch (e: IOException) {
+                false
+            }
+        }
+
+        /**
          * Check if directory is empty
          */
         fun isEmpty(directory: File): Boolean {
