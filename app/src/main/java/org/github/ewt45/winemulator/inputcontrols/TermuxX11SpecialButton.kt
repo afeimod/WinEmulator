@@ -1,40 +1,46 @@
 package org.github.ewt45.winemulator.inputcontrols
 
-import androidx.annotation.NonNull
+import android.widget.Button
 
-/** The {@link Class} that implements special buttons for {@link TermuxExtraKeysView}. */
-class TermuxX11SpecialButton private constructor(@NonNull val key: String) {
+/**
+ * Represents special buttons in the extra keys view (Ctrl, Alt, Shift, etc.)
+ */
+enum class TermuxX11SpecialButton(val key: String, val display: String) {
+    CTRL("ctrl", "CTRL"),
+    ALT("alt", "ALT"),
+    SHIFT("shift", "SHIFT"),
+    META("meta", "META"),
+    FN("fn", "FN");
 
     companion object {
-        private val map = HashMap<String, TermuxX11SpecialButton>()
-
-        val CTRL = TermuxX11SpecialButton("CTRL")
-        val ALT = TermuxX11SpecialButton("ALT")
-        val SHIFT = TermuxX11SpecialButton("SHIFT")
-        val META = TermuxX11SpecialButton("META")
-        val FN = TermuxX11SpecialButton("FN")
-
-        /**
-         * Get the {@link TermuxX11SpecialButton} for `key`.
-         *
-         * @param key The unique key name for the special button.
-         */
-        fun valueOf(key: String): TermuxX11SpecialButton? {
-            return map[key]
+        fun fromKey(key: String): TermuxX11SpecialButton? {
+            return entries.find { it.key == key }
         }
     }
+}
 
-    init {
-        map[key] = this
-    }
+/**
+ * State holder for a special button.
+ * Tracks whether the button is active, locked, and which views are associated with it.
+ */
+class TermuxX11SpecialButtonState(
+    private val view: TermuxExtraKeysView
+) {
+    var isActive = false
+    var isLocked = false
+    var isCreated = false
+    var buttons = ArrayList<Button>()
 
-    /** Get the key for this {@link TermuxX11SpecialButton}. */
-    fun getKey(): String {
-        return key
-    }
-
-    @NonNull
-    override fun toString(): String {
-        return key
+    fun setActive(active: Boolean) {
+        isActive = active
+        if (!active) {
+            isLocked = false
+        }
+        // Update all associated buttons
+        for (button in buttons) {
+            button.setTextColor(
+                if (active) view.buttonActiveTextColor else view.buttonTextColor
+            )
+        }
     }
 }

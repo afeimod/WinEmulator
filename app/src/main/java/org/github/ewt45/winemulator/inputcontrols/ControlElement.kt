@@ -63,14 +63,14 @@ class ControlElement(
     internal var y: Int = 0
     internal var isSelected: Boolean = false
     internal var isToggleSwitch: Boolean = false
+    internal var text: String = ""
+    internal var iconId: Byte = 0
+    internal var range: Range? = null
+    internal var orientation: Byte = 0
     private var currentPointerId: Int = -1
     private val boundingBox = Rect()
     private var states = booleanArrayOf(false, false, false, false)
     private var boundingBoxNeedsUpdate = true
-    private var text: String = ""
-    private var iconId: Byte = 0
-    private var range: Range? = null
-    private var orientation: Byte = 0
     private var currentPosition: PointF? = null
     private var scroller: RangeScroller? = null
     private var interpolator: CubicBezierInterpolator? = null
@@ -233,7 +233,7 @@ class ControlElement(
     }
 
     private fun computeBoundingBox() {
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
         var halfWidth = 0
         var halfHeight = 0
 
@@ -313,7 +313,7 @@ class ControlElement(
     }
 
     fun draw(canvas: Canvas) {
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
         val paint = inputControlsView.getPaint()
         val primaryColor = inputControlsView.getPrimaryColor()
 
@@ -345,7 +345,7 @@ class ControlElement(
     private fun drawButton(canvas: Canvas, paint: Paint, box: Rect, primaryColor: Int, strokeWidth: Float) {
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
 
         when (shape) {
             Shape.CIRCLE -> {
@@ -482,7 +482,7 @@ class ControlElement(
     private fun drawDPad(canvas: Canvas, paint: Paint, box: Rect) {
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
         val offsetX = snappingSize * 2 * scale
         val offsetY = snappingSize * 3 * scale
         val start = snappingSize * scale
@@ -526,7 +526,7 @@ class ControlElement(
     }
 
     private fun drawRangeButton(canvas: Canvas, paint: Paint, box: Rect, strokeWidth: Float) {
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
         val radius = snappingSize * 0.75f * scale
         val currentRange = getRange()
         val elementSize = scroller?.getElementSize() ?: 0f
@@ -640,7 +640,7 @@ class ControlElement(
     private fun drawStick(canvas: Canvas, paint: Paint, box: Rect, primaryColor: Int, strokeWidth: Float) {
         val cx = box.centerX().toFloat()
         val cy = box.centerY().toFloat()
-        val snappingSize = inputControlsView.snappingSize
+        val snappingSize = inputControlsView.snappingSizeValue
         val oldColor = paint.color
 
         canvas.drawCircle(cx, cy, box.height() * 0.5f, paint)
@@ -785,10 +785,8 @@ class ControlElement(
 
             when (type) {
                 Type.TRACKPAD -> {
-                    val touchpadView = inputControlsView.touchpadView
                     if (currentPosition == null) currentPosition = PointF()
-                    val deltaPoint = touchpadView?.computeDeltaPoint(currentPosition!!.x, currentPosition!!.y, px, py)
-                        ?: floatArrayOf(0f, 0f)
+                    val deltaPoint = inputControlsView.computeDeltaPoint(currentPosition!!.x, currentPosition!!.y, px, py)
                     deltaX = deltaPoint[0]
                     deltaY = deltaPoint[1]
                     currentPosition?.set(px, py)
@@ -806,8 +804,8 @@ class ControlElement(
                         offsetY = (kotlin.math.sin(angle) * radius).toFloat()
                     }
 
-                    deltaX = kotlin.math.clamp(offsetX / radius, -1f, 1f)
-                    deltaY = kotlin.math.clamp(offsetY / radius, -1f, 1f)
+                    deltaX = Mathf.clamp(offsetX / radius, -1f, 1f)
+                    deltaY = Mathf.clamp(offsetY / radius, -1f, 1f)
                 }
             }
 
@@ -868,8 +866,8 @@ class ControlElement(
                             inputControlsView.handleInputEvent(binding, true, kotlin.math.clamp(interpolatedValue * kotlin.math.sign(value), -1f, 1f))
                             states[i] = true
                         } else {
-                            if (kotlin.math.abs(value) > inputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
-                                inputControlsView.handleInputEvent(binding, true, value * inputControlsView.CURSOR_ACCELERATION)
+                            if (kotlin.math.abs(value) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {
+                                inputControlsView.handleInputEvent(binding, true, value * InputControlsView.CURSOR_ACCELERATION)
                             }
                             when (binding) {
                                 Binding.MOUSE_MOVE_LEFT, Binding.MOUSE_MOVE_RIGHT -> cursorDx = kotlin.math.round(value).toInt()

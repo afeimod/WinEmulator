@@ -2,6 +2,7 @@ package org.github.ewt45.winemulator.inputcontrols
 
 import android.content.Context
 import androidx.annotation.NonNull
+import com.termux.x11.controller.core.FileUtils
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -57,7 +58,7 @@ class ControlsProfile(
     fun getController(id: String): ExternalController? {
         if (!controllersLoaded) loadControllers()
         for (c in controllers) {
-            if (c.getId() == id) return c
+            if (c.id == id) return c
         }
         return null
     }
@@ -65,7 +66,7 @@ class ControlsProfile(
     fun getController(deviceId: Int): ExternalController? {
         if (!controllersLoaded) loadControllers()
         for (c in controllers) {
-            if (c.getDeviceId() == deviceId) return c
+            if (c.getControllerDeviceId() == deviceId) return c
         }
         return null
     }
@@ -148,8 +149,8 @@ class ControlsProfile(
                 val controllerJSONObject = controllersJSONArray.getJSONObject(i)
                 val controllerId = controllerJSONObject.getString("id")
                 val controller = ExternalController()
-                controller.setId(controllerId)
-                controller.setName(controllerJSONObject.getString("name"))
+                controller.setControllerId(controllerId)
+                controller.setControllerName(controllerJSONObject.getString("name"))
 
                 val controllerBindingsJSONArray = controllerJSONObject.getJSONArray("controllerBindings")
                 for (j in 0 until controllerBindingsJSONArray.length()) {

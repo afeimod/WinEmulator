@@ -63,7 +63,7 @@ class RangeScroller(
     }
 
     private fun isTap(): Boolean {
-        return (System.currentTimeMillis() - touchTime) < inputControlsView.MAX_TAP_MILLISECONDS
+        return (System.currentTimeMillis() - touchTime) < InputControlsView.MAX_TAP_MILLISECONDS
     }
 
     private fun destroyTimer() {
@@ -90,7 +90,7 @@ class RangeScroller(
                     }
                 }
             }
-        }, inputControlsView.MAX_TAP_MILLISECONDS)
+        }, InputControlsView.MAX_TAP_MILLISECONDS)
     }
 
     fun handleTouchMove(x: Float, y: Float) {
@@ -98,7 +98,7 @@ class RangeScroller(
             val position = if (element.getOrientation() == 0.toByte()) x else y
             val deltaPosition = position - lastPosition
 
-            if (kotlin.math.abs(deltaPosition) >= inputControlsView.MAX_TAP_TRAVEL_DISTANCE) {
+            if (kotlin.math.abs(deltaPosition) >= InputControlsView.MAX_TAP_TRAVEL_DISTANCE) {
                 scrolling = true
                 destroyTimer()
             }

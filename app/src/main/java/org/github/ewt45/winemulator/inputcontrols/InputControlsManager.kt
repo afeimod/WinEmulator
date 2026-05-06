@@ -26,6 +26,10 @@ class InputControlsManager(private val context: Context) {
     private var maxProfileId = 0
     private var profilesLoaded = false
 
+    fun forceReloadProfiles() {
+        profilesLoaded = false
+    }
+
     fun getProfiles(): ArrayList<ControlsProfile> {
         return getProfiles(false)
     }
