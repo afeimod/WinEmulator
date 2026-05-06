@@ -106,8 +106,8 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 
     var buttonTextAllCaps = true
 
-    var longPressTimeout: Int = ViewConfiguration.getLongPressTimeout()
-    var longPressRepeatDelay: Int = DEFAULT_LONG_PRESS_REPEAT_DELAY
+    var longPressTimeout = ViewConfiguration.getLongPressTimeout()
+    var longPressRepeatDelay = DEFAULT_LONG_PRESS_REPEAT_DELAY
 
     private var popupWindow: PopupWindow? = null
 
@@ -125,8 +125,6 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
             DEFAULT_BUTTON_BACKGROUND_COLOR,
             DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR
         )
-        setLongPressTimeout(ViewConfiguration.getLongPressTimeout())
-        setLongPressRepeatDelay(DEFAULT_LONG_PRESS_REPEAT_DELAY)
     }
 
     fun setButtonColors(
@@ -139,21 +137,6 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
         buttonActiveTextColor = activeTextColor
         buttonBackgroundColor = backgroundColor
         buttonActiveBackgroundColor = activeBackgroundColor
-    }
-
-    fun setLongPressTimeout(duration: Int) {
-        longPressTimeout = when {
-            duration >= MIN_LONG_PRESS_DURATION && duration <= MAX_LONG_PRESS_DURATION -> duration
-            else -> FALLBACK_LONG_PRESS_DURATION
-        }
-    }
-
-
-    fun setLongPressRepeatDelay(delay: Int) {
-        longPressRepeatDelay = when {
-            delay >= MIN_LONG_PRESS__REPEAT_DELAY && delay <= MAX_LONG_PRESS__REPEAT_DELAY -> delay
-            else -> DEFAULT_LONG_PRESS_REPEAT_DELAY
-        }
     }
 
     fun getDefaultSpecialButtons(): MutableMap<TermuxX11SpecialButton, TermuxX11SpecialButtonState> {

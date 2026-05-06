@@ -104,10 +104,6 @@ class InputControlsView(context: Context?) : View(context) {
         this.showTouchscreenControlsVal = showVal
     }
 
-    fun setOverlayOpacity(opacity: Float) {
-        this.overlayOpacityVal = opacity
-    }
-
     override fun onDraw(canvas: Canvas) {
         val width = width
         val height = height
