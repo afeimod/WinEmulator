@@ -26,6 +26,9 @@ class ExternalControllerBinding {
         this.bindingVal = binding
     }
 
+    val binding: Binding?
+        get() = bindingVal
+
     fun getKeyCodeForAxisValue(): Int = keyCodeForAxisVal
 
     fun toJSONObject(): JSONObject? {
