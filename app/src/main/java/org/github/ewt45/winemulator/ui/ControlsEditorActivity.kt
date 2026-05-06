@@ -60,7 +60,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         inputControlsView.overlayOpacity = 0.6f
 
         val profileId = intent.getIntExtra(EXTRA_PROFILE_ID, 0)
-        profile = ControlsProfile.loadProfile(this, ControlsProfile.getProfileFile(this, profileId))
+        profile = InputControlsManager.loadProfile(this, ControlsProfile.getProfileFile(this, profileId))
 
         if (profile == null) {
             Toast.makeText(this, R.string.no_profile_selected, Toast.LENGTH_SHORT).show()
@@ -93,7 +93,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         if (profile != null) {
             // 重新从文件加载配置
             val profileId = profile!!.id
-            profile = ControlsProfile.loadProfile(this, ControlsProfile.getProfileFile(this, profileId))
+            profile = InputControlsManager.loadProfile(this, ControlsProfile.getProfileFile(this, profileId))
             profile?.let {
                 inputControlsView.setProfile(it)
                 inputControlsView.invalidate()
