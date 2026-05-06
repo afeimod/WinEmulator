@@ -193,12 +193,10 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
             for (col in buttons[row].indices) {
                 val buttonInfo = buttons[row][col]
 
-                val button: Button
-                if (isSpecialButton(buttonInfo)) {
-                    button = createSpecialButton(buttonInfo.key, true)
-                    if (button == null) return
+                val button: Button = if (isSpecialButton(buttonInfo)) {
+                    createSpecialButton(buttonInfo.key, true) ?: return
                 } else {
-                    button = Button(context, null, android.R.attr.buttonBarButtonStyle)
+                    Button(context, null, android.R.attr.buttonBarButtonStyle)
                 }
 
                 button.background = object : ColorDrawable(Color.BLACK) {

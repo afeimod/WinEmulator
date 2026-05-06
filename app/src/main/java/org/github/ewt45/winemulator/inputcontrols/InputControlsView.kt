@@ -315,7 +315,7 @@ class InputControlsView(context: Context?) : View(context) {
         for (i in axes.indices) {
             if (kotlin.math.abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
                 controllerBinding = controller.getControllerBinding(
-                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]))
+                    ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]).toInt())
                 )
                 if (controllerBinding != null) {
                     handleInputEvent(controllerBinding.binding!!, true, values[i])
@@ -344,12 +344,12 @@ class InputControlsView(context: Context?) : View(context) {
                 var controllerBinding: ExternalControllerBinding?
                 controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_L2)
                 if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding!!, controller.state.isPressed(ExternalController.IDX_BUTTON_L2))
+                    handleInputEvent(controllerBinding.binding!!, controller.state.isPressed(ExternalController.IDX_BUTTON_L2.toInt()))
                 }
 
                 controllerBinding = controller.getControllerBinding(KeyEvent.KEYCODE_BUTTON_R2)
                 if (controllerBinding != null) {
-                    handleInputEvent(controllerBinding.binding!!, controller.state.isPressed(ExternalController.IDX_BUTTON_R2))
+                    handleInputEvent(controllerBinding.binding!!, controller.state.isPressed(ExternalController.IDX_BUTTON_R2.toInt()))
                 }
 
                 processJoystickInput(controller)

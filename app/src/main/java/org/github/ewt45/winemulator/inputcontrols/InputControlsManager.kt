@@ -182,7 +182,7 @@ class InputControlsManager(private val context: Context) {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val destination = File(downloadsDir, "Winlator/profiles/" + profile.name + ".icp")
         destination.parentFile?.mkdirs()
-        FileUtils.copy(ControlsProfile.getProfileFile(context, profile.id).absolutePath, destination.absolutePath)
+        FileUtils.copy(ControlsProfile.getProfileFile(context, profile.id), destination)
         MediaScannerConnection.scanFile(context, arrayOf(destination.absolutePath), null, null)
         return if (destination.isFile) destination else null
     }

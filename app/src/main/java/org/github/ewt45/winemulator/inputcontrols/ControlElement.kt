@@ -555,6 +555,7 @@ class ControlElement(
             canvas.clipPath(clipPath)
 
             var startX = box.left.toFloat() - (scrollOffset % elementSize)
+            val savedColor = paint.color
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val index = i % currentRange.max.toInt()
@@ -583,7 +584,7 @@ class ControlElement(
             }
 
             paint.style = Paint.Style.STROKE
-            paint.color = oldColor
+            paint.color = savedColor
             canvas.restore()
         } else {
             val lineLeft = box.left + strokeWidth * 0.5f
@@ -606,6 +607,7 @@ class ControlElement(
             canvas.clipPath(clipPath)
 
             var startY = box.top.toFloat() - (scrollOffset % elementSize)
+            val savedColorY = paint.color
 
             for (i in rangeIndex[0] until rangeIndex[1]) {
                 val oldColor = paint.color
@@ -633,7 +635,7 @@ class ControlElement(
             }
 
             paint.style = Paint.Style.STROKE
-            paint.color = oldColor
+            paint.color = savedColorY
             canvas.restore()
         }
     }
