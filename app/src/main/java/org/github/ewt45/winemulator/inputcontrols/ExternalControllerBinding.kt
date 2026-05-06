@@ -9,7 +9,7 @@ import org.json.JSONObject
 class ExternalControllerBinding {
     // Use different name to avoid clash
     var keyCodeForAxisVal: Int = 0
-    var binding: Binding? = null
+    var bindingVal: Binding? = null
 
     constructor()
 
@@ -23,8 +23,12 @@ class ExternalControllerBinding {
     }
 
     fun setBinding(binding: Binding?) {
-        this.binding = binding
+        this.bindingVal = binding
     }
+
+    var binding: Binding?
+        get() = bindingVal
+        set(value) { bindingVal = value }
 
     fun getKeyCodeForAxisValue(): Int = keyCodeForAxisVal
 
@@ -32,7 +36,7 @@ class ExternalControllerBinding {
         return try {
             val jsonObject = JSONObject()
             jsonObject.put("keyCodeForAxis", keyCodeForAxisVal)
-            jsonObject.put("binding", binding?.toString())
+            jsonObject.put("binding", bindingVal?.toString())
             jsonObject
         } catch (e: Exception) {
             null

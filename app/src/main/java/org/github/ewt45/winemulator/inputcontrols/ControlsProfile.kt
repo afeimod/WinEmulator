@@ -16,8 +16,8 @@ class ControlsProfile(
     val id: Int
 ) : Comparable<ControlsProfile> {
     
-    var name: String = ""
-    var cursorSpeed: Float = 1.0f
+    var nameVal: String = ""
+    var cursorSpeedVal: Float = 1.0f
     
     private val elements = ArrayList<ControlElement>()
     private val controllers = ArrayList<ExternalController>()
@@ -27,11 +27,13 @@ class ControlsProfile(
     private var virtualGamepad = false
     private var gamepadState: GamepadState? = null
 
-    fun getName(): String = name
-    fun setName(name: String) { this.name = name }
+    var name: String
+        get() = nameVal
+        set(value) { nameVal = value }
 
-    fun getCursorSpeed(): Float = cursorSpeed
-    fun setCursorSpeed(cursorSpeed: Float) { this.cursorSpeed = cursorSpeed }
+    var cursorSpeed: Float
+        get() = cursorSpeedVal
+        set(value) { cursorSpeedVal = value }
 
     fun isVirtualGamepad(): Boolean = virtualGamepad
 

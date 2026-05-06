@@ -106,8 +106,8 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 
     var buttonTextAllCaps = true
 
-    var longPressTimeout = ViewConfiguration.getLongPressTimeout()
-    var longPressRepeatDelay = DEFAULT_LONG_PRESS_REPEAT_DELAY
+    var longPressTimeoutVal = ViewConfiguration.getLongPressTimeout()
+    var longPressRepeatDelayVal = DEFAULT_LONG_PRESS_REPEAT_DELAY
 
     private var popupWindow: PopupWindow? = null
 
@@ -142,18 +142,26 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
     }
 
     fun setLongPressTimeout(duration: Int) {
-        longPressTimeout = when {
+        longPressTimeoutVal = when {
             duration >= MIN_LONG_PRESS_DURATION && duration <= MAX_LONG_PRESS_DURATION -> duration
             else -> FALLBACK_LONG_PRESS_DURATION
         }
     }
 
     fun setLongPressRepeatDelay(delay: Int) {
-        longPressRepeatDelay = when {
+        longPressRepeatDelayVal = when {
             delay >= MIN_LONG_PRESS__REPEAT_DELAY && delay <= MAX_LONG_PRESS__REPEAT_DELAY -> delay
             else -> DEFAULT_LONG_PRESS_REPEAT_DELAY
         }
     }
+
+    var longPressTimeout: Int
+        get() = longPressTimeoutVal
+        set(value) { longPressTimeoutVal = value }
+
+    var longPressRepeatDelay: Int
+        get() = longPressRepeatDelayVal
+        set(value) { longPressRepeatDelayVal = value }
 
     fun getDefaultSpecialButtons(): MutableMap<TermuxX11SpecialButton, TermuxX11SpecialButtonState> {
         return mutableMapOf(

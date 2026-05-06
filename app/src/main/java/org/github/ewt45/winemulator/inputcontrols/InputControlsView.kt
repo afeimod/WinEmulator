@@ -33,8 +33,8 @@ class InputControlsView(context: Context?) : View(context) {
 
     // Public properties for external access
     var inputEventHandler: InputEventHandler? = null
-    var showTouchscreenControls: Boolean = true
-    var overlayOpacity: Float = DEFAULT_OVERLAY_OPACITY
+    var showTouchscreenControlsVal: Boolean = true
+    var overlayOpacityVal: Float = DEFAULT_OVERLAY_OPACITY
     
     internal val snappingSizeValue: Int
         get() = snappingSize
@@ -242,8 +242,16 @@ class InputControlsView(context: Context?) : View(context) {
         return showTouchscreenControls
     }
 
+    var showTouchscreenControls: Boolean
+        get() = showTouchscreenControlsVal
+        set(value) { showTouchscreenControlsVal = value }
+
+    var overlayOpacity: Float
+        get() = overlayOpacityVal
+        set(value) { overlayOpacityVal = value }
+
     fun setShowTouchscreenControls(showTouchscreenControls: Boolean) {
-        this.showTouchscreenControls = showTouchscreenControls
+        this.showTouchscreenControlsVal = showTouchscreenControls
     }
 
     fun getPrimaryColor(): Int {
