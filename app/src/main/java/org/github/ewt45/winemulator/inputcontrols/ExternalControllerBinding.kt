@@ -15,20 +15,12 @@ class ExternalControllerBinding {
 
     constructor(keyCodeForAxis: Int, binding: Binding) {
         this.keyCodeForAxisVal = keyCodeForAxis
-        this.binding = binding
+        this.bindingVal = binding
     }
 
     fun setKeyCode(keyCode: Int) {
         this.keyCodeForAxisVal = keyCode
     }
-
-    fun setBinding(binding: Binding?) {
-        this.bindingVal = binding
-    }
-
-    var binding: Binding?
-        get() = bindingVal
-        set(value) { bindingVal = value }
 
     fun getKeyCodeForAxisValue(): Int = keyCodeForAxisVal
 

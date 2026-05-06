@@ -155,14 +155,6 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
         }
     }
 
-    var longPressTimeout: Int
-        get() = longPressTimeoutVal
-        set(value) { longPressTimeoutVal = value }
-
-    var longPressRepeatDelay: Int
-        get() = longPressRepeatDelayVal
-        set(value) { longPressRepeatDelayVal = value }
-
     fun getDefaultSpecialButtons(): MutableMap<TermuxX11SpecialButton, TermuxX11SpecialButtonState> {
         return mutableMapOf(
             TermuxX11SpecialButton.CTRL to TermuxX11SpecialButtonState(this),

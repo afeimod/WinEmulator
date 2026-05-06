@@ -9,28 +9,13 @@ import android.widget.Button
 class TermuxX11SpecialButtonState(
     private val mTermuxExtraKeysView: TermuxExtraKeysView
 ) {
-    var isActiveVal = false
+    var isActive = false
     var isLocked = false
     var isCreated = false
     var buttons = ArrayList<Button>()
 
-    var isActive: Boolean
-        get() = isActiveVal
-        set(value) {
-            isActiveVal = value
-            if (!value) {
-                isLocked = false
-            }
-            // Update all associated buttons
-            for (button in buttons) {
-                button.setTextColor(
-                    if (value) mTermuxExtraKeysView.buttonActiveTextColor else mTermuxExtraKeysView.buttonTextColor
-                )
-            }
-        }
-
     fun setActive(active: Boolean) {
-        isActiveVal = active
+        isActive = active
         if (!active) {
             isLocked = false
         }

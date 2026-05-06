@@ -96,12 +96,16 @@ class InputControlsView(context: Context?) : View(context) {
         this.editMode = editMode
     }
 
-    fun setOverlayOpacity(overlayOpacity: Float) {
-        this.overlayOpacity = overlayOpacity
-    }
-
     fun getSnappingSize(): Int {
         return snappingSize
+    }
+
+    fun isShowTouchscreenControls(): Boolean {
+        return showTouchscreenControlsVal
+    }
+
+    fun setShowTouchscreenControlsValue(val: Boolean) {
+        this.showTouchscreenControlsVal = val
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -239,7 +243,7 @@ class InputControlsView(context: Context?) : View(context) {
     }
 
     fun isShowTouchscreenControls(): Boolean {
-        return showTouchscreenControls
+        return showTouchscreenControlsVal
     }
 
     var showTouchscreenControls: Boolean
@@ -249,10 +253,6 @@ class InputControlsView(context: Context?) : View(context) {
     var overlayOpacity: Float
         get() = overlayOpacityVal
         set(value) { overlayOpacityVal = value }
-
-    fun setShowTouchscreenControls(showTouchscreenControls: Boolean) {
-        this.showTouchscreenControlsVal = showTouchscreenControls
-    }
 
     fun getPrimaryColor(): Int {
         return Color.argb((overlayOpacity * 255).toInt(), 255, 255, 255)
