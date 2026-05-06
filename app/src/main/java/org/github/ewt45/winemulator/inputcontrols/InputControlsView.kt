@@ -233,18 +233,26 @@ class InputControlsView(context: Context?) : View(context) {
         if (profile != null) {
             this.profile = profile
             deselectAllElements()
+            invalidate()  // 立即刷新视图
         } else {
             this.profile = null
+            invalidate()  // 立即刷新视图
         }
     }
 
     var showTouchscreenControls: Boolean
         get() = showTouchscreenControlsVal
-        set(value) { showTouchscreenControlsVal = value }
+        set(value) {
+            showTouchscreenControlsVal = value
+            invalidate()  // 立即刷新视图
+        }
 
     var overlayOpacity: Float
         get() = overlayOpacityVal
-        set(value) { overlayOpacityVal = value }
+        set(value) {
+            overlayOpacityVal = value
+            invalidate()  // 立即刷新视图
+        }
 
     fun getPrimaryColor(): Int {
         return Color.argb((overlayOpacity * 255).toInt(), 255, 255, 255)
