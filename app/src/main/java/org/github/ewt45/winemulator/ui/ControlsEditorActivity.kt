@@ -150,6 +150,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
             view.findViewById<View>(R.id.CBToggleSwitch)?.visibility = if (type == ControlElement.Type.BUTTON) View.VISIBLE else View.GONE
             view.findViewById<View>(R.id.LLCustomTextIcon)?.visibility = if (type == ControlElement.Type.BUTTON) View.VISIBLE else View.GONE
             view.findViewById<View>(R.id.LLRangeOptions)?.visibility = if (type == ControlElement.Type.RANGE_BUTTON) View.VISIBLE else View.GONE
+            view.findViewById<View>(R.id.LLDPadBindings)?.visibility = if (type == ControlElement.Type.D_PAD) View.VISIBLE else View.GONE
 
             loadBindingSpinners(element, view.findViewById(R.id.LLBindings))
         }
@@ -162,15 +163,21 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
             visibility = if (element.type == ControlElement.Type.RANGE_BUTTON) View.VISIBLE else View.GONE
         })
 
-        val rgOrientation = view.findViewById<RadioGroup>(R.id.RGOrientation)
-        rgOrientation.check(if (element.orientation == 1.toByte()) R.id.RBVertical else R.id.RBHorizontal)
-        rgOrientation.setOnCheckedChangeListener { _, checkedId ->
-            element.orientation = if (checkedId == R.id.RBVertical) 1 else 0
-            profile?.save()
-            inputControlsView.invalidate()
+        // Load orientation from LLRangeOptions
+        val llRangeOptions = view.findViewById<View>(R.id.LLRangeOptions)
+        if (llRangeOptions != null) {
+            val rgOrientation = llRangeOptions.findViewById<RadioGroup>(R.id.RGOrientation)
+            if (rgOrientation != null) {
+                rgOrientation.check(if (element.orientation == 1.toByte()) R.id.RBVertical else R.id.RBHorizontal)
+                rgOrientation.setOnCheckedChangeListener { _, checkedId ->
+                    element.orientation = if (checkedId == R.id.RBVertical) 1 else 0
+                    profile?.save()
+                    inputControlsView.invalidate()
+                }
+            }
         }
 
-        val tvScale = view.findViewById<TextView>(R.id.TVScale)
+        updateLayout.run()
         val sbScale = view.findViewById<SeekBar>(R.id.SBScale)
         sbScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -314,7 +321,7 @@ class ControlsEditorActivity : AppCompatActivity(), View.OnClickListener {
         }
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                element.range = ControlElement.Range.entries[position]
+                element.setRange(ControlElement.Range.entries[position])
                 profile?.save()
                 inputControlsView.invalidate()
             }
