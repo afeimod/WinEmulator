@@ -31,12 +31,12 @@ class RangeScroller(
         return scrollOffset
     }
 
-    fun getRangeIndex(): ByteArray {
+    fun getRangeIndex(): IntArray {
         val range = element.getRange()
         var from = kotlin.math.floor((scrollOffset / getElementSize()) % range.max).toInt()
         if (from < 0) from = (range.max + from).toInt()
         val to = from + element.getBindingCount() + 1
-        return byteArrayOf(from.toByte(), to.toByte())
+        return intArrayOf(from, to)
     }
 
     private fun getBindingByPosition(x: Float, y: Float): Binding {
@@ -90,7 +90,7 @@ class RangeScroller(
                     }
                 }
             }
-        }, InputControlsView.MAX_TAP_MILLISECONDS)
+        }, InputControlsView.MAX_TAP_MILLISECONDS.toLong())
     }
 
     fun handleTouchMove(x: Float, y: Float) {

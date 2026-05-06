@@ -89,7 +89,7 @@ class InputControlsManager(private val context: Context) {
             for (file in files) {
                 val profile = loadProfile(context, file)
                 if (profile != null) {
-                    if (!(ignoreTemplates && profile.isTemplate)) profilesList.add(profile)
+                    if (!(ignoreTemplates && profile.isTemplate())) profilesList.add(profile)
                     maxProfileId = maxOf(maxProfileId, profile.id)
                 }
             }
@@ -181,7 +181,8 @@ class InputControlsManager(private val context: Context) {
     fun exportProfile(profile: ControlsProfile): File? {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val destination = File(downloadsDir, "Winlator/profiles/" + profile.name + ".icp")
-        FileUtils.copy(ControlsProfile.getProfileFile(context, profile.id), destination)
+        destination.parentFile?.mkdirs()
+        FileUtils.copy(ControlsProfile.getProfileFile(context, profile.id).absolutePath, destination.absolutePath)
         MediaScannerConnection.scanFile(context, arrayOf(destination.absolutePath), null, null)
         return if (destination.isFile) destination else null
     }

@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.graphics.PointF
 import android.graphics.Rect
 import androidx.core.graphics.ColorUtils
+import com.termux.x11.controller.math.Mathf
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -396,7 +397,7 @@ class ControlElement(
         val icon = inputControlsView.getIcon(iconId) ?: return
 
         paint.colorFilter = inputControlsView.getColorFilter()
-        val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
+        val margin = (inputControlsView.snappingSizeValue * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
         val halfSize = ((minOf(width, height) - margin) * 0.5f).toInt()
 
         val srcRect = Rect(0, 0, icon.width, icon.height)
@@ -429,7 +430,7 @@ class ControlElement(
 
         if (icon == null) return
 
-        val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
+        val margin = (inputControlsView.snappingSizeValue * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
         val halfSize = ((minOf(width, height) - margin) * 0.7f).toInt()
 
         val srcRect = Rect(0, 0, icon.width, icon.height)
@@ -464,7 +465,7 @@ class ControlElement(
 
         if (icon == null) return
 
-        val margin = (inputControlsView.snappingSize * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
+        val margin = (inputControlsView.snappingSizeValue * (if (shape == Shape.CIRCLE || shape == Shape.SQUARE) 2.0f else 1.0f) * scale).toInt()
         val halfSize = ((minOf(width, height) - margin) * 0.7f).toInt()
 
         val srcRect = Rect(0, 0, icon.width, icon.height)
@@ -804,8 +805,8 @@ class ControlElement(
                         offsetY = (kotlin.math.sin(angle) * radius).toFloat()
                     }
 
-                    deltaX = Mathf.clamp(offsetX / radius, -1f, 1f)
-                    deltaY = Mathf.clamp(offsetY / radius, -1f, 1f)
+                    deltaX = com.termux.x11.controller.math.Mathf.clamp(offsetX / radius, -1f, 1f)
+                    deltaY = com.termux.x11.controller.math.Mathf.clamp(offsetY / radius, -1f, 1f)
                 }
             }
 
@@ -827,7 +828,7 @@ class ControlElement(
                         val binding = getBindingAt(i)
 
                         if (binding.isGamepad()) {
-                            val adjustedValue = kotlin.math.clamp(
+                            val adjustedValue = com.termux.x11.controller.math.Mathf.clamp(
                                 kotlin.math.abs(kotlin.math.abs(value) - 0.01f) * kotlin.math.sign(value) * STICK_SENSITIVITY,
                                 -1f, 1f
                             )
@@ -863,7 +864,7 @@ class ControlElement(
                             }
                             interpolator?.set(0.075f, 0.95f, 0.45f, 0.95f)
                             val interpolatedValue = interpolator?.getInterpolation(kotlin.math.min(1.0f, kotlin.math.abs(value / TRACKPAD_MAX_SPEED))) ?: 0f
-                            inputControlsView.handleInputEvent(binding, true, kotlin.math.clamp(interpolatedValue * kotlin.math.sign(value), -1f, 1f))
+                            inputControlsView.handleInputEvent(binding, true, com.termux.x11.controller.math.Mathf.clamp(interpolatedValue * kotlin.math.sign(value), -1f, 1f))
                             states[i] = true
                         } else {
                             if (kotlin.math.abs(value) > InputControlsView.CURSOR_ACCELERATION_THRESHOLD) {

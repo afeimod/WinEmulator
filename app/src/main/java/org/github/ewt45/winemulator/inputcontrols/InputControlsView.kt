@@ -121,7 +121,7 @@ class InputControlsView(context: Context?) : View(context) {
             drawCursor(canvas)
         }
         if (profile != null) {
-            if (!profile!!.isElementsLoaded) {
+            if (!profile!!.isElementsLoaded()) {
                 profile!!.loadElements(this)
             }
             if (showTouchscreenControls) {
@@ -467,9 +467,9 @@ class InputControlsView(context: Context?) : View(context) {
     fun handleInputEvent(binding: Binding, isActionDown: Boolean, offset: Float) {
         val handler = inputEventHandler ?: return
         
-        if (binding.isGamepad) {
+        if (binding.isGamepad()) {
             // Gamepad events are handled by the gamepad state management
-            val state = profile?.gamepadState
+            val state = profile?.getGamepadState()
             val buttonIdx = binding.ordinal - Binding.GAMEPAD_BUTTON_A.ordinal
             if (buttonIdx <= 11) {
                 state?.setPressed(buttonIdx, isActionDown)
@@ -507,18 +507,19 @@ class InputControlsView(context: Context?) : View(context) {
                 }
                 if (isActionDown) createMouseMoveTimer()
             } else {
-                val pointerButton = binding.pointerButton
+                val pointerButton = binding.getPointerButton()
+                val keycode = binding.keycode
                 if (isActionDown) {
                     if (pointerButton != null) {
-                        handler.onPointerButton(pointerButton, true)
+                        handler.onPointerButton(pointerButton.ordinal, true)
                     } else {
-                        handler.onKeyEvent(binding.keycode, true)
+                        handler.onKeyEvent(keycode.ordinal, true)
                     }
                 } else {
                     if (pointerButton != null) {
-                        handler.onPointerButton(pointerButton, false)
+                        handler.onPointerButton(pointerButton.ordinal, false)
                     } else {
-                        handler.onKeyEvent(binding.keycode, false)
+                        handler.onKeyEvent(keycode.ordinal, false)
                     }
                 }
             }
