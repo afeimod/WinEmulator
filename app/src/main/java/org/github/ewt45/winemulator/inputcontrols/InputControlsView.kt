@@ -399,8 +399,10 @@ class InputControlsView(context: Context?) : View(context) {
                     invalidate()
                 }
             }
+            return true
         }
-        return true
+        // 在非编辑模式下，处理虚拟按键的触摸事件
+        return handleTouchEvent(event)
     }
 
     fun handleTouchEvent(event: MotionEvent): Boolean {
