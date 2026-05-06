@@ -106,8 +106,8 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 
     var buttonTextAllCaps = true
 
-    var longPressTimeoutVal = ViewConfiguration.getLongPressTimeout()
-    var longPressRepeatDelayVal = DEFAULT_LONG_PRESS_REPEAT_DELAY
+    var longPressTimeout: Int = ViewConfiguration.getLongPressTimeout()
+    var longPressRepeatDelay: Int = DEFAULT_LONG_PRESS_REPEAT_DELAY
 
     private var popupWindow: PopupWindow? = null
 
@@ -142,14 +142,15 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
     }
 
     fun setLongPressTimeout(duration: Int) {
-        longPressTimeoutVal = when {
+        longPressTimeout = when {
             duration >= MIN_LONG_PRESS_DURATION && duration <= MAX_LONG_PRESS_DURATION -> duration
             else -> FALLBACK_LONG_PRESS_DURATION
         }
     }
 
+
     fun setLongPressRepeatDelay(delay: Int) {
-        longPressRepeatDelayVal = when {
+        longPressRepeatDelay = when {
             delay >= MIN_LONG_PRESS__REPEAT_DELAY && delay <= MAX_LONG_PRESS__REPEAT_DELAY -> delay
             else -> DEFAULT_LONG_PRESS_REPEAT_DELAY
         }

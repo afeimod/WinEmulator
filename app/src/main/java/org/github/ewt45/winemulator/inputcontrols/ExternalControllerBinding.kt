@@ -22,6 +22,10 @@ class ExternalControllerBinding {
         this.keyCodeForAxisVal = keyCode
     }
 
+    fun setBinding(binding: Binding?) {
+        this.bindingVal = binding
+    }
+
     fun getKeyCodeForAxisValue(): Int = keyCodeForAxisVal
 
     fun toJSONObject(): JSONObject? {

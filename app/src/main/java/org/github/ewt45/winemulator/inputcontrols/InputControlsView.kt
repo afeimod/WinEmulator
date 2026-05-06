@@ -100,12 +100,12 @@ class InputControlsView(context: Context?) : View(context) {
         return snappingSize
     }
 
-    fun isShowTouchscreenControls(): Boolean {
-        return showTouchscreenControlsVal
+    fun setShowTouchscreenControlsValue(showVal: Boolean) {
+        this.showTouchscreenControlsVal = showVal
     }
 
-    fun setShowTouchscreenControlsValue(val: Boolean) {
-        this.showTouchscreenControlsVal = val
+    fun setOverlayOpacity(opacity: Float) {
+        this.overlayOpacityVal = opacity
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -240,10 +240,6 @@ class InputControlsView(context: Context?) : View(context) {
         } else {
             this.profile = null
         }
-    }
-
-    fun isShowTouchscreenControls(): Boolean {
-        return showTouchscreenControlsVal
     }
 
     var showTouchscreenControls: Boolean
