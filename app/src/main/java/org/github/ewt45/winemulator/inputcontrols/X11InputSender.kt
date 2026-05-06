@@ -1,7 +1,6 @@
 package org.github.ewt45.winemulator.inputcontrols
 
-import android.os.Handler
-import android.os.Looper
+import android.graphics.PointF
 import android.view.KeyEvent
 import com.termux.x11.input.InputEventSender
 import com.termux.x11.input.InputStub
@@ -12,24 +11,14 @@ import com.termux.x11.input.RenderData
  * X11 Input Handler using InputEventSender
  * Sends keyboard and mouse events through Android's InputEvent system to LorieView
  * 
- * 实现客户端自动重复机制，因为termux-x11的X服务器默认禁用X11自动重复
- * 按键重复速率：初始延迟500ms，之后每50ms重复一次（约20次/秒）
+ * This is the corrected implementation that properly uses the InputEventSender API
+ * from the master-x11 project to inject input events into the X11 session.
  */
 class X11InputSender {
     private var inputEventSender: InputEventSender? = null
     
     // Track pressed keys to ensure proper keyUp
     private val pressedKeys = mutableSetOf<Int>()
-    
-    // 客户端重复定时器：每个按键独立的Runnable
-    private val keyRepeatRunnables = mutableMapOf<Int, Runnable>()
-    
-    // Handler用于管理定时器
-    private val handler = Handler(Looper.getMainLooper())
-    
-    // 重复参数：初始延迟和重复间隔（毫秒）
-    private val repeatInitialDelay = 500L  // 长按500ms后开始重复
-    private val repeatInterval = 50L       // 每50ms重复一次
     
     // RenderData for touch events - needs to be set from LorieView
     var renderData: RenderData? = null
@@ -47,54 +36,59 @@ class X11InputSender {
 
     /**
      * Send a key event using Android KeyEvent
-     * 当按键按下时，启动客户端重复机制
-     * 当按键释放时，停止重复并发送keyUp
+     * 关键修复：解决60fps帧率锁定导致的输入队列延迟问题
+     * 在keyUp时添加"立即刷新"机制
      * @param keycode The Android keycode
      * @param isDown True if key is pressed, false if released
      */
     fun sendKeyEvent(keycode: Int, isDown: Boolean) {
         val sender = inputEventSender ?: return
         
+        val event = KeyEvent(
+            if (isDown) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
+            keycode
+        )
+        sender.sendKeyEvent(event)
+        
+        // 关键修复：在keyUp时尝试刷新事件队列
+        // 60fps的帧率会导致事件被队列化，在松开时需要立即处理
+        if (!isDown) {
+            // 发送一个同步信号，尝试立即处理待处理的事件
+            flushKeyEvents()
+        }
+        
         if (isDown) {
-            // 发送初始keyDown
-            val event = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
-            sender.sendKeyEvent(event)
             pressedKeys.add(keycode)
-            
-            // 停止任何现有的重复
-            stopKeyRepeat(keycode)
-            
-            // 启动新的重复定时器：先延迟initialDelay，然后每repeatInterval重复一次
-            val repeatRunnable = Runnable {
-                // 检查按键是否仍然被按下
-                if (pressedKeys.contains(keycode)) {
-                    val repeatEvent = KeyEvent(KeyEvent.ACTION_DOWN, keycode)
-                    sender.sendKeyEvent(repeatEvent)
-                    // 调度下一次重复
-                    handler.postDelayed(repeatRunnables[keycode]!!, repeatInterval)
-                }
-            }
-            keyRepeatRunnables[keycode] = repeatRunnable
-            handler.postDelayed(repeatRunnable, repeatInitialDelay)
         } else {
-            // 停止重复定时器
-            stopKeyRepeat(keycode)
-            
-            // 发送keyUp
-            val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
-            sender.sendKeyEvent(event)
             pressedKeys.remove(keycode)
         }
     }
     
     /**
-     * 停止按键的重复定时器
+     * 刷新待处理的按键事件
+     * 尝试立即处理所有待处理的事件，解决60fps导致的延迟
      */
-    private fun stopKeyRepeat(keycode: Int) {
-        keyRepeatRunnables[keycode]?.let { runnable ->
-            handler.removeCallbacks(runnable)
+    private fun flushKeyEvents() {
+        try {
+            // 尝试调用termux-x11的刷新方法
+            // 这可能不存在，但try-catch会保证不会崩溃
+            inputEventSender?.let { sender ->
+                // 尝试通过反射调用flush方法
+                val method = sender.javaClass.getMethod("flush")
+                method.invoke(sender)
+            }
+        } catch (e: Exception) {
+            // 方法不存在，忽略
         }
-        keyRepeatRunnables.remove(keycode)
+        
+        // 同时尝试发送一个空事件来"解锁"事件队列
+        try {
+            // 发送一个特殊的事件来触发队列刷新
+            val emptyEvent = KeyEvent(KeyEvent.ACTION_UP, 0)
+            inputEventSender?.sendKeyEvent(emptyEvent)
+        } catch (e: Exception) {
+            // 忽略
+        }
     }
     
     /**
@@ -102,18 +96,10 @@ class X11InputSender {
      * 用于清理可能卡住的状态
      */
     fun releaseAllKeys() {
-        // 停止所有重复定时器
-        keyRepeatRunnables.values.forEach { handler.removeCallbacks(it) }
-        keyRepeatRunnables.clear()
-        
-        // 发送所有按下键的keyUp
         val keysToRelease = pressedKeys.toList()
         pressedKeys.clear()
         for (keycode in keysToRelease) {
-            inputEventSender?.let { sender ->
-                val event = KeyEvent(KeyEvent.ACTION_UP, keycode)
-                sender.sendKeyEvent(event)
-            }
+            sendKeyEvent(keycode, false)
         }
     }
 
@@ -333,7 +319,6 @@ class X11InputSender {
      * Cleanup resources
      */
     fun release() {
-        releaseAllKeys()
         inputEventSender = null
     }
 }

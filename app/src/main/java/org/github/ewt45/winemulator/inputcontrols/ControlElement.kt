@@ -726,15 +726,14 @@ class ControlElement(
                     return true
                 }
                 Type.BUTTON -> {
-                    // winlator逻辑：只发送一次按下/释放事件
-                    // 按键重复由X11服务端自动处理
+                    if (isKeepButtonPressedAfterMinTime()) {
+                        touchTime = System.currentTimeMillis()
+                    }
                     if (!isToggleSwitch || !isSelected) {
-                        inputControlsView.handleInputEvent(getBindingAt(0), true)
+                        val binding = getBindingAt(0)
+                        // winlator逻辑：只发送一次keyDown，让X11自动处理repeat
+                        inputControlsView.handleInputEvent(binding, true)
                     }
-                    if (isToggleSwitch) {
-                        isSelected = !isSelected
-                    }
-                    inputControlsView.invalidate()
                     return true
                 }
                 Type.RANGE_BUTTON -> {
@@ -952,15 +951,14 @@ class ControlElement(
                     }
                 }
                 Type.BUTTON -> {
-                    // winlator逻辑：发送按键释放事件
-                    // X11会自动停止自动重复
+                    // winlator逻辑：只发送keyUp，让X11停止repeat
                     val binding = getBindingAt(0)
                     inputControlsView.handleInputEvent(binding, false)
 
                     if (isToggleSwitch) {
                         isSelected = !isSelected
+                        inputControlsView.invalidate()
                     }
-                    inputControlsView.invalidate()
                 }
                 Type.RANGE_BUTTON, Type.D_PAD, Type.STICK, Type.TRACKPAD -> {
                     for (i in states.indices) {
