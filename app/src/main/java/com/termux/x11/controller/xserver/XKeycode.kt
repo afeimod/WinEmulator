@@ -5,6 +5,7 @@ package com.termux.x11.controller.xserver
  * Maps Android keycodes to X11 keycodes.
  */
 enum class XKeycode(val id: Int) {
+    KEY_NONE(0),
     KEY_ESCAPE(9),
     KEY_1(10),
     KEY_2(11),
@@ -183,7 +184,9 @@ enum class XKeycode(val id: Int) {
     KEY_F21(199),
     KEY_F22(200),
     KEY_F23(201),
-    KEY_F24(202);
+    KEY_F24(202),
+    KEY_PRIOR(112),  // Alias for KEY_PAGEUP
+    KEY_NEXT(117);   // Alias for KEY_PAGEDOWN
 
     companion object {
         /**
