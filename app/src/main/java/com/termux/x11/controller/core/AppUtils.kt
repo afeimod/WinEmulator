@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.DisplayMetrics
 import android.view.WindowManager
 
 /**
@@ -38,14 +39,16 @@ abstract class AppUtils {
          * Get screen width in pixels
          */
         fun getScreenWidth(): Int {
-            return android.view.DisplayMetrics().widthPixels
+            val metrics = DisplayMetrics()
+            return metrics.widthPixels
         }
 
         /**
          * Get screen height in pixels
          */
         fun getScreenHeight(): Int {
-            return android.view.DisplayMetrics().heightPixels
+            val metrics = DisplayMetrics()
+            return metrics.heightPixels
         }
     }
 }
