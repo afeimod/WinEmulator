@@ -54,15 +54,15 @@ class ControlElement(
         }
     }
 
-    // Properties
-    private var type: Type = Type.BUTTON
-    private var shape: Shape = Shape.CIRCLE
-    private var bindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE, Binding.NONE, Binding.NONE)
-    private var scale: Float = 1.0f
-    private var x: Int = 0
-    private var y: Int = 0
-    private var isSelected: Boolean = false
-    private var isToggleSwitch: Boolean = false
+    // Properties - using internal visibility for access from InputControlsView
+    internal var type: Type = Type.BUTTON
+    internal var shape: Shape = Shape.CIRCLE
+    internal var bindings: Array<Binding> = arrayOf(Binding.NONE, Binding.NONE, Binding.NONE, Binding.NONE)
+    internal var scale: Float = 1.0f
+    internal var x: Int = 0
+    internal var y: Int = 0
+    internal var isSelected: Boolean = false
+    internal var isToggleSwitch: Boolean = false
     private var currentPointerId: Int = -1
     private val boundingBox = Rect()
     private var states = booleanArrayOf(false, false, false, false)

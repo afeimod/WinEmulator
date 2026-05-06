@@ -4,7 +4,7 @@ import androidx.annotation.NonNull
 import com.termux.x11.controller.xserver.Pointer
 import com.termux.x11.controller.xserver.XKeycode
 
-enum class Binding(val keycode: XKeycode) {
+enum class Binding {
     NONE,
     MOUSE_LEFT_BUTTON,
     MOUSE_MIDDLE_BUTTON,
@@ -130,19 +130,17 @@ enum class Binding(val keycode: XKeycode) {
     GAMEPAD_DPAD_DOWN,
     GAMEPAD_DPAD_LEFT;
 
-    constructor() : this(XKeycode.KEY_NONE) {
-        var keycode: XKeycode
-        try {
-            keycode = XKeycode.valueOf(name)
-        } catch (e: IllegalArgumentException) {
-            keycode = XKeycode.KEY_NONE
-            if (name == "KEY_PG_UP") {
-                keycode = XKeycode.KEY_PRIOR
-            } else if (name == "KEY_PG_DOWN") {
-                keycode = XKeycode.KEY_NEXT
-            }
+    val keycode: XKeycode by lazy {
+        val nameToFind = when (this) {
+            KEY_PG_UP -> "KEY_PRIOR"
+            KEY_PG_DOWN -> "KEY_NEXT"
+            else -> name
         }
-        this.keycode = keycode
+        try {
+            XKeycode.valueOf(nameToFind)
+        } catch (e: IllegalArgumentException) {
+            XKeycode.KEY_NONE
+        }
     }
 
     @NonNull
@@ -206,27 +204,27 @@ enum class Binding(val keycode: XKeycode) {
         }
 
         fun mouseBindingLabels(): Array<String> {
-            return values().filter { it.isMouse() }.map { it.toString() }.toTypedArray()
+            return entries.filter { it.isMouse() }.map { it.toString() }.toTypedArray()
         }
 
         fun keyboardBindingLabels(): Array<String> {
-            return values().filter { it.isKeyboard() }.map { it.toString() }.toTypedArray()
+            return entries.filter { it.isKeyboard() }.map { it.toString() }.toTypedArray()
         }
 
         fun gamepadBindingLabels(): Array<String> {
-            return values().filter { it.isGamepad() }.map { it.toString() }.toTypedArray()
+            return entries.filter { it.isGamepad() }.map { it.toString() }.toTypedArray()
         }
 
         fun mouseBindingValues(): Array<Binding> {
-            return values().filter { it.isMouse() }.toTypedArray()
+            return entries.filter { it.isMouse() }.toTypedArray()
         }
 
         fun keyboardBindingValues(): Array<Binding> {
-            return values().filter { it.isKeyboard() }.toTypedArray()
+            return entries.filter { it.isKeyboard() }.toTypedArray()
         }
 
         fun gamepadBindingValues(): Array<Binding> {
-            return values().filter { it.isGamepad() }.toTypedArray()
+            return entries.filter { it.isGamepad() }.toTypedArray()
         }
     }
 }

@@ -19,11 +19,9 @@ import android.widget.Button
 import android.widget.GridLayout
 import android.widget.PopupWindow
 import androidx.annotation.NonNull
-import androidx.annotation.Nullable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ScheduledExecutorService
-import java.util.stream.Collectors
 
 /**
  * TermuxExtraKeysView - Extra keys view based on termux-app implementation.
@@ -36,10 +34,10 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 ) : GridLayout(context, attrs) {
 
     companion object {
-        const val DEFAULT_BUTTON_TEXT_COLOR = 0xFFFFFFFF
-        const val DEFAULT_BUTTON_ACTIVE_TEXT_COLOR = 0xFF80DEEA
+        const val DEFAULT_BUTTON_TEXT_COLOR = 0xFFFFFFFF.toInt()
+        const val DEFAULT_BUTTON_ACTIVE_TEXT_COLOR = 0xFF80DEEA.toInt()
         const val DEFAULT_BUTTON_BACKGROUND_COLOR = 0x00000000
-        const val DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR = 0xFF7F7F7F
+        const val DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR = 0xFF7F7F7F.toInt()
 
         const val MIN_LONG_PRESS_DURATION = 200
         const val MAX_LONG_PRESS_DURATION = 3000
@@ -96,8 +94,8 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 
     var extraKeysViewClient: IExtraKeysViewClient? = null
 
-    private var specialButtons = getDefaultSpecialButtons()
-    private var specialButtonsKeys: Set<String> = specialButtons.keys
+    private var specialButtons: MutableMap<TermuxX11SpecialButton, TermuxX11SpecialButtonState> = getDefaultSpecialButtons()
+    private var specialButtonsKeys: Set<String> = specialButtons.keys.map { it.key }.toSet()
 
     private var repetitiveKeys = PRIMARY_REPETITIVE_KEYS
 
@@ -167,7 +165,7 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
         )
     }
 
-    fun setSpecialButtons(buttons: Map<TermuxX11SpecialButton, TermuxX11SpecialButtonState>) {
+    fun setSpecialButtons(buttons: MutableMap<TermuxX11SpecialButton, TermuxX11SpecialButtonState>) {
         specialButtons = buttons
         specialButtonsKeys = specialButtons.keys.map { it.key }.toSet()
     }
@@ -213,7 +211,7 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
                 button.setPadding(0, 0, 0, 0)
 
                 button.setOnClickListener {
-                    performExtraKeyButtonHapticFeedback(it, buttonInfo, button as Button)
+                    performExtraKeyButtonHapticFeedback(it, buttonInfo, button)
                     onAnyExtraKeyButtonClick(it, buttonInfo, button)
                 }
 
@@ -221,7 +219,7 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
                     when (event.action) {
                         MotionEvent.ACTION_DOWN -> {
                             view.setBackgroundColor(buttonActiveBackgroundColor)
-                            startScheduledExecutors(view, buttonInfo, button as Button)
+                            startScheduledExecutors(view, buttonInfo, button)
                             true
                         }
                         MotionEvent.ACTION_MOVE -> {
@@ -348,8 +346,7 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
 
         val button: Button
         if (isSpecialButton(extraButton)) {
-            button = createSpecialButton(extraButton.key, false)
-            if (button == null) return
+            button = createSpecialButton(extraButton.key, false) ?: return
         } else {
             button = Button(context, null, android.R.attr.buttonBarButtonStyle)
             button.setTextColor(buttonTextColor)
@@ -427,143 +424,6 @@ public final class TermuxExtraKeysView @JvmOverloads constructor(
             mState.isLocked = !mState.isActive
             mState.isActive = !mState.isActive
             longPressCount++
-        }
-    }
-}
-
-/**
- * Special button types that can be toggled/locked
- */
-enum class TermuxX11SpecialButton(val key: String) {
-    CTRL("CTRL"),
-    ALT("ALT"),
-    SHIFT("SHIFT"),
-    META("META"),
-    FN("FN");
-
-    companion object {
-        fun fromKey(key: String): TermuxX11SpecialButton? {
-            return entries.find { it.key == key }
-        }
-    }
-}
-
-/**
- * State for special toggle buttons
- */
-class TermuxX11SpecialButtonState(view: TermuxExtraKeysView) {
-    var isCreated = false
-    var isActive = false
-    var isLocked = false
-    var buttons = ArrayList<Button>()
-
-    fun setIsActive(active: Boolean) {
-        isActive = active
-        // Update all buttons' text color
-        for (button in buttons) {
-            button.setTextColor(if (isActive) TermuxExtraKeysView.DEFAULT_BUTTON_ACTIVE_TEXT_COLOR else TermuxExtraKeysView.DEFAULT_BUTTON_TEXT_COLOR)
-        }
-    }
-
-    fun setIsLocked(locked: Boolean) {
-        isLocked = locked
-    }
-}
-
-/**
- * Extra key button definition
- */
-class TermuxX11ExtraKeyButton(
-    val key: String,
-    val display: String,
-    val macro: String? = null,
-    val popup: TermuxX11ExtraKeyButton? = null
-) {
-    companion object {
-        const val KEY_KEY_NAME = "key"
-        const val KEY_MACRO = "macro"
-        const val KEY_POPUP = "popup"
-        const val KEY_DISPLAY_NAME = "x11"
-    }
-}
-
-/**
- * Extra keys info containing button matrix
- */
-class TermuxX11ExtraKeysInfo(
-    val matrix: Array<Array<TermuxX11ExtraKeyButton>>
-) {
-    companion object {
-        /**
-         * Parse extra keys info from JSON string
-         */
-        fun parse(propertiesInfo: String): TermuxX11ExtraKeysInfo {
-            val rows = mutableListOf<Array<TermuxX11ExtraKeyButton>>()
-            
-            try {
-                val jsonRows = org.json.JSONArray(propertiesInfo)
-                for (i in 0 until jsonRows.length()) {
-                    val jsonRow = jsonRows.getJSONArray(i)
-                    val row = mutableListOf<TermuxX11ExtraKeyButton>()
-                    
-                    for (j in 0 until jsonRow.length()) {
-                        val item = jsonRow.get(j)
-                        val button = when (item) {
-                            is String -> TermuxX11ExtraKeyButton(item, getDisplayForKey(item))
-                            is org.json.JSONObject -> {
-                                val key = item.optString(KEY_KEY_NAME, item.optString(KEY_MACRO, ""))
-                                val display = item.optString(KEY_DISPLAY_NAME, getDisplayForKey(key))
-                                val macro = item.optString(KEY_MACRO, null)
-                                
-                                var popupButton: TermuxX11ExtraKeyButton? = null
-                                if (item.has(KEY_POPUP)) {
-                                    val popupItem = item.get(KEY_POPUP)
-                                    popupButton = when (popupItem) {
-                                        is String -> TermuxX11ExtraKeyButton(popupItem, getDisplayForKey(popupItem))
-                                        is org.json.JSONObject -> {
-                                            val popupKey = popupItem.optString(KEY_KEY_NAME, popupItem.optString(KEY_MACRO, ""))
-                                            val popupDisplay = popupItem.optString(KEY_DISPLAY_NAME, getDisplayForKey(popupKey))
-                                            TermuxX11ExtraKeyButton(popupKey, popupDisplay, popupItem.optString(KEY_MACRO, null))
-                                        }
-                                        else -> null
-                                    }
-                                }
-                                
-                                TermuxX11ExtraKeyButton(key, display, macro, popupButton)
-                            }
-                            else -> TermuxX11ExtraKeyButton("?", "?")
-                        }
-                        row.add(button)
-                    }
-                    
-                    rows.add(row.toTypedArray())
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            
-            return TermuxX11ExtraKeysInfo(rows.toTypedArray())
-        }
-
-        private fun getDisplayForKey(key: String): String {
-            return when (key) {
-                "LEFT" -> "←"
-                "RIGHT" -> "→"
-                "UP" -> "↑"
-                "DOWN" -> "↓"
-                "ENTER" -> "↲"
-                "TAB" -> "↹"
-                "BKSP" -> "⌫"
-                "DEL" -> "⌦"
-                "HOME" -> "⇱"
-                "END" -> "⇲"
-                "PGUP" -> "⇑"
-                "PGDN" -> "⇓"
-                "CTRL" -> "⎈"
-                "ALT" -> "⎇"
-                "ESC" -> "⎋"
-                else -> key
-            }
         }
     }
 }
